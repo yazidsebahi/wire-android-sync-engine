@@ -38,6 +38,8 @@ import scala.util.Try
 
 class Images(context: Context, bitmapLoader: BitmapDecoder, tracking: TrackingService)(implicit ui: UiModule) {
 
+  import Images._
+
   private implicit val dispatcher = Threading.ImageDispatcher
 
   val images      = new UiCache[AssetId, ImageAsset](lruSize = 15)

@@ -56,9 +56,6 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 
 trait PushService {
 
-  def onMissedCloudPushNotifications: EventStream[MissedPushes]
-  def onFetchedPushNotifications:     EventStream[Seq[ReceivedPushData]]
-
   //set withRetries to false if the caller is to handle their own retry logic
   def syncHistory(reason: String, withRetries: Boolean = true): Future[Unit]
 
@@ -91,12 +88,6 @@ class PushServiceImpl(context:        Context,
 
   implicit val logTag: LogTag = accountTag[PushServiceImpl](accountId)
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
-
-  override val onMissedCloudPushNotifications = EventStream[MissedPushes]()
-  override val onFetchedPushNotifications     = EventStream[Seq[ReceivedPushData]]()
-
-  onMissedCloudPushNotifications.map(MissedPushEvent)(tracking.track(_, accountId))
-  onFetchedPushNotifications(_.foreach(p => tracking.track(ReceivedPushEvent(p), accountId)))
 
   override val onHistoryLost = new SourceSignal[Instant] with BgEventSource
   override val processing = Signal(false)
@@ -214,10 +205,10 @@ class PushServiceImpl(context:        Context,
         inBackground <- lifeCycle.uiActive.map(!_).head
     } yield {
         if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
-          onMissedCloudPushNotifications ! MissedPushes(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName)
+          tracking.track(MissedPushEvent(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName))
 
         if (pushes.nonEmpty)
-          onFetchedPushNotifications ! pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift))))
+          pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift)))).foreach(p => tracking.track(ReceivedPushEvent(p)))
 
         nots
       }).flatMap(onPushNotifications)

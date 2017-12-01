@@ -26,10 +26,11 @@ import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.service.otr.OtrServiceImpl
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
-import com.waz.testutils.{DefaultPatienceConfig, EmptyTrackingService, MockZMessaging}
+import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -44,7 +45,7 @@ import scala.concurrent.Future
   lazy val selfUser = UserData("test")
   lazy val clientId = ClientId()
 
-  val tracking = new EmptyTrackingService
+  val tracking: TrackingService = null
 
   lazy val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group)
 

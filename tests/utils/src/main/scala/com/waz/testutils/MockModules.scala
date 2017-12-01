@@ -52,7 +52,7 @@ class MockGlobalModule(dbSuffix: String = Random.nextInt().toHexString) extends 
   if (ZMessaging.currentGlobal == null) ZMessaging.currentGlobal = this
   override lazy val factory = new MockZMessagingFactory(this)
 
-  override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend, new EmptyTrackingService) {
+  override lazy val loginClient: LoginClient = new LoginClientImpl(client, backend, null) {
     override def login(account: AccountData) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
     override def access(cookie: Cookie, token: Option[Token]) = CancellableFuture.successful(Right((Token("", "", Int.MaxValue), Some(Cookie("")))))
   }
@@ -84,7 +84,7 @@ class MockAccountManager(override val accounts: AccountsServiceImpl = new MockAc
   }
 }
 
-class MockUserModule(val mockAccount: MockAccountManager = new MockAccountManager(), userId: UserId = UserId()) extends UserModule(userId, mockAccount, new EmptyTrackingService)
+class MockUserModule(val mockAccount: MockAccountManager = new MockAccountManager(), userId: UserId = UserId()) extends UserModule(userId, mockAccount, null)
 
 class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId: Option[TeamId] = None, clientId: ClientId = ClientId()) extends ZMessaging(teamId, clientId, mockUser) { zms =>
   def this(selfUserId: UserId) = this(new MockUserModule(userId = selfUserId), None, ClientId())

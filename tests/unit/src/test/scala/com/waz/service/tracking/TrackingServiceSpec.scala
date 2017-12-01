@@ -19,10 +19,9 @@ package com.waz.service.tracking
 
 import com.waz.model.AccountId
 import com.waz.service.ZMessaging
-import com.waz.service.tracking.TrackingService.NoReporting
 import com.waz.specs.AndroidFreeSpec
 
-import scala.concurrent.{Future, Promise, TimeoutException}
+import scala.concurrent.{Future, Promise}
 
 class TrackingServiceSpec extends AndroidFreeSpec {
 
@@ -31,19 +30,19 @@ class TrackingServiceSpec extends AndroidFreeSpec {
     override def current: Future[Option[ZMessaging]] = Future.successful(None)
   }
 
-  val tracking = new TrackingServiceImpl(stubZmsProvider)
+  val service = new TrackingServiceImpl(stubZmsProvider)
 
   feature("registering event") {
     scenario("contribution event") {
       val p = Promise[Unit]()
 
-      tracking.events {
+      service.events {
         case (_, event) if event.name == "contributed" && event.props.nonEmpty =>
           if (event.props.get.getString("action") == ContributionEvent.Action.Text.name)
             p.completeWith(Future.successful({}))
       }
 
-      tracking.contribution(ContributionEvent.Action.Text)
+      service.contribution(ContributionEvent.Action.Text)
 
       result(p.future)
     }
@@ -52,12 +51,12 @@ class TrackingServiceSpec extends AndroidFreeSpec {
       val reason = "no reason"
       val p = Promise[Unit]()
 
-      tracking.events {
+      service.events {
         case (_, event) if event.name == "account.logged_out" && event.props.nonEmpty =>
           if (event.props.get.getString("reason") == reason) p.completeWith(Future.successful({}))
       }
 
-      tracking.loggedOut(reason, AccountId())
+      service.loggedOut(reason, AccountId())
 
       result(p.future)
     }
@@ -65,12 +64,12 @@ class TrackingServiceSpec extends AndroidFreeSpec {
     scenario("opt in event") {
       val p = Promise[Unit]()
 
-      tracking.events {
+      service.events {
         case (_, event) if event.name == "settings.opted_in_tracking" && event.props.isEmpty =>
           p.completeWith(Future.successful({}))
       }
 
-      tracking.optIn()
+      service.optIn()
 
       result(p.future)
     }
@@ -78,12 +77,12 @@ class TrackingServiceSpec extends AndroidFreeSpec {
     scenario("opt out event") {
       val p = Promise[Unit]()
 
-      tracking.events {
+      service.events {
         case (_, event) if event.name == "settings.opted_out_tracking" && event.props.isEmpty =>
           p.completeWith(Future.successful({}))
       }
 
-      tracking.optOut()
+      service.optOut()
 
       result(p.future)
     }
@@ -91,30 +90,16 @@ class TrackingServiceSpec extends AndroidFreeSpec {
     scenario("exception event") {
       val p = Promise[Unit]()
 
-      tracking.events {
+      service.events {
         case (_, event) if event.name == "debug.exception" && event.props.nonEmpty =>
           if (event.props.get.getString("exceptionType") == "IllegalArgumentException" &&
             event.props.get.getString("description") == "bar")
           p.completeWith(Future.successful({}))
       }
 
-      tracking.exception(new IllegalArgumentException("foo"), "bar")
+      service.exception(new IllegalArgumentException("foo"), "bar")("test")
 
       result(p.future)
-    }
-
-    scenario("exception event with NoReporting") {
-      val p = Promise[Unit]()
-
-      tracking.events {
-        case (_, event) => p.completeWith(Future.successful({}))
-      }
-
-      tracking.exception(new IllegalArgumentException("foo") with NoReporting, "bar")
-
-      intercept[TimeoutException]{
-        result(p.future)
-      }
     }
   }
 

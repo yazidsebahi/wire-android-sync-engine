@@ -19,13 +19,14 @@ package com.waz.service.tracking
 
 import java.lang.Math.max
 
-import com.waz.api.EphemeralExpiration
+import com.waz.ZLog.LogTag
+import com.waz.api.{EphemeralExpiration, NetworkMode}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConversationData, Mime}
-import com.waz.service.push.{MissedPushes, ReceivedPushData}
+import com.waz.service.push.ReceivedPushData
 import com.waz.utils.returning
 import org.json.JSONObject
-import org.threeten.bp.Duration
+import org.threeten.bp.{Duration, Instant}
 
 trait TrackingEvent {
   val name: String
@@ -94,7 +95,7 @@ case class CrashEvent(crashType: String, crashDetails: String, override val thro
 }
 
 // for all other exceptions
-case class ExceptionEvent(exceptionType: String, exceptionDetails: String, description: String, override val throwable: Option[Throwable] = None) extends ThrowableEvent {
+case class ExceptionEvent(exceptionType: String, exceptionDetails: String, description: String, override val throwable: Option[Throwable] = None)(implicit val tag: LogTag) extends ThrowableEvent {
   override val name = "debug.exception"
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("exceptionType", exceptionType)
@@ -103,13 +104,17 @@ case class ExceptionEvent(exceptionType: String, exceptionDetails: String, descr
   })
 }
 
-case class MissedPushEvent(p: MissedPushes) extends TrackingEvent {
+case class MissedPushEvent(time:            Instant,
+                           countMissed:     Int,
+                           inBackground:    Boolean, //will help rull out false-positivie - missed pushes in foreground may be legitimate misses!
+                           networkMode:     NetworkMode,
+                           networkOperator: String) extends TrackingEvent {
   override val name = "debug.push_missed"
   override val props = Some(returning(new JSONObject()) { o =>
-    o.put("time", p.time.toString)
-    o.put("missed_count", p.countMissed)
-    o.put("in_background", p.inBackground)
-    o.put("network_mode", p.networkMode)
+    o.put("time", time.toString)
+    o.put("missed_count", countMissed)
+    o.put("in_background", inBackground)
+    o.put("network_mode", networkMode)
   })
 }
 

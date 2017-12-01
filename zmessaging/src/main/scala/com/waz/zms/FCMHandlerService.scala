@@ -28,6 +28,7 @@ import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
 import com.waz.service.tracking.TrackingService
+import com.waz.service.tracking.TrackingService.exception
 import com.waz.service.{AccountsService, NetworkModeService, ZMessaging}
 import com.waz.sync.client.PushNotification
 import com.waz.utils.{JsonDecoder, LoggedTry, RichInstant, Serialized}
@@ -77,7 +78,7 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
               }
             case _ =>
               warn(UserKeyMissingMsg)
-              TrackingService.exception(new Exception(UserKeyMissingMsg), UserKeyMissingMsg)
+              exception(new Exception(UserKeyMissingMsg), UserKeyMissingMsg)
               Future.successful({})
           }
         case Some(_) =>

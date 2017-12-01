@@ -233,7 +233,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
       if (client.signalingKey.isEmpty) {
         returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
           warn(msg)
-          global.trackingService.exception(new IllegalStateException(msg), msg, id)
+          global.trackingService.exception(new IllegalStateException(msg), msg, Some(id))
         }
         Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
       }

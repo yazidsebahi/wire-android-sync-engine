@@ -61,8 +61,6 @@ import scala.concurrent.{Await, Future}
   var postMemberJoinResponse: Either[ErrorResponse, Option[MemberJoinEvent]] = _
   var postMemberLeaveResponse: Either[ErrorResponse, Option[MemberLeaveEvent]] = _
 
-  val tracking = new EmptyTrackingService
-
   def handler = service.conversationSync
 
   lazy val service = new MockZMessaging() {

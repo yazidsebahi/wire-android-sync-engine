@@ -208,7 +208,7 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl,
       case Some(conv) => processor(conv)
       case None if retryCount > 3 =>
         val ex = new NoSuchElementException("No conversation data found") with NoStackTrace
-        tracking.exception(ex, "No conversation data found")
+        tracking.exception(ex, "No conversation data found")(tag)
         Future.failed(ex)
       case None =>
         warn(s"No conversation data found for remote id: $remoteId on try: $retryCount")(tag)

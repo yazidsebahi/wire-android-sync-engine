@@ -27,7 +27,6 @@ import com.waz.RobolectricUtils
 import com.waz.ZLog.LogTag
 import com.waz.api.impl.ErrorResponse
 import com.waz.service.BackendConfig
-import com.waz.testutils.EmptyTrackingService
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
@@ -55,7 +54,7 @@ import scala.util.Random.nextInt
     startMock()
     reset()
     client = new ZNetClientImpl(None, new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort).baseUrl) {
-      new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort), new EmptyTrackingService)
+      new LoginClientImpl(new AsyncClientImpl, BackendConfig("http://localhost:" + wireMockPort), null)
 
       override def MaxConcurrentRequests = maxConcurrentRequests
 

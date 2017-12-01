@@ -29,7 +29,7 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
 import com.waz.sync.client.{PushNotification, PushNotificationsClient}
-import com.waz.testutils.{EmptyTrackingService, TestBackoff, TestGlobalPreferences, TestUserPreferences}
+import com.waz.testutils.{TestBackoff, TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -56,7 +56,6 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   val network         = mock[NetworkModeService]
   val lifeCycle       = mock[UiLifeCycle]
   val client          = mock[PushNotificationsClient]
-  val tracking        = new EmptyTrackingService
 
   implicit val ctx = Threading.Background
 
@@ -85,6 +84,8 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
 
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+
+  (tracking.track _).expects(*, *).anyNumberOfTimes()
 
   val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
