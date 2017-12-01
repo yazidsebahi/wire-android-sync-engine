@@ -27,12 +27,19 @@ import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.SyncResult
 import com.waz.sync.client.UsersClient
+import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 
-class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserServiceImpl, usersStorage: UsersStorageImpl, assets: AssetService, usersClient: UsersClient, imageGenerator: ImageAssetGenerator) {
+class UsersSyncHandler(assetSync: AssetSyncHandler,
+                       userService: UserServiceImpl,
+                       usersStorage: UsersStorageImpl,
+                       assets: AssetService,
+                       usersClient: UsersClient,
+                       imageGenerator: ImageAssetGenerator,
+                       otrSync: OtrSyncHandler) {
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
 
@@ -60,6 +67,15 @@ class UsersSyncHandler(assetSync: AssetSyncHandler, userService: UserServiceImpl
       case None           => updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(userData.id, picture = None)))
     }
     case _ => Future.successful(SyncResult.failed())
+  }
+
+  def postAvailability(availability: Availability): Future[SyncResult] = {
+    verbose(s"postAvailability($availability)")
+    otrSync.broadcastMessage(GenericMessage(Uid(), GenericContent.AvailabilityStatus(availability)))
+      .map {
+        case Left(e) => SyncResult.Failure(Some(e))
+        case Right(_) => SyncResult.Success
+      }
   }
 
   private def postSelfPicture(id: UserId, assetId: AssetId): Future[SyncResult] = for {

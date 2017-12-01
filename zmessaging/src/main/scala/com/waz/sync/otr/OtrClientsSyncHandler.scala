@@ -39,12 +39,32 @@ import com.waz.znet.Response.Status
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: UserId, clientId: Signal[Option[ClientId]], netClient: OtrClient, otrClients: OtrClientsService, storage: OtrClientsStorage, cryptoBox: CryptoBoxService, userPrefs: UserPreferences) {
+trait OtrClientsSyncHandler {
+  def syncSelfClients(): Future[SyncResult]
+  def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]]
+  def syncClients(user: UserId): Future[SyncResult]
+  def postLabel(id: ClientId, label: String): Future[SyncResult]
+  def syncPreKeys(clients: Map[UserId, Seq[ClientId]]): Future[SyncResult]
+  def registerSignalingKey(): Future[SyncResult]
+  def syncClientsLocation(): Future[SyncResult]
+
+  def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]]
+}
+
+class OtrClientsSyncHandlerImpl(context: Context,
+                                accountId: AccountId,
+                                userId: UserId,
+                                clientId: Signal[Option[ClientId]],
+                                netClient: OtrClient,
+                                otrClients: OtrClientsService,
+                                storage: OtrClientsStorage,
+                                cryptoBox: CryptoBoxService,
+                                userPrefs: UserPreferences) extends OtrClientsSyncHandler {
   import com.waz.threading.Threading.Implicits.Background
 
-  lazy val sessions = cryptoBox.sessions
+  private lazy val sessions = cryptoBox.sessions
 
-  lazy val geocoder = new Geocoder(context, Locales.currentLocale)
+  private lazy val geocoder = new Geocoder(context, Locales.currentLocale)
 
   def syncSelfClients(): Future[SyncResult] = Serialized.future("sync-self-clients", this) { // serialized to avoid races with registration
     verbose(s"syncSelfClients")
@@ -53,7 +73,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
 
   // keeps ZMS_MAJOR_VERSION number of client registration
   // this can be used to detect problematic version updates
-  lazy val clientRegVersion = userPrefs.preference(ClientRegVersion)
+  private lazy val clientRegVersion = userPrefs.preference(ClientRegVersion)
 
   def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]] = Serialized.future("sync-self-clients", this) {
     cryptoBox.createClient() flatMap {
@@ -155,7 +175,7 @@ class OtrClientsSyncHandler(context: Context, accountId: AccountId, userId: User
     }
   }
 
-  private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] =
+  def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] =
     netClient.loadPreKeys(clients).future
       .flatMap {
         case Left(error) => Future.successful(Some(error))

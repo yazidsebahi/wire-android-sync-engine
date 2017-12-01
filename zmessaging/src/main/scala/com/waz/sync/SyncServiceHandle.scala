@@ -19,7 +19,7 @@ package com.waz.sync
 
 import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model._
+import com.waz.model.{Availability, _}
 import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync._
@@ -50,6 +50,7 @@ trait SyncServiceHandle {
 
   def postSelfUser(info: UserInfo): Future[SyncId]
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
+  def postAvailability(status: Availability): Future[SyncId]
   def postMessage(id: MessageId, conv: ConvId, editTime: Instant): Future[SyncId]
   def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId]
   def postRecalled(conv: ConvId, currentMsgId: MessageId, recalledMsgId: MessageId): Future[SyncId]
@@ -112,6 +113,7 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
+  def postAvailability(status: Availability) = addRequest(PostAvailability(status))
   def postMessage(id: MessageId, conv: ConvId, time: Instant) = addRequest(PostMessage(conv, id, time), timeout = System.currentTimeMillis() + timeouts.messages.sendingTimeout.toMillis, forceRetry = true)
   def postDeleted(conv: ConvId, msg: MessageId) = addRequest(PostDeleted(conv, msg))
   def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId) = addRequest(PostRecalled(conv, msg, recalled))
@@ -195,6 +197,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case DeleteAccount                         => zms.usersSync.deleteAccount()
     case PostSelf(info)                        => zms.usersSync.postSelfUser(info)
     case PostSelfPicture(_)                    => zms.usersSync.postSelfPicture()
+    case PostAvailability(availability)        => zms.usersSync.postAvailability(availability)
     case PostAddressBook(ab)                   => zms.addressbookSync.postAddressBook(ab)
     case PostInvitation(i)                     => zms.invitationSync.postInvitation(i)
     case RegisterPushToken(token)              => zms.gcmSync.registerPushToken(token)

@@ -19,33 +19,30 @@ package com.waz.sync.otr
 
 import java.util.Date
 
-import com.waz.RobolectricUtils
-import com.waz.api.impl.ErrorResponse
+import com.waz.cache.CacheService
+import com.waz.content.{ConversationStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
-import com.waz.model.otr.{Client, ClientId, UserClients}
-import com.waz.service.otr.OtrServiceImpl
-import com.waz.service.tracking.TrackingService
-import com.waz.sync.client.MessagesClient
-import com.waz.sync.client.MessagesClient.OtrMessage
-import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
-import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging}
-import com.waz.threading.CancellableFuture
-import com.waz.utils.events.Signal
-import com.waz.znet.ZNetClient.ErrorOrResponse
-import org.scalatest._
-import org.scalatest.concurrent.ScalaFutures
-
-import scala.concurrent.Future
+import com.waz.model.otr.ClientId
+import com.waz.service.assets.AssetService
+import com.waz.service.conversation.ConversationsService
+import com.waz.service.{ErrorsService, UserService}
+import com.waz.service.messages.MessagesService
+import com.waz.service.otr.OtrService
+import com.waz.service.push.PushService
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.client.{AssetClient, MessagesClient, OtrClient, UsersClient}
+import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent}
+import com.waz.znet.ZNetClient
+import org.scalatest.Ignore
 
 
-@Ignore class OtrSyncHandlerSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with OptionValues with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
+@Ignore class OtrSyncHandlerSpec extends AndroidFreeSpec {
 
   lazy val selfUser = UserData("test")
   lazy val clientId = ClientId()
 
-  val tracking: TrackingService = null
 
   lazy val conv = ConversationData(ConvId(), RConvId(), None, UserId(), ConversationType.Group)
 
@@ -58,37 +55,26 @@ import scala.concurrent.Future
 
   var encryptedContent: EncryptedContent = EncryptedContent(Map.empty)
 
-  lazy val zms = new MockZMessaging(selfUserId = selfUser.id, clientId = clientId) {
+  private val znet                = mock[ZNetClient]
+  private val client              = new OtrClient(znet)
+  private val msgClient           = new MessagesClient(znet)
+  private val assetClient         = mock[AssetClient]
+  private val otr                 = mock[OtrService]
+  private val assets              = mock[AssetService]
+  private val convs               = mock[ConversationsService]
+  private val convStorage         = mock[ConversationStorage]
+  private val users               = mock[UserService]
+  private val messages            = mock[MessagesService]
+  private val errors              = mock[ErrorsService]
+  private val clientsSyncHandler  = mock[OtrClientsSyncHandler]
+  private val cache               = mock[CacheService]
+  private val push                = mock[PushService]
+  private val usersClient         = new UsersClient(znet)
+  private val teamId              = TeamId()
+  private val usersStorage        = mock[UsersStorage]
 
-    override lazy val otrService: OtrServiceImpl =
-      new OtrServiceImpl(selfUserId, clientId, otrClientsService, push, cryptoBox, membersStorage, convsContent, sync, cache, metadata, otrClientsStorage, prefs, tracking) {
-        override def encryptMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean, previous: EncryptedContent, recipients: Option[Set[UserId]]): Future[EncryptedContent] = {
-          encryptMsgRequests = encryptMsgRequests :+ (convId, msg, useFakeOnError)
-          Future successful encryptedContent
-        }
-    }
-
-    override lazy val messagesClient: MessagesClient = new MessagesClient(zNetClient) {
-      override def postMessage(conv: RConvId, content: OtrMessage, ignoreMissing: Boolean, recipients: Option[Set[UserId]]): ErrorOrResponse[MessageResponse] = {
-          postMsgRequests = postMsgRequests :+ (conv, content, ignoreMissing)
-          CancellableFuture.successful(if (ignoreMissing || postMsgResponse.missing.isEmpty) Right(MessageResponse.Success(postMsgResponse)) else Right(MessageResponse.Failure(postMsgResponse)))
-        }
-    }
-
-    override lazy val otrClientsSync: OtrClientsSyncHandler = new OtrClientsSyncHandler(context, accountId, selfUserId, Signal.const(Some(clientId)), otrClient, otrClientsService, otrClientsStorage, cryptoBox, userPrefs) {
-      override private[otr] def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] = Future.successful(None)
-    }
-
-
-    usersStorage.addOrOverwrite(selfUser).futureValue
-    otrClientsStorage.insert(UserClients(selfUser.id, Map(clientId -> Client(clientId, ""))))
-  }
-
-  lazy val handler = zms.otrSync
-
-  before {
-    encryptMsgRequests = Nil
-  }
+  val handler = new OtrSyncHandlerImpl(client, msgClient, assetClient, otr, assets, convs, convStorage,
+    users, messages, errors, clientsSyncHandler, cache, push, usersClient, Some(teamId), usersStorage)
 
   feature("Error recovery") {
 
@@ -97,7 +83,7 @@ import scala.concurrent.Future
       val missing = Map(UserId() -> Seq(ClientId()))
       postMsgResponse = ClientMismatch(Map.empty, missing, Map.empty, new Date(1))
 
-      val res = handler.postOtrMessage(conv, msg).futureValue
+      val res = handler.postOtrMessage(conv, msg)
       res shouldEqual Right(new Date(1))
 
       val otrMsg = OtrMessage(clientId, encryptedContent)

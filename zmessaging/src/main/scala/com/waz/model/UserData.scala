@@ -19,6 +19,7 @@ package com.waz.model
 
 import java.util.Date
 import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
+
 import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
 import com.waz.db.Col._
@@ -49,6 +50,7 @@ case class UserData(
                      displayName:           String                = "",
                      verified:              Verification          = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
                      deleted:               Boolean               = false,
+                     availability:          Availability          = Availability.None,
                      handle:                Option[Handle]
                    ) {
 
@@ -84,13 +86,13 @@ case class UserData(
     handle = Some(user.handle)
   )
 
-  def updated(name: Option[String] = None,
-              email: Option[EmailAddress] = None,
-              phone: Option[PhoneNumber] = None,
-              accent: Option[AccentColor] = None,
-              picture: Option[AssetId] = None,
-              trackingId: Option[String] = None,
-              handle: Option[Handle] = None): UserData = copy(
+  def updated(name:           Option[String] = None,
+              email:          Option[EmailAddress] = None,
+              phone:          Option[PhoneNumber] = None,
+              accent:         Option[AccentColor] = None,
+              picture:        Option[AssetId] = None,
+              trackingId:     Option[String] = None,
+              handle:         Option[Handle] = None): UserData = copy(
     name = name.getOrElse(this.name),
     email = email.orElse(this.email),
     phone = phone.orElse(this.phone),
@@ -150,7 +152,7 @@ object UserData {
   }
 
   // used for testing only
-  def apply(name: String): UserData = UserData(UserId(), None, name, None, None, searchKey = SearchKey(name), handle = None)
+  def apply(name: String): UserData = UserData(UserId(), None, name, None, None, searchKey = SearchKey.simple(name), handle = None)
 
   def apply(id: UserId, name: String): UserData = UserData(id, None, name, None, None, searchKey = SearchKey(name), handle = None)
 
@@ -177,7 +179,7 @@ object UserData {
       connection = ConnectionStatus('connection), connectionLastUpdated = new Date(decodeLong('connectionLastUpdated)), connectionMessage = decodeOptString('connectionMessage),
       conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation),
       syncTimestamp = decodeLong('syncTimestamp), 'displayName, Verification.valueOf('verified), deleted = 'deleted,
-      handle = decodeOptHandle('handle))
+      availability = Availability(decodeInt('activityStatus)), handle = decodeOptHandle('handle))
   }
 
   implicit lazy val Encoder: JsonEncoder[UserData] = new JsonEncoder[UserData] {
@@ -199,6 +201,7 @@ object UserData {
       o.put("displayName", v.displayName)
       o.put("verified", v.verified.name)
       o.put("deleted", v.deleted)
+      o.put("availability", v.availability.id)
       v.handle foreach(u => o.put("handle", u.string))
     }
   }
@@ -222,13 +225,14 @@ object UserData {
     val DisplayName = text('display_name)(_.displayName)
     val Verified = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
     val Deleted = bool('deleted)(_.deleted)
+    val AvailabilityStatus = int[Availability]('availability, _.id, Availability.apply)(_.availability)
     val Handle = opt(handle('handle))(_.handle)
 
     override val idCol = Id
-    override val table = Table("Users", Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
+    override val table = Table("Users", Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle)
 
     override def apply(implicit cursor: DBCursor): UserData =
-      new UserData(Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, Handle)
+      new UserData(Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle)
 
     override def onCreate(db: DB): Unit = {
       super.onCreate(db)

@@ -17,35 +17,55 @@
  */
 package com.waz.service
 
-import com.waz.RobolectricUtils
+import com.waz.content._
+import com.waz.model.{Availability, _}
+import com.waz.service.assets.AssetService
+import com.waz.service.push.PushService
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.UsersClient
+import com.waz.testutils.TestUserPreferences
+import com.waz.utils.events.{BgEventSource, Signal, SourceSignal}
+import com.waz.znet.ZNetClient
+
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model._
-import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
-import com.waz.utils.events.EventContext.Implicits.global
-import com.waz.utils.returning
-import org.robolectric.Robolectric
-import org.scalatest._
+import org.threeten.bp.Instant
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
+class UserServiceSpec extends AndroidFreeSpec {
 
-@Ignore class UserServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils {
+  private lazy val me = UserData(name = "me").updateConnectionStatus(ConnectionStatus.Self)
 
-  lazy val users = Seq(UserData("other user 1"), UserData("other user 2"), UserData("some name"),
+  private lazy val users = Seq(me, UserData("other user 1"), UserData("other user 2"), UserData("some name"),
     UserData("related user 1"), UserData("related user 2"), UserData("other related"),
     UserData("friend user 1"), UserData("friend user 2"), UserData("some other friend")
   )
 
-  val timeout = 5.seconds
 
-  var zms: MockZMessaging = _
-  def storage = zms.storage.db
-  def service = zms.users
+  private val accountsService = mock[AccountsService]
+  private val usersStorage    = mock[UsersStorage]
+  private val pushService     = mock[PushService]
+  private val assetService    = mock[AssetService]
+  private val znet            = mock[ZNetClient]
+  private val usersClient     = new UsersClient(znet)
+  private val sync            = mock[SyncServiceHandle]
+  private val database        = mock[Database]
+  private val assetsStorage   = mock[AssetsStorage]
+  private val userPrefs       = new TestUserPreferences
 
-  var syncRequest = None: Option[UserId]
+  userPrefs.preference(LastSlowSyncTimeKey) := Some(System.currentTimeMillis())
 
+  (usersStorage.optSignal _).expects(*).onCall((id: UserId) => Signal.const(users.find(_.id == id)))
+  (accountsService.loggedInAccounts _).expects().returning(Signal.empty)
+  (pushService.onHistoryLost _).expects().returning(new SourceSignal(Some(Instant.now())) with BgEventSource)
+  (sync.syncUsersIfNotEmpty _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+  (assetService.updateAssets _).expects(*).anyNumberOfTimes().returning(Future.successful(Set.empty))
+  (usersStorage.updateOrCreateAll _).expects(*).anyNumberOfTimes().returning(Future.successful(Set.empty))
+
+  //var syncRequest = None: Option[UserId]
+/*
   before {
     ZMessaging.context = Robolectric.application
 
@@ -66,26 +86,57 @@ import scala.concurrent.duration._
     Await.result(storage.close(), 10.seconds)
     Robolectric.application.getDatabasePath(storage.dbHelper.getDatabaseName).delete()
   }
+*/
+  private def getService = new UserServiceImpl(
+    users.head.id, AccountId(), accountsService, usersStorage, userPrefs,
+    pushService, assetService, usersClient, sync, assetsStorage
+  )
 
-  scenario("load user") {
-    zms.insertUsers(users)
+  feature("activity status") {
+    scenario("change activity status") {
+      val service = getService
 
-    users foreach { u =>
-      Await.result(service.getUser(u.id), timeout).map(_.copy(displayName = u.displayName)) shouldEqual Some(u)
+      val id = me.id
+      val availability = me.availability
+      availability should not equal Availability.Busy
+
+      val before = me.copy()
+      val after = me.copy(availability = Availability.Busy)
+      (usersStorage.update _).expects(id, *).once().returning(Future.successful(Some((before, after))))
+      (sync.postAvailability _).expects(Availability.Busy).once().returning(Future.successful(SyncId()))
+
+      result(service.updateAvailability(Availability.Busy)) shouldEqual Some(after)
+    }
+  }
+
+  feature("load user") {
+
+    scenario("load user") {
+      val service = getService
+
+      (sync.syncUsers _).expects(*).returning(Future.successful(SyncId()))
+      (usersStorage.get _).expects(*).anyNumberOfTimes().onCall((id: UserId) => Future.successful(users.find(_.id == id)))
+
+
+      users foreach { u =>
+        result(service.getUser(u.id)).map(_.copy(displayName = u.displayName)) shouldEqual Some(u)
+      }
+
+      result(service.getUser(UserId())) shouldEqual None
     }
 
-    Await.result(service.getUser(UserId()), timeout) shouldEqual None
-  }
+    scenario("update self user") {
+      val service = getService
 
-  scenario("update self user") {
-    zms.insertUsers(users)
-    val id = users.head.id
-    Await.result(service.updateSyncedUsers(Seq(UserInfo(id))), timeout)
-    Await.result(service.getSelfUser, timeout).map(_.connection) shouldEqual Some(ConnectionStatus.Self)
-  }
+      val id = users.head.id
+      (usersStorage.get _).expects(id).once().returning(Future.successful(users.headOption))
 
+      result(service.updateSyncedUsers(Seq(UserInfo(id))))
+      result(service.getSelfUser).map(_.connection) shouldEqual Some(ConnectionStatus.Self)
+    }
+  }
+/*
   scenario("update other user") {
-    zms.insertUsers(users)
     val id = users(2).id
     zms.dispatch(UserUpdateEvent(UserInfo(id)))
     withDelay {
@@ -244,5 +295,5 @@ import scala.concurrent.duration._
       changed should be('empty)
     }
   }
-
+*/
 }

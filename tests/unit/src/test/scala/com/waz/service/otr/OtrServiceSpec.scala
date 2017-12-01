@@ -169,7 +169,7 @@ import scala.util.Random
     lazy val (c2, pre2) = (client2.selfClient, client2.prekeys)
 
     def send(m: GenericMessage, from: TestClient, to: TestClient) = {
-      val content = Await.result(from.otrService.encryptMessage(from.conv.id, m), 5.seconds).content(to.self.id)(to.selfClient.id)
+      val content = Await.result(from.otrService.encryptConvMessage(from.conv.id, m), 5.seconds).content(to.self.id)(to.selfClient.id)
       val event = OtrMessageEvent(to.conv.remoteId, new Date, from.self.id, from.selfClient.id, to.selfClient.id, content)
       val res = Await.result(to.otrService.decryptOtrEvent(event), 5.seconds)
       res shouldBe 'right
@@ -209,7 +209,7 @@ import scala.util.Random
     }
 
     scenario("don't generate content for self client when sending a message") {
-      val content = client1.otrService.encryptMessage(conv1.id, TextMessage("test", Map.empty)).futureValue.content
+      val content = client1.otrService.encryptConvMessage(conv1.id, TextMessage("test", Map.empty)).futureValue.content
       content should have size 1
       content.keySet should contain(user2.id)
     }
@@ -222,7 +222,7 @@ import scala.util.Random
     }
 
     scenario(s"don't generate message to yourself") {
-      val content = Await.result(client1.otrService.encryptMessage(conv1.id, TextMessage("test", Map.empty)), 5.seconds).content
+      val content = Await.result(client1.otrService.encryptConvMessage(conv1.id, TextMessage("test", Map.empty)), 5.seconds).content
       content.keys should have size 1
     }
 

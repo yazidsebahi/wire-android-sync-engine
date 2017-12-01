@@ -19,14 +19,12 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.model._
-import com.waz.model.otr.ClientId
-import com.waz.sync.client.OtrClient.{ClientMismatchResponse, EncryptedContent, MessageResponse}
+import com.waz.sync.client.OtrClient.{ClientMismatchResponse, MessageResponse}
+import com.waz.sync.otr.OtrMessage
 import com.waz.utils._
-import com.waz.znet.ContentEncoder.RequestContent
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
-import com.waz.znet.{ContentEncoder, Request, Response, ZNetClient}
-import com.wire.messages.nano.Otr
+import com.waz.znet.{Request, Response, ZNetClient}
 
 class MessagesClient(netClient: ZNetClient) {
   import MessagesClient._
@@ -47,19 +45,5 @@ object MessagesClient {
     val base = s"/conversations/$conv/otr/messages"
     if (ignoreMissing) s"$base?ignore_missing=true"
     else receivers.fold2(base, uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
-  }
-
-  case class OtrMessage(sender: ClientId, recipients: EncryptedContent, blob: Option[Array[Byte]] = None, nativePush: Boolean = true)
-
-  implicit lazy val OtrMessageEncoder: ContentEncoder[OtrMessage] = new ContentEncoder[OtrMessage] {
-    override def apply(m: OtrMessage): RequestContent = {
-      val msg = new Otr.NewOtrMessage
-      msg.sender = OtrClient.clientId(m.sender)
-      msg.nativePush = m.nativePush
-      msg.recipients = m.recipients.userEntries
-      m.blob foreach { msg.blob = _ }
-
-      ContentEncoder.protobuf(msg)
-    }
   }
 }

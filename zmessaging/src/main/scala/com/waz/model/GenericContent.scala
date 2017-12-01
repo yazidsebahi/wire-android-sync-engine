@@ -542,6 +542,31 @@ object GenericContent {
     }
   }
 
+  type AvailabilityStatus = Messages.Availability
+
+  implicit object AvailabilityStatus extends GenericContent[AvailabilityStatus] {
+    import Messages.Availability._
+
+    override def set(msg: GenericMessage): (AvailabilityStatus) => GenericMessage = msg.setAvailability
+
+    def apply(activity: Availability): AvailabilityStatus = returning(new Messages.Availability) {
+      _.`type` = activity match {
+        case Availability.None      => NONE
+        case Availability.Available => AVAILABLE
+        case Availability.Away      => AWAY
+        case Availability.Busy      => BUSY
+      }
+    }
+
+    def unapply(availability: AvailabilityStatus): Option[Availability] = availability.`type` match {
+      case NONE      => Some(Availability.None)
+      case AVAILABLE => Some(Availability.Available)
+      case AWAY      => Some(Availability.Away)
+      case BUSY      => Some(Availability.Busy)
+      case _         => None
+    }
+  }
+
   case object Unknown
 
   implicit object UnknownContent extends GenericContent[Unknown.type] {

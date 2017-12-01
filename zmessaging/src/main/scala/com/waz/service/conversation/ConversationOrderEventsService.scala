@@ -55,23 +55,24 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
       case MemberLeaveEvent(_, _, _, leaving) if leaving.contains(selfUserId) => true
       case GenericMessageEvent(_, _, _, GenericMessage(_, content)) =>
         content match {
-          case _: Asset        => true
-          case _: Calling      => true
-          case _: Cleared      => false
-          case _: ClientAction => false
-          case _: Receipt      => false
-          case _: Ephemeral    => true
-          case _: External     => true
-          case _: ImageAsset   => true
-          case _: Knock        => true
-          case _: LastRead     => false
-          case _: Location     => true
-          case _: MsgRecall    => false
-          case _: MsgEdit      => false
-          case _: MsgDeleted   => false
-          case _: Reaction     => false
-          case _: Text         => true
-          case _               => false
+          case _: Asset               => true
+          case _: Calling             => true
+          case _: Cleared             => false
+          case _: ClientAction        => false
+          case _: Receipt             => false
+          case _: Ephemeral           => true
+          case _: AvailabilityStatus  => false
+          case _: External            => true
+          case _: ImageAsset          => true
+          case _: Knock               => true
+          case _: LastRead            => false
+          case _: Location            => true
+          case _: MsgRecall           => false
+          case _: MsgEdit             => false
+          case _: MsgDeleted          => false
+          case _: Reaction            => false
+          case _: Text                => true
+          case _                      => false
         }
       case _ => false
     }

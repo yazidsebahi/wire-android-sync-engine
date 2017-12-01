@@ -39,7 +39,7 @@ import com.waz.service.push._
 import com.waz.service.teams.TeamsServiceImpl
 import com.waz.sync.client._
 import com.waz.sync.handler._
-import com.waz.sync.otr.OtrSyncHandler
+import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
@@ -80,7 +80,7 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, gl
   lazy val usersStorage                           = wire[UsersStorageImpl]
   lazy val otrClientsStorage: OtrClientsStorage   = wire[OtrClientsStorageImpl]
   lazy val membersStorage                         = wire[MembersStorageImpl]
-  lazy val assetsStorage                          = wire[AssetsStorage]
+  lazy val assetsStorage                          = wire[AssetsStorageImpl]
   lazy val reactionsStorage                       = wire[ReactionsStorageImpl]
   lazy val notifStorage                           = wire[NotificationStorageImpl]
   lazy val convsStorage                           = wire[ConversationStorageImpl]
@@ -192,7 +192,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
   lazy val push: PushService                          = wire[PushServiceImpl]
   lazy val pushToken: PushTokenService                = wire[PushTokenService]
-  lazy val errors                                     = wire[ErrorsService]
+  lazy val errors                                     = wire[ErrorsServiceImpl]
   lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
   lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
   lazy val websocket: WebSocketClientService          = wire[WebSocketClientServiceImpl]
@@ -201,7 +201,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
   lazy val assets: AssetService                       = wire[AssetServiceImpl]
   lazy val users: UserServiceImpl                     = wire[UserServiceImpl]
-  lazy val conversations: ConversationsService        = wire[ConversationsService]
+  lazy val conversations: ConversationsService        = wire[ConversationsServiceImpl]
   lazy val convsNotifier                              = wire[ConversationsNotifier]
   lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
   lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
@@ -230,24 +230,24 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val handlesService                             = wire[HandlesService]
   lazy val gsmService                                 = wire[GsmInterruptService]
 
-  lazy val assetSync        = wire[AssetSyncHandler]
-  lazy val usersearchSync   = wire[UserSearchSyncHandler]
-  lazy val usersSync        = wire[UsersSyncHandler]
-  lazy val conversationSync = wire[ConversationsSyncHandler]
-  lazy val teamsSync        = wire[TeamsSyncHandler]
-  lazy val connectionsSync  = wire[ConnectionsSyncHandler]
-  lazy val addressbookSync  = wire[AddressBookSyncHandler]
-  lazy val gcmSync          = wire[PushTokenSyncHandler]
-  lazy val typingSync       = wire[TypingSyncHandler]
-  lazy val richmediaSync    = wire[RichMediaSyncHandler]
-  lazy val invitationSync   = wire[InvitationSyncHandler]
-  lazy val messagesSync     = wire[MessagesSyncHandler]
-  lazy val otrSync          = wire[OtrSyncHandler]
-  lazy val reactionsSync    = wire[ReactionsSyncHandler]
-  lazy val lastReadSync     = wire[LastReadSyncHandler]
-  lazy val clearedSync      = wire[ClearedSyncHandler]
-  lazy val openGraphSync    = wire[OpenGraphSyncHandler]
-  lazy val handlesSync      = wire[HandlesSyncHandler]
+  lazy val assetSync                                  = wire[AssetSyncHandler]
+  lazy val usersearchSync                             = wire[UserSearchSyncHandler]
+  lazy val usersSync                                  = wire[UsersSyncHandler]
+  lazy val conversationSync                           = wire[ConversationsSyncHandler]
+  lazy val teamsSync                                  = wire[TeamsSyncHandler]
+  lazy val connectionsSync                            = wire[ConnectionsSyncHandler]
+  lazy val addressbookSync                            = wire[AddressBookSyncHandler]
+  lazy val gcmSync                                    = wire[PushTokenSyncHandler]
+  lazy val typingSync                                 = wire[TypingSyncHandler]
+  lazy val richmediaSync                              = wire[RichMediaSyncHandler]
+  lazy val invitationSync                             = wire[InvitationSyncHandler]
+  lazy val messagesSync                               = wire[MessagesSyncHandler]
+  lazy val otrSync: OtrSyncHandler                    = wire[OtrSyncHandlerImpl]
+  lazy val reactionsSync                              = wire[ReactionsSyncHandler]
+  lazy val lastReadSync                               = wire[LastReadSyncHandler]
+  lazy val clearedSync                                = wire[ClearedSyncHandler]
+  lazy val openGraphSync                              = wire[OpenGraphSyncHandler]
+  lazy val handlesSync                                = wire[HandlesSyncHandler]
 
   lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 

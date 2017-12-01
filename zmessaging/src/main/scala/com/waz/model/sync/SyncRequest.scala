@@ -23,7 +23,7 @@ import com.waz.api.EphemeralExpiration
 import com.waz.model.AddressBook.AddressBookDecoder
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.ClientId
-import com.waz.model.{SearchQuery, _}
+import com.waz.model.{Availability, SearchQuery, _}
 import com.waz.service.ZMessaging
 import com.waz.sync.client.{ConversationsClient, UsersClient}
 import com.waz.sync.queue.SyncJobMerger._
@@ -121,6 +121,10 @@ object SyncRequest {
 
   case class PostSelfPicture(assetId: Option[AssetId]) extends BaseRequest(Cmd.PostSelfPicture) {
     override def merge(req: SyncRequest) = mergeHelper[PostSelfPicture](req)(Merged(_))
+  }
+
+  case class PostAvailability(availability: Availability) extends BaseRequest(Cmd.PostAvailability) {
+    override val mergeKey: Any = (cmd, availability.id)
   }
 
   sealed abstract class RequestForConversation(cmd: SyncCommand) extends BaseRequest(cmd) with ConversationReference
@@ -323,6 +327,7 @@ object SyncRequest {
           case Cmd.PostTypingState       => PostTypingState(convId, 'typing)
           case Cmd.PostConnectionStatus  => PostConnectionStatus(userId, opt('status, js => ConnectionStatus(js.getString("status"))))
           case Cmd.PostSelfPicture       => PostSelfPicture(decodeOptAssetId('asset))
+          case Cmd.PostAvailability      => PostAvailability(Availability(decodeInt('availability)))
           case Cmd.PostMessage           => PostMessage(convId, messageId, 'time)
           case Cmd.PostDeleted           => PostDeleted(convId, messageId)
           case Cmd.PostRecalled          => PostRecalled(convId, messageId, decodeId[MessageId]('recalled))
@@ -388,6 +393,7 @@ object SyncRequest {
         case RegisterPushToken(token)         => putId("token", token)
         case SyncRichMedia(messageId)         => putId("message", messageId)
         case PostSelfPicture(assetId)         => assetId.foreach(putId("asset", _))
+        case PostAvailability(availability)   => o.put("availability", availability.id)
         case PostMessage(_, messageId, time)  =>
           putId("message", messageId)
           o.put("time", time.toEpochMilli)

@@ -20,8 +20,10 @@ package com.waz.sync.client
 import android.util.Base64
 import com.waz.model.UserId
 import com.waz.model.otr.ClientId
-import com.waz.sync.client.MessagesClient.OtrMessage
+
 import com.waz.sync.client.OtrClient._
+import com.waz.sync.otr.OtrMessage
+import com.waz.sync.otr.OtrMessage.OtrMessageEncoder
 import com.waz.utils._
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, GzippedRequestContent, JsonContentEncoder}
 import com.waz.znet.JsonObjectResponse
@@ -90,7 +92,7 @@ import scala.util.Random
     }
 
     scenario("Encode request as protobuf") {
-      val body = MessagesClient.OtrMessageEncoder(OtrMessage(ClientId(), content)).asInstanceOf[BinaryRequestContent]
+      val body = OtrMessageEncoder(OtrMessage(ClientId(), content)).asInstanceOf[BinaryRequestContent]
       info(s"protobuf request size: ${body.data.length}")
       info(s"gzipped protobuf request size: ${new GzippedRequestContent(body.data, "application/x-protobuf").data.length}")
     }

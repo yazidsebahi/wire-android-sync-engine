@@ -38,8 +38,7 @@ class UsersClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
   import com.waz.sync.client.UsersClient._
 
-  def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] = {
-
+  def loadUsers(ids: Seq[UserId]): ErrorOrResponse[IndexedSeq[UserInfo]] =
     if (ids.isEmpty) CancellableFuture.successful(Right(Vector())) else {
       CancellableFuture.lift(Future.traverse(ids.grouped(IdsCountThreshold).toSeq) { ids => // split up every 45 user ids so that the request uri remains short enough
         netClient(Request.Get(usersPath(ids))) map {
@@ -53,7 +52,6 @@ class UsersClient(netClient: ZNetClient) {
         }
       } .map (_.flatten.toIndexedSeq) .map (Right(_)) .recover { case e: FailedLoadUsersResponse => Left(e.error) }, {})
     }
-  }
 
   def loadSelf(): ErrorOrResponse[UserInfo] =
     netClient.withErrorHandling("loadSelf", Request.Get(SelfPath)) {
@@ -77,6 +75,7 @@ class UsersClient(netClient: ZNetClient) {
         Right(())
     }
   }
+
 }
 
 object UsersClient {
@@ -105,4 +104,5 @@ object UsersClient {
   }
 
   class FailedLoadUsersResponse(val error: ErrorResponse) extends RuntimeException(s"loading users failed with: $error") with NoReporting
+
 }
