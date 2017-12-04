@@ -37,8 +37,8 @@ trait TrackingService {
   def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit
 
   def loggedOut(reason: String, accountId: AccountId): Unit = track(LoggedOutEvent(reason), Some(accountId))
-  def optIn(): Unit = track(OptEvent(true))
-  def optOut(): Unit = track(OptEvent(false))
+  def optIn(): Unit = track(OptInEvent)
+  def optOut(): Unit = track(OptOutEvent)
   def contribution(action: ContributionEvent.Action): Unit
   def assetContribution(assetId: AssetId, accountId: AccountId): Unit
   def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit
