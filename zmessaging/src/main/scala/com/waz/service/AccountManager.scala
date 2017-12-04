@@ -50,6 +50,7 @@ import scala.util.control.NonFatal
 class UserModule(val userId: UserId, val account: AccountManager, tracking: TrackingService) {
   private implicit val dispatcher = account.dispatcher
 
+  implicit lazy val accountContext = account.accountContext
   def context = account.global.context
   def contextWrapper = Context.wrap(context)
   def db = account.storage.db
@@ -70,7 +71,6 @@ class UserModule(val userId: UserId, val account: AccountManager, tracking: Trac
 
   lazy val otrClient = new OtrClient(account.netClient)
 
-  implicit lazy val accountContext: AccountContext      = new AccountContext(accountId, accountService)
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
@@ -85,13 +85,9 @@ class UserModule(val userId: UserId, val account: AccountManager, tracking: Trac
       case Some(account) =>
         if (account.clientId.isDefined) Future.successful(Right({}))
         else {
-          import com.waz.api.ClientRegistrationState._
           clientsSync.registerClient(account.password) flatMap {
             case Right((state, cl)) =>
               verbose(s"Client registration complete: $state, $cl")
-              if (state != REGISTERED || cl.isEmpty) {
-                sync.syncSelfClients()
-              }
               accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state)).map(_ => Right({}))
             case Left(err) =>
               error(s"client registration failed: $err")
@@ -107,6 +103,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   import AccountManager._
   implicit val dispatcher = new SerialDispatchQueue()
   verbose(s"Creating for: $id")
+
+  lazy val accountContext: AccountContext = new AccountContext(id, accounts)
 
   import global._
   val storage: StorageModule = global.factory.baseStorage(id)
@@ -182,12 +180,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
     logout(flushCredentials = true)
   }
 
-  @volatile private var _userModule = Option.empty[UserModule]
-
-  lazy val userModule = userId collect {
-    case Some(user) =>
-      _userModule = Some(_userModule.getOrElse(global.factory.userModule(user, this)))
-      _userModule.get
+  lazy val userModule = userId.collect {
+    case Some(user) => global.factory.userModule(user, this)
   }
 
   lazy val accountData = accountsStorage.signal(id)
@@ -196,14 +190,15 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
   lazy val userId = accountData.map(_.userId)
 
-  // logged in zmessaging instance
-  @volatile private var _zmessaging = Option.empty[ZMessaging]
-
   private val shouldSyncInitial = storage.userPrefs.preference(ShouldSyncInitial)
-  for {
+
+  (for {
     um         <- userModule
     shouldSync <- shouldSyncInitial.signal
-  } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncInitial := false)
+  } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncInitial := false))(accountContext)
+
+  // logged in zmessaging instance
+  @volatile private var _zmessaging = Option.empty[ZMessaging]
 
   val zmessaging = (for {
     Some(cId)  <- clientId
