@@ -33,10 +33,12 @@ trait TrackingEvent {
   val props: Option[JSONObject]
 }
 
-case class OptEvent(enabled: Boolean) extends TrackingEvent {
-  override val name = s"settings.opted_${if (enabled) "in" else "out"}_tracking"
+trait OptEvent extends TrackingEvent {
   override val props = None
 }
+
+case object OptInEvent  extends OptEvent { override val name = s"settings.opted_in_tracking" }
+case object OptOutEvent extends OptEvent { override val name = s"settings.opted_out_tracking" }
 
 case class ContributionEvent(action: ContributionEvent.Action, conversationType: ConversationType, ephExp: EphemeralExpiration, withBot: Boolean) extends TrackingEvent {
   override val name = "contributed"
