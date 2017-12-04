@@ -469,6 +469,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
   def getAccountService: AccountsServiceImpl = {
     (globalModule.accountsStorage _).expects().anyNumberOfTimes.returning(storage)
+    (globalModule.trackingService _).expects().anyNumberOfTimes.returning(tracking)
     (globalModule.phoneNumbers _).expects().anyNumberOfTimes.returning(phoneNumbers)
     (globalModule.regClient _).expects().anyNumberOfTimes.returning(regClient)
     (globalModule.loginClient _).expects().anyNumberOfTimes.returning(loginClient)

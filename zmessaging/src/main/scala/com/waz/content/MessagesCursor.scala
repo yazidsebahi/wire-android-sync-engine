@@ -18,13 +18,13 @@
 package com.waz.content
 
 import android.support.v4.util.LruCache
-import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.MessagesCursor.Entry
 import com.waz.db.{CursorIterator, Reader, ReverseCursorIterator}
 import com.waz.model._
 import com.waz.service.messages.MessageAndLikes
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.events.EventStream
@@ -44,7 +44,11 @@ trait MsgCursor {
   def close(): Unit
 }
 
-class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val lastReadTime: Instant, loader: MessageAndLikesStorage)(implicit ordering: Ordering[Instant]) extends MsgCursor { self =>
+class MessagesCursor(cursor: DBCursor,
+                     override val lastReadIndex: Int,
+                     val lastReadTime: Instant,
+                     loader: MessageAndLikesStorage,
+                     tracking: TrackingService)(implicit ordering: Ordering[Instant]) extends MsgCursor { self =>
   import MessagesCursor._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -154,7 +158,7 @@ class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val last
     val window = loadWindow(index)
 
     if (! window.contains(index)) {
-      HockeyApp.saveException(new RuntimeException(s"cursor window loading failed, requested index: $index, got window with offset: ${window.offset} and size: ${window.msgs.size}"), "")
+      tracking.exception(new RuntimeException(s"cursor window loading failed, requested index: $index, got window with offset: ${window.offset} and size: ${window.msgs.size}"), "")
       MessageAndLikes.Empty
     } else {
       val fetching = if (prevWindow != window) {
@@ -184,7 +188,7 @@ class MessagesCursor(cursor: DBCursor, override val lastReadIndex: Int, val last
     val window = loadWindow(offset, math.min(count, WindowSize))
 
     if (! window.contains(offset) || !window.contains(end - 1))
-      HockeyApp.saveException(new RuntimeException(s"cursor window loading failed, requested [$offset, $end), got window with offset: ${window.offset} and size: ${window.msgs.size}"), "")
+      tracking.exception(new RuntimeException(s"cursor window loading failed, requested [$offset, $end), got window with offset: ${window.offset} and size: ${window.msgs.size}"), "")
 
     window.msgs.slice(offset - window.offset, end - window.offset)
   }

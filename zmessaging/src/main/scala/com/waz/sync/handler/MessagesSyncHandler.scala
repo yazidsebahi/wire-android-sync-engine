@@ -18,7 +18,6 @@
 package com.waz.sync.handler
 
 import android.content.Context
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
@@ -36,6 +35,7 @@ import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdater}
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.otr.OtrServiceImpl
+import com.waz.service.tracking.TrackingService
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -69,6 +69,7 @@ class MessagesSyncHandler(context:    Context,
                           users:      UserServiceImpl,
                           cache:      CacheService,
                           members:    MembersStorage,
+                          tracking:   TrackingService,
                           errors:     ErrorsService, timeouts: Timeouts) {
 
   import com.waz.threading.Threading.Implicits.Background
@@ -144,11 +145,11 @@ class MessagesSyncHandler(context:    Context,
 
           }
       case (Some(msg), None) =>
-        HockeyApp.saveException(new Exception("postMessage failed, couldn't find conversation for msg"), "postMessage failed, couldn't find conversation for msg")
+        tracking.exception(new Exception("postMessage failed, couldn't find conversation for msg"), "postMessage failed, couldn't find conversation for msg")
         service.messageDeliveryFailed(msg.convId, msg, internalError("conversation not found")) map (_ => SyncResult.aborted())
 
       case (msg, conv) =>
-        HockeyApp.saveException(new Exception("postMessage failed, couldn't find a message nor conversation"), "postMessage failed, couldn't find a message nor conversation")
+        tracking.exception(new Exception("postMessage failed, couldn't find a message nor conversation"), "postMessage failed, couldn't find a message nor conversation")
         successful(SyncResult.aborted())
     }
   }

@@ -17,13 +17,13 @@
  */
 package com.waz.service.conversation
 
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.UserServiceImpl
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -52,7 +52,11 @@ trait ConversationsContentUpdater {
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, users: UserServiceImpl, membersStorage: MembersStorageImpl, messagesStorage: => MessagesStorageImpl) extends ConversationsContentUpdater {
+class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl,
+                                      users: UserServiceImpl,
+                                      membersStorage: MembersStorageImpl,
+                                      messagesStorage: => MessagesStorageImpl,
+                                      tracking: TrackingService) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
@@ -204,7 +208,7 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl, user
       case Some(conv) => processor(conv)
       case None if retryCount > 3 =>
         val ex = new NoSuchElementException("No conversation data found") with NoStackTrace
-        HockeyApp.saveException(ex, "No conversation data found")(tag)
+        tracking.exception(ex, "No conversation data found")(tag)
         Future.failed(ex)
       case None =>
         warn(s"No conversation data found for remote id: $remoteId on try: $retryCount")(tag)

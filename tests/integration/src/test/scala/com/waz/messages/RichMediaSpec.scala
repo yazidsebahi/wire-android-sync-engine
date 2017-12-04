@@ -214,13 +214,6 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       var uris = Option.empty[Seq[URI]]
 
-      media.prepareStreaming(new StreamingCallback {
-        override def onFailure(code: Int, message: String, label: String): Unit = {
-          uris = Some(Nil)
-          fail(s"$code, $message, $label")
-        }
-        override def onSuccess(us: util.List[URI]): Unit = uris = Some(us.asScala)
-      })
 
       withDelay {
         uris shouldBe 'defined
@@ -251,13 +244,6 @@ class RichMediaSpec extends FeatureSpec with Matchers with EitherValues with Bef
 
       var uris = Option.empty[Seq[URI]]
 
-      media.prepareStreaming(new StreamingCallback {
-        override def onFailure(code: Int, message: String, label: String): Unit = {
-          uris = Some(Nil)
-          fail(s"$code, $message, $label")
-        }
-        override def onSuccess(us: util.List[URI]): Unit = uris = Some(us.asScala)
-      })
 
       withDelay {
         uris shouldBe 'defined

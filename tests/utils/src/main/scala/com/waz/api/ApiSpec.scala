@@ -41,7 +41,6 @@ import com.waz.utils._
 import com.waz.utils.events.EventContext
 import com.waz.znet._
 import com.waz.{RoboProcess, RobolectricUtils, ShadowLogging}
-import net.hockeyapp.android.Constants
 import org.scalatest._
 import org.scalatest.enablers.{Containing, Emptiness, Length}
 import com.waz.ZLog.ImplicitTag._
@@ -159,7 +158,6 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
     Threading.AssertsEnabled = false
 
     ZMessaging.context = context
-    Constants.loadFromContext(context)
     ZMessaging.currentUi = ui
     ZMessaging.currentAccounts = accounts
     ui.global.permissions.setProvider(new RoboPermissionProvider)

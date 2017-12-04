@@ -53,24 +53,14 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
 
   def sendMessage(id: ConvId, content: MessageContent): Unit = zms(_.convsUi.sendMessage(id, content))
 
-  def setName(id: ConvId, name: String): Unit = zms(_.convsUi.setConversationName(id, name))
-
-  def addMembers(id: ConvId, users: Seq[User]): Unit = zms(_.convsUi.addConversationMembers(id, users.map(u => UserId(u.getId))))
-
-  def removeMember(id: ConvId, user: User): Unit = zms(_.convsUi.removeConversationMember(id, UserId(user.getId)))
-
-  def leave(id: ConvId): Unit = Serialized("Conversations", id) { zms(_.convsUi.leaveConversation(id)) }
-
+  // used by DeviceActor
   def setArchived(id: ConvId, archived: Boolean): Unit = zms(_.convsUi.setConversationArchived(id, archived))
-
   def setMuted(id: ConvId, muted: Boolean): Unit = zms(_.convsUi.setConversationMuted(id, muted))
-
   def clear(id: ConvId): Unit = Serialized("Conversations", id) { zms(_.convsUi.clearConversation(id)) }
 
   def createGroupConversation(users: Seq[User], localId: ConvId = ConvId()) =
     zms.flatMapFuture(_.convsUi.createGroupConversation(localId, users.map(u => UserId(u.getId))))
 
-  def knock(id: ConvId): Unit = zms(_.convsUi.knock(id))
 
   def onVerificationStateChange(callback: VerificationStateCallback) = {
 

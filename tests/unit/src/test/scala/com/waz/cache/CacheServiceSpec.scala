@@ -28,8 +28,8 @@ import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils.IoUtils
 import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -42,7 +42,7 @@ import scala.concurrent.duration._
 
   lazy val storage = new GlobalDatabase(Robolectric.application)
   lazy val cacheStorage = CacheStorage(storage, Robolectric.application)
-  lazy val service = CacheService(Robolectric.application, storage, cacheStorage)
+  lazy val service = CacheService(Robolectric.application, storage, cacheStorage, null)
 
   after {
     Thread.sleep(1000) // because some operations (deleting) are scheduled on background

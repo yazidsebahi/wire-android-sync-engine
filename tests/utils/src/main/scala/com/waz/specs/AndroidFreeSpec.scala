@@ -20,9 +20,9 @@ package com.waz.specs
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.{LogTag, error}
-import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.model.AccountId
 import com.waz.service.AccountsService.{AccountState, InForeground, LoggedOut}
+import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, ZMessaging}
 import com.waz.testutils.TestClock
 import com.waz.threading.Threading.{Background, IO, ImageDispatcher, Ui}
@@ -30,7 +30,6 @@ import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Intent, JVMIntentUtil, JavaURIUtil, URI, _}
-import com.waz.{HockeyApp, HockeyAppUtil}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -46,6 +45,14 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
   val account1Id  = AccountId("account1")
   val accounts    = mock[AccountsService]
+  val tracking    = mock[TrackingService]
+
+  (tracking.exception(_: Throwable, _: String, _: Option[AccountId])(_: LogTag)).expects(*, *, *, *).anyNumberOfTimes().onCall { (t, description, _, tag) =>
+    t match {
+      case e: exceptions.TestFailedException => swallowedFailure = Some(e)
+      case _ => error(s"Exception sent to HockeyApp: $description", t)(tag)
+    }
+  }
 
   val accountStates = Signal[Map[AccountId, AccountState]](Map(account1Id -> InForeground))
 
@@ -87,15 +94,6 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
         }
       }))
     }, Threading.testUiThreadName))
-
-    HockeyApp.setUtil(Some(new HockeyAppUtil {
-      override def saveException(t: Throwable, description: String)(implicit tag: LogTag) = {
-        t match {
-          case e: exceptions.TestFailedException => swallowedFailure = Some(e)
-          case _ => error(s"Exception sent to HockeyApp: $description", t)(tag)
-        }
-      }
-    }))
   }
 
   /**

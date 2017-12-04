@@ -17,12 +17,12 @@
  */
 package com.waz.sync.handler
 
-import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.model.GenericContent.Reaction
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.service.messages.ReactionsService
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.MessagesClient
 import com.waz.sync.otr.OtrSyncHandler
@@ -30,7 +30,11 @@ import com.waz.utils._
 
 import scala.concurrent.Future
 
-class ReactionsSyncHandler(client: MessagesClient, convs: ConversationsContentUpdaterImpl, service: ReactionsService, otrSync: OtrSyncHandler) {
+class ReactionsSyncHandler(client:    MessagesClient,
+                           convs:     ConversationsContentUpdaterImpl,
+                           service:   ReactionsService,
+                           otrSync:   OtrSyncHandler,
+                           tracking:  TrackingService) {
 
   private implicit val logTag: LogTag = logTagFor[ReactionsSyncHandler]
   import com.waz.threading.Threading.Implicits.Background
@@ -45,7 +49,7 @@ class ReactionsSyncHandler(client: MessagesClient, convs: ConversationsContentUp
             Future.successful(SyncResult(error))
         }
       case None =>
-        HockeyApp.saveException(new Exception("postLiking failed, couldn't find conversation"), s"postLiking failed, couldn't find conversation")
+        tracking.exception(new Exception("postLiking failed, couldn't find conversation"), s"postLiking failed, couldn't find conversation")
         Future.successful(SyncResult.failed())
     }
 }

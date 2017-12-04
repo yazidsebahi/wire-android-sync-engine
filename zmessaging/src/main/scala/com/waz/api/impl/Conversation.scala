@@ -58,7 +58,6 @@ class Conversation(override val id: ConvId, val initData: ConversationData = Con
     ui.zms { _.conversations.forceNameUpdate(id) }
   }
 
-  override def isOtto: Boolean = convIsOtto
 }
 
 object Conversation {

@@ -17,8 +17,8 @@
  */
 package com.waz.service.conversation
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.MessageContent.Asset.ErrorHandler
 import com.waz.api.MessageContent.Text
@@ -34,6 +34,7 @@ import com.waz.service.AccountsService.InForeground
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.Locales.currentLocaleOrdering
@@ -45,8 +46,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.higherKinds
-import scala.language.implicitConversions
+import scala.language.{higherKinds, implicitConversions}
 
 trait ConversationsUiService {
   @Deprecated
@@ -83,7 +83,6 @@ trait ConversationsUiService {
   def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]]
   def setEphemeral(id: ConvId, expiration: EphemeralExpiration): Future[Option[(ConversationData, ConversationData)]]
 
-  def assetUploadStarted   : EventStream[AssetData]
   def assetUploadCancelled : EventStream[Mime]
   def assetUploadFailed    : EventStream[ErrorResponse]
 }
@@ -94,6 +93,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
                                  users:           UserService,
                                  usersStorage:    UsersStorage,
                                  messages:        MessagesService,
+                                 messagesStorage: MessagesStorage,
                                  messagesContent: MessagesContentUpdater,
                                  members:         MembersStorage,
                                  assetStorage:    AssetsStorage,
@@ -103,11 +103,11 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
                                  convs:           ConversationsService,
                                  sync:            SyncServiceHandle,
                                  accounts:        AccountsService,
+                                 tracking:        TrackingService,
                                  errors:          ErrorsService) extends ConversationsUiService {
   import ConversationsUiService._
   import Threading.Implicits.Background
 
-  override val assetUploadStarted   = EventStream[AssetData]()
   override val assetUploadCancelled = EventStream[Mime]() //size, mime
   override val assetUploadFailed    = EventStream[ErrorResponse]()
 
@@ -417,7 +417,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       data <- assets.addImageAsset(img, conv.remoteId, isSelf = false)
       msg <- messages.addAssetMessage(conv.id, data)
       _ <- updateLastRead(msg)
-      _ <- Future.successful(assetUploadStarted ! data)
+      _ <- Future.successful(tracking.assetContribution(data.id, accountId))
       _ <- sync.postMessage(msg.id, conv.id, msg.editTime)
     } yield Some(msg)
   }
@@ -429,7 +429,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       message <- messages.addAssetMessage(conv.id, asset)
       _ <- updateLastRead(message)
       size <- in.sizeInBytes
-      _ <- Future.successful(assetUploadStarted ! asset)
+      _ <- Future.successful(tracking.assetContribution(asset.id, accountId))
       shouldSend <- checkSize(conv.id, size, mime, message, handler)
       _ <- if (shouldSend) sync.postMessage(message.id, conv.id, message.editTime) else Future.successful(())
     } yield Some(message)

@@ -18,10 +18,10 @@
 package com.waz.sync
 
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.{ConvId, MessageId, SyncId}
 import com.waz.model.sync.SyncJob
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync.SyncRequest.PostOpenGraphMeta
+import com.waz.model.{ConvId, MessageId, SyncId}
 import com.waz.service.NetworkModeService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.queue.{SyncContentUpdater, SyncExecutor, SyncScheduler}
@@ -43,7 +43,7 @@ class SyncExecutorSpec extends AndroidFreeSpec {
   }
 
   def getExecutor = {
-    new SyncExecutor(scheduler, content, network, handler)
+    new SyncExecutor(scheduler, content, network, handler, tracking)
   }
 
 }

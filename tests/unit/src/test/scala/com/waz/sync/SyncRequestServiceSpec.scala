@@ -77,7 +77,7 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
     (reporting.addStateReporter(_: (PrintWriter) => Future[Unit])(_: LogTag)).expects(*, *)
 
     val content = new SyncContentUpdaterImpl(db)
-    val service = new SyncRequestServiceImpl(context, account1Id, content, network, sync, reporting, accounts)
+    val service = new SyncRequestServiceImpl(context, account1Id, content, network, sync, reporting, accounts, tracking)
     (new AndroidSyncServiceHandle(service, timeouts), service)
   }
 }

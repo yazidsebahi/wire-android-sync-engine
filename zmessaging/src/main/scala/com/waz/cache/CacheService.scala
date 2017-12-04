@@ -21,7 +21,6 @@ import java.io._
 import java.lang.System._
 
 import android.content.Context
-import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.Database
@@ -36,8 +35,8 @@ import com.waz.utils.{IoUtils, returning}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
-
 import com.waz.ZLog.ImplicitTag._
+import com.waz.service.tracking.TrackingService
 
 trait CacheService {
   def createManagedFile(key: Option[AESKey] = None)(implicit timeout: Expiration = CacheService.DefaultExpiryTime): CacheEntry
@@ -99,7 +98,7 @@ trait CacheService {
   def optSignal(cacheKey: CacheKey): Signal[Option[CacheEntry]]
 }
 
-class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheStorage) extends CacheService {
+class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheStorage, tracking: TrackingService) extends CacheService {
 
   import CacheService._
   import Threading.Implicits.Background
@@ -131,7 +130,7 @@ class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheS
         case Failure(c: CancelException) =>
           Future.failed(c)
         case Failure(e) =>
-          HockeyApp.saveException(e, s"addStream failed")
+          tracking.exception(e, s"addStream failed")
           Future.failed(e)
       }
     }
@@ -142,7 +141,7 @@ class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheS
         if (moveFile) src.delete()
         add(CacheEntryData(key, timeout = timeout.timeout, path = Some(path), fileId = fileId, encKey = encKey, fileName = name, mimeType = mime, length = Some(len)))
       case Failure(e) =>
-        HockeyApp.saveException(e, s"addFile failed")
+        tracking.exception(e, s"addFile failed")
         throw new Exception(s"addFile($key) failed", e)
     }
 
@@ -246,8 +245,8 @@ class CacheServiceImpl(context: Context, storage: Database, cacheStorage: CacheS
 
 object CacheService {
 
-  def apply(context: Context, storage: Database, cacheStorage: CacheStorage) = new CacheServiceImpl(context, storage, cacheStorage)
-  def apply(context: Context, storage: Database): CacheService = CacheService(context, storage, CacheStorage(storage, context))
+  def apply(context: Context, storage: Database, cacheStorage: CacheStorage, tracking: TrackingService) = new CacheServiceImpl(context, storage, cacheStorage, tracking)
+  def apply(context: Context, storage: Database, tracking: TrackingService): CacheService = CacheService(context, storage, CacheStorage(storage, context), tracking)
 
   val DataThreshold = 4 * 1024 // amount of data stored in db instead of a file
   val TemDataExpiryTime = 12.hours

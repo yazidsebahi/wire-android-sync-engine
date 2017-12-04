@@ -69,7 +69,7 @@ import scala.concurrent.{Await, Future}
 
     override lazy val conversations: ConversationsService =
       new ConversationsService(context, selfUserId, push, users, usersStorage, membersStorage,
-        convsStorage, convsContent, sync, errors, messages, messagesContent, userPrefs, eventScheduler) {
+        convsStorage, convsContent, sync, errors, messages, messagesContent, userPrefs, eventScheduler, tracking) {
 
         override def updateConversations(conversations: Seq[ConversationResponse]) = Future.successful(Nil)
       }

@@ -36,7 +36,6 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
   val accId       = AccountId()
   val accStorage  = mock[AccountsStorage]
 
-
   feature("Successful logins") {
     scenario("Return authentication token if valid") {
 
@@ -233,5 +232,5 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
     }
   }
 
-  def getManager = new AuthenticationManager(accId, accStorage, loginClient)
+  def getManager = new AuthenticationManager(accId, accStorage, loginClient, tracking)
 }

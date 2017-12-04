@@ -117,6 +117,7 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
   def prefs = global.prefs
   def imageCache = global.imageCache
   def bitmapDecoder = global.bitmapDecoder
+  val tracking = global.trackingService
 
   val currentAccount = accounts.activeAccountManager
   val currentZms = accounts.activeZms
@@ -129,7 +130,7 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
 
   def getCurrent = accounts.getActiveZms
 
-  lazy val images: Images = new Images(context, bitmapDecoder)
+  lazy val images: Images = new Images(context, bitmapDecoder, tracking)
   lazy val messages: Messages = new Messages
   lazy val users: Users = new Users
   lazy val convs: Conversations = new Conversations()

@@ -49,6 +49,8 @@ trait AccountsService {
 
   def activeZms: Signal[Option[ZMessaging]]
 
+  def zms(accountId: AccountId): Signal[Option[ZMessaging]]
+
 }
 
 object AccountsService {
@@ -102,6 +104,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     returning(zs.flatten.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
+
+  def zms(accountId: AccountId): Signal[Option[ZMessaging]] = zmsInstances.map(_.find(_.accountId == accountId))
 
   @volatile private var accountStateSignals = Map.empty[AccountId, Signal[AccountState]]
   override def accountState(accountId: AccountId) = {

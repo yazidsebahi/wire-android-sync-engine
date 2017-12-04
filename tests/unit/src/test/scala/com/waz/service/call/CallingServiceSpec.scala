@@ -23,17 +23,16 @@ import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{UserId, _}
-import com.waz.service.AccountsService.{AccountState, InForeground}
 import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
 import com.waz.service.call.Avs.WCall
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
-import com.waz.service.{AccountContext, AccountsService, MediaManagerService, NetworkModeService}
+import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
 import com.waz.threading.{SerialDispatchQueue, Threading}
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, Serialized}
 import org.json.JSONObject

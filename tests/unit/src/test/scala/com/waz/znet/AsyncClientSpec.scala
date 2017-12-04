@@ -26,7 +26,6 @@ import com.koushikdutta.async.callback._
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback._
 import com.koushikdutta.async._
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator

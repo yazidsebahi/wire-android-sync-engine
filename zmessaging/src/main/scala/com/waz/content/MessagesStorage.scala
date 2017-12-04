@@ -28,6 +28,7 @@ import com.waz.model.MessageData.{MessageDataDao, MessageEntry}
 import com.waz.model._
 import com.waz.service.Timeouts
 import com.waz.service.messages.MessageAndLikes
+import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
@@ -66,7 +67,14 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def countLaterThan(conv: ConvId, time: Instant): Future[Long]
 }
 
-class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId, convs: ConversationStorage, users: UsersStorage, msgAndLikes: => MessageAndLikesStorage, timeouts: Timeouts) extends
+class MessagesStorageImpl(context: Context,
+                          storage: ZmsDatabase,
+                          userId: UserId,
+                          convs: ConversationStorage,
+                          users: UsersStorage,
+                          msgAndLikes: => MessageAndLikesStorage,
+                          timeouts: Timeouts,
+                          tracking: TrackingService) extends
     CachedStorageImpl[MessageId, MessageData](new TrimmingLruCache[MessageId, Option[MessageData]](context, Fixed(MessagesStorage.cacheSize)), storage)(MessageDataDao, "MessagesStorage_Cached") with MessagesStorage {
 
   import com.waz.utils.events.EventContext.Implicits.global
@@ -87,14 +95,14 @@ class MessagesStorageImpl(context: Context, storage: ZmsDatabase, userId: UserId
 
   def msgsIndex(conv: ConvId): Future[ConvMessagesIndex] =
     Option(indexes.get(conv)).fold {
-      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage))(indexes.put(conv, _)))
+      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, tracking))(indexes.put(conv, _)))
     } {
       Future.successful
     }
 
   def msgsFilteredIndex(conv: ConvId, messageFilter: MessageFilter): Future[ConvMessagesIndex] =
     filteredIndexes.get(conv, messageFilter).fold {
-      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, filter = Some(messageFilter)))(filteredIndexes.put(conv, messageFilter, _)))
+      Future(returning(new ConvMessagesIndex(conv, this, userId, users, convs, msgAndLikes, storage, tracking, filter = Some(messageFilter)))(filteredIndexes.put(conv, messageFilter, _)))
     } {
       Future.successful
     }

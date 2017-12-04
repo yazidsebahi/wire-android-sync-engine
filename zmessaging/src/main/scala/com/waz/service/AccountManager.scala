@@ -18,7 +18,6 @@
 package com.waz.service
 
 import com.softwaremill.macwire._
-import com.waz.HockeyApp
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ClientRegistrationState
@@ -29,12 +28,13 @@ import com.waz.model.{UserData, _}
 import com.waz.service.AccountsService.{InForeground, LoggedOut}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
+import com.waz.service.tracking.{LoggedOutEvent, TrackingService}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, EventStream, Signal, SourceStream}
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.Response.Status
@@ -47,9 +47,10 @@ import scala.util.Right
 import scala.util.control.NonFatal
 
 //TODO consider merging with AccountManager
-class UserModule(val userId: UserId, val account: AccountManager) {
+class UserModule(val userId: UserId, val account: AccountManager, tracking: TrackingService) {
   private implicit val dispatcher = account.dispatcher
 
+  implicit lazy val accountContext = account.accountContext
   def context = account.global.context
   def contextWrapper = Context.wrap(context)
   def db = account.storage.db
@@ -70,7 +71,6 @@ class UserModule(val userId: UserId, val account: AccountManager) {
 
   lazy val otrClient = new OtrClient(account.netClient)
 
-  implicit lazy val accountContext: AccountContext      = new AccountContext(accountId, accountService)
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
@@ -85,13 +85,9 @@ class UserModule(val userId: UserId, val account: AccountManager) {
       case Some(account) =>
         if (account.clientId.isDefined) Future.successful(Right({}))
         else {
-          import com.waz.api.ClientRegistrationState._
           clientsSync.registerClient(account.password) flatMap {
             case Right((state, cl)) =>
               verbose(s"Client registration complete: $state, $cl")
-              if (state != REGISTERED || cl.isEmpty) {
-                sync.syncSelfClients()
-              }
               accStorage.update(account.id, acc => acc.copy(clientId = cl.map(_.id), clientRegState = state)).map(_ => Right({}))
             case Left(err) =>
               error(s"client registration failed: $err")
@@ -107,6 +103,8 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   import AccountManager._
   implicit val dispatcher = new SerialDispatchQueue()
   verbose(s"Creating for: $id")
+
+  lazy val accountContext: AccountContext = new AccountContext(id, accounts)
 
   import global._
   val storage: StorageModule = global.factory.baseStorage(id)
@@ -132,7 +130,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   otrCurrentClient.map(_.isDefined) { exists =>
     if (hasClient && !exists) {
       info(s"client has been removed on backend, logging out")
-      OnRemovedClient ! id
+      global.trackingService.loggedOut(LoggedOutEvent.RemovedClient, id)
       logoutAndResetClient()
     }
     hasClient = exists
@@ -160,7 +158,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   selfUserData.map(_.exists(_.deleted)) { deleted =>
     if (deleted) {
       info(s"self user was deleted, logging out")
-      OnSelfDeleted ! id
+      global.trackingService.loggedOut(LoggedOutEvent.SelfDeleted, id)
       for {
         _ <- logoutAndResetClient()
         _ =  accounts.accountMap.remove(id)
@@ -178,16 +176,12 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
 
   auth.onInvalidCredentials.on(dispatcher){ _ =>
-    OnInvalidCredentials ! id
+    global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, id)
     logout(flushCredentials = true)
   }
 
-  @volatile private var _userModule = Option.empty[UserModule]
-
-  lazy val userModule = userId collect {
-    case Some(user) =>
-      _userModule = Some(_userModule.getOrElse(global.factory.userModule(user, this)))
-      _userModule.get
+  lazy val userModule = userId.collect {
+    case Some(user) => global.factory.userModule(user, this)
   }
 
   lazy val accountData = accountsStorage.signal(id)
@@ -196,14 +190,15 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
   lazy val userId = accountData.map(_.userId)
 
-  // logged in zmessaging instance
-  @volatile private var _zmessaging = Option.empty[ZMessaging]
-
   private val shouldSyncInitial = storage.userPrefs.preference(ShouldSyncInitial)
-  for {
+
+  (for {
     um         <- userModule
     shouldSync <- shouldSyncInitial.signal
-  } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncInitial := false)
+  } if (shouldSync) um.sync.performFullSync().flatMap(_ => shouldSyncInitial := false))(accountContext)
+
+  // logged in zmessaging instance
+  @volatile private var _zmessaging = Option.empty[ZMessaging]
 
   val zmessaging = (for {
     Some(cId)  <- clientId
@@ -233,7 +228,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
       if (client.signalingKey.isEmpty) {
         returning (s"Client registered ${client.regTime.map(_ until Instant.now).map(_.toDays).getOrElse(0)} ago is missing its signaling key") { msg =>
           warn(msg)
-          HockeyApp.saveException(new IllegalStateException(msg), msg)
+          global.trackingService.exception(new IllegalStateException(msg), msg, Some(id))
         }
         Serialized.future(self)(userModule.head.map(_.clientsSync.registerSignalingKey()))
       }
@@ -467,8 +462,4 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
 
 object AccountManager {
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
-
-  val OnRemovedClient: SourceStream[AccountId] = EventStream[AccountId]()
-  val OnSelfDeleted: SourceStream[AccountId] = EventStream[AccountId]()
-  val OnInvalidCredentials: SourceStream[AccountId] = EventStream[AccountId]()
 }

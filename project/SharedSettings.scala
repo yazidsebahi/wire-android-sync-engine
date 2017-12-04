@@ -30,7 +30,6 @@ object SharedSettings {
     lazy val backendApi = "com.wire" % "backend-api-proto" % "1.1"
     lazy val spotifyPlayer = "com.wire" % "spotify-player" % "1.0.0-beta13"
     lazy val spotifyAuth = "com.spotify.android" % "auth" % "1.0.0-alpha"
-    lazy val hockeyApp = "net.hockeyapp.android" % "HockeySDK" % "4.1.4"
     lazy val supportV4 = "com.android.support" % "support-v4" % supportLibVersion
     lazy val scalaCheck = "org.scalacheck" %% "scalacheck" % "1.12.5" % Test
     lazy val wireMock = "com.github.tomakehurst" % "wiremock" % "1.53" % Test // current versions requires Java 8...

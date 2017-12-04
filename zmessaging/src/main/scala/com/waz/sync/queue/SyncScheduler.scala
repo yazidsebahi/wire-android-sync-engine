@@ -28,6 +28,7 @@ import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.AccountsService.{Active, LoggedOut}
+import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
 import com.waz.threading.CancellableFuture.CancelException
@@ -64,7 +65,8 @@ class SyncSchedulerImpl(context:     Context,
                         val network: NetworkModeService,
                         service:     SyncRequestServiceImpl,
                         handler:     => SyncHandler,
-                        accounts:    AccountsService)
+                        accounts:    AccountsService,
+                        tracking:    TrackingService)
                        (implicit accountContext: AccountContext) extends SyncScheduler {
 
 
@@ -76,7 +78,7 @@ class SyncSchedulerImpl(context:     Context,
   private[sync] lazy val syncIntent      = Option(Context.unwrap(context)).map(SyncService.intent(_, accountId))
 
   override val queue                = new SyncSerializer
-  private[sync] val executor        = new SyncExecutor(this, content, network, handler)
+  private[sync] val executor        = new SyncExecutor(this, content, network, handler, tracking)
   private[sync] val executions      = new mutable.HashMap[SyncId, Future[SyncResult]]()
   private[sync] val executionsCount = Signal(0)
 

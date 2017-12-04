@@ -17,7 +17,6 @@
  */
 package com.waz.sync.queue
 
-import com.waz.HockeyApp
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.SyncState
@@ -25,8 +24,9 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.model.SyncId
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service.NetworkModeService
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.{SyncHandler, SyncRequestServiceImpl, SyncResult}
-import com.waz.threading.{SerialDispatchQueue, CancellableFuture}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 
 import scala.concurrent.duration._
@@ -34,7 +34,11 @@ import scala.concurrent.{Future, TimeoutException}
 import scala.util.Failure
 import scala.util.control.NoStackTrace
 
-class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, network: NetworkModeService, handler: => SyncHandler) {
+class SyncExecutor(scheduler:   SyncScheduler,
+                   content:     SyncContentUpdater,
+                   network:     NetworkModeService,
+                   handler: =>  SyncHandler,
+                   tracking:    TrackingService) {
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncExecutorQueue")
 
   def apply(job: SyncJob): Future[SyncResult] = job.request match {
@@ -89,7 +93,7 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
 
       // this is only to check for any long running sync requests, which could mean very serious problem
       CancellableFuture.lift(future).withTimeout(10.minutes).onComplete {
-        case Failure(e: TimeoutException) => HockeyApp.saveException(new RuntimeException(s"SyncRequest: ${job.request.cmd} runs for over 10 minutes", e), s"SyncRequest taking too long: $job")
+        case Failure(e: TimeoutException) => tracking.exception(new RuntimeException(s"SyncRequest: ${job.request.cmd} runs for over 10 minutes", e), s"SyncRequest taking too long: $job")
         case _ =>
       }
       future
@@ -109,16 +113,16 @@ class SyncExecutor(scheduler: SyncScheduler, content: SyncContentUpdater, networ
       case SyncResult.Failure(error, false) =>
         warn(s"SyncRequest: $job, failed permanently with error: $error")
         if (error.exists(_.shouldReportError)) {
-          HockeyApp.saveException(new RuntimeException(s"Request ${job.request.cmd} failed permanently with error: ${error.map(_.code)}") with NoStackTrace, s"Got fatal error, dropping request: $job\n error: $error")
+          tracking.exception(new RuntimeException(s"Request ${job.request.cmd} failed permanently with error: ${error.map(_.code)}") with NoStackTrace, s"Got fatal error, dropping request: $job\n error: $error")
         }
         drop()
       case SyncResult.Failure(error, true) =>
         warn(s"SyncRequest: $job, failed with error: $error")
         if (job.attempts > SyncRequestServiceImpl.MaxSyncAttempts) {
-          HockeyApp.saveException(new RuntimeException(s"Request ${job.request.cmd} failed with error: ${error.map(_.code)}") with NoStackTrace, s"MaxSyncAttempts exceeded, dropping request: $job\n error: $error")
+          tracking.exception(new RuntimeException(s"Request ${job.request.cmd} failed with error: ${error.map(_.code)}") with NoStackTrace, s"MaxSyncAttempts exceeded, dropping request: $job\n error: $error")
           drop()
         } else if (job.timeout > 0 && job.timeout < job.startTime) {
-          HockeyApp.saveException(new RuntimeException(s"Request ${job.request.cmd} timed-out with error: ${error.map(_.code)}") with NoStackTrace, s"Request timeout elapsed, dropping request: $job\n error: $error")
+          tracking.exception(new RuntimeException(s"Request ${job.request.cmd} timed-out with error: ${error.map(_.code)}") with NoStackTrace, s"Request timeout elapsed, dropping request: $job\n error: $error")
           drop()
         } else {
           verbose(s"will schedule retry for: $job, $job")

@@ -85,6 +85,8 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
   (receivedPushes.list _).expects().anyNumberOfTimes().returning(Future.successful(Seq.empty))
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
+  (tracking.track _).expects(*, *).anyNumberOfTimes()
+
   val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
 
@@ -326,7 +328,7 @@ class PushServiceSpec extends AndroidFreeSpec { test =>
     }
   }
 
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account1Id, pipeline, websocket, network, lifeCycle, sync)
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account1Id, pipeline, websocket, network, lifeCycle, tracking, sync)
 
   val lastId = Uid("last-id")
   val notJson = s"""

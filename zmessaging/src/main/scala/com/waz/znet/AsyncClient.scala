@@ -22,9 +22,9 @@ import java.util.concurrent.TimeoutException
 
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback.HttpConnectCallback
-import com.waz.HockeyApp.NoReporting
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.service.tracking.TrackingService.NoReporting
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.returning
