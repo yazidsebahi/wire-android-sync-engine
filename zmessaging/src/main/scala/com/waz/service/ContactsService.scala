@@ -142,7 +142,7 @@ class ContactsService(context:        Context,
   private def shareContactsPreferred = shareContactsPref().map(teamId.isEmpty && _)
   private def shareContactsPermissionGranted = teamId.isEmpty && permissions.isGranted(READ_CONTACTS)
 
-  private lazy val contactsObserver = new ContentObserverSignal(Contacts)(context)
+  private lazy val contactsObserver = new ContentObserverSignal(Contacts, permissions)(context)
   private lazy val contactsNeedReloading = new AtomicBoolean(true)
 
   private def markContactsDirty(): Unit = {
