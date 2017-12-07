@@ -161,11 +161,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
   lazy val receivedPushStorage: ReceivedPushStorage = wire[ReceivedPushStorageImpl]
 
-  lazy val spotifyClientId  = metadata.spotifyClientId
-
   lazy val youtubeClient      = wire[YouTubeClient]
   lazy val soundCloudClient   = wire[SoundCloudClient]
-  lazy val spotifyClient      = wire[SpotifyClient]
   lazy val assetClient        = wire[AssetClient]
   lazy val usersClient        = wire[UsersClient]
   lazy val convClient         = wire[ConversationsClient]
@@ -220,7 +217,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val giphy                                      = wire[GiphyService]
   lazy val youtubeMedia                               = wire[YouTubeMediaService]
   lazy val soundCloudMedia                            = wire[SoundCloudMediaService]
-  lazy val spotifyMedia                               = wire[SpotifyMediaService]
   lazy val otrService: OtrServiceImpl                 = wire[OtrServiceImpl]
   lazy val genericMsgs: GenericMessageService         = wire[GenericMessageService]
   lazy val reactions: ReactionsService                = wire[ReactionsService]

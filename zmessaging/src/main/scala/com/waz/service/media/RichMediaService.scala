@@ -39,8 +39,7 @@ class RichMediaService(assets:      AssetService,
                        messages:    MessagesContentUpdater,
                        sync:        SyncServiceHandle,
                        youTube:     YouTubeMediaService,
-                       soundCloud:  SoundCloudMediaService,
-                       spotify:     SpotifyMediaService) {
+                       soundCloud:  SoundCloudMediaService) {
   import com.waz.api.Message.Part.Type._
   import Threading.Implicits.Background
 
@@ -49,7 +48,7 @@ class RichMediaService(assets:      AssetService,
   private def isSyncableMsg(msg: MessageData) = msg.msgType == Message.Type.RICH_MEDIA && msg.content.exists(isSyncable)
 
   private def isSyncable(c: MessageContent) = c.tpe match {
-    case YOUTUBE | GOOGLE_MAPS | SOUNDCLOUD | SPOTIFY => true
+    case YOUTUBE | GOOGLE_MAPS | SOUNDCLOUD => true
     case _ => false
   }
 
@@ -99,14 +98,12 @@ class RichMediaService(assets:      AssetService,
   private def updateRichMediaContent(msg: MessageData, content: MessageContent): Future[Either[ErrorResponse, MessageContent]] = content.tpe match {
     case YOUTUBE     => youTube.updateMedia(msg, content)
     case SOUNDCLOUD  => soundCloud.updateMedia(msg, content)
-    case SPOTIFY     => spotify.updateMedia(msg, content)
     case _           => Future.successful(Right(content))
   }
 
   def prepareStreaming(media: MediaAssetData): ErrorOr[Vector[URI]] = media.provider match {
     case MediaProvider.YOUTUBE    => youTube.prepareStreaming(media)
     case MediaProvider.SOUNDCLOUD => soundCloud.prepareStreaming(media)
-    case MediaProvider.SPOTIFY    => spotify.prepareStreaming(media)
     case other =>
       warn(s"Unable to prepare streaming for rich media from $other.")
       Future.successful(Right(Vector.empty))

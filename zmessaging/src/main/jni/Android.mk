@@ -5,12 +5,12 @@ include $(CLEAR_VARS)
 LOCAL_MODULE    := lzw-decoder
 LOCAL_SRC_FILES := LzwDecoder.cpp
 LOCAL_LDLIBS    := -llog
-LOCAL_CFLAGS    := -O2 -Wall -pedantic -Wno-variadic-macros
+LOCAL_CFLAGS    := -O2 -Wall -pedantic -Wno-variadic-macros -fstack-protector-all
 include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE    := randombytes
 LOCAL_SRC_FILES := randombytes.c
-LOCAL_CFLAGS    := -std=c99 -O2 -Wall -pedantic -Wno-variadic-macros -lsodium
+LOCAL_CFLAGS    := -std=c99 -O2 -Wall -pedantic -Wno-variadic-macros -lsodium -fstack-protector-all
 LOCAL_LDLIBS    += src/main/jni/$(TARGET_ARCH_ABI)/libsodium.so
 include $(BUILD_SHARED_LIBRARY)
