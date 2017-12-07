@@ -114,17 +114,6 @@ class InvitationServiceImpl(storage:       Database,
       case None => CancellableFuture.successful(Left(ErrorResponse.internalError("Not a team account")))
     }
 
-  def postTeamInvitations(emails: Seq[EmailAddress], name: Option[String]): Future[Unit] = {
-    teamId match {
-      case Some(tid) =>
-        val invites = emails.map { e => TeamInvitation(tid, e, name.getOrElse(" "), None)}
-        val map = invites.map(i => i -> Option.empty[Either[ErrorResponse, ConfirmedTeamInvitation]]).toMap
-        invitedToTeam.mutate(_ ++ map)
-        sync.postTeamInvitations(invites).map(_ => ())
-      case _ => Future.successful(())
-    }
-  }
-
   def onInvitationSuccess(inv: Invitation, genesis: Instant): Future[Unit] = {
     verbose(s"invitation of ${inv.id} succeeded at $genesis")
     for {

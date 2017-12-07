@@ -23,7 +23,7 @@ import com.waz.model.{EditHistory, MessageId}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils._
-import com.waz.utils.crypto.SecureRandom
+import com.waz.utils.crypto.ZSecureRandom
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
@@ -39,7 +39,7 @@ class EditHistoryStorageImpl(context: Context, storage: Database) extends Cached
   import Threading.Implicits.Background
 
   // run db cleanup on each app start, will wait a bit to not execute it too soon
-  CancellableFuture.delayed((5 + SecureRandom.nextInt(10)).seconds) {
+  CancellableFuture.delayed((5 + ZSecureRandom.nextInt(10)).seconds) {
     storage { EditHistoryDao.deleteOlder(Instant.now.minus(EditExpiryTime))(_) }
   }
 }
