@@ -21,7 +21,6 @@ import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.PermissionProvider
 import com.waz.content.Uris
 import com.waz.model._
 import com.waz.service.AccountManager
@@ -96,10 +95,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     case res =>
       error(s"initFuture failed: $res")
   }
-
-  override def setPermissionProvider(p: PermissionProvider): Unit = ui.global.permissions.setProvider(p)
-
-  override def removePermissionProvider(p: PermissionProvider): Unit = ui.global.permissions.clearProvider(p)
 
   override def getSelf: Self = ui.users.selfUser
 

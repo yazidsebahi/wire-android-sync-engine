@@ -19,6 +19,7 @@ package com.waz.service
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import android.Manifest.permission.READ_CONTACTS
 import android.content.Context
 import android.database.Cursor
 import android.database.DatabaseUtils.queryNumEntries
@@ -28,17 +29,15 @@ import android.os.Build.VERSION_CODES.LOLLIPOP
 import android.provider.ContactsContract.DisplayNameSources._
 import android.provider.{BaseColumns, ContactsContract}
 import com.google.i18n.phonenumbers.PhoneNumberUtil
-import com.waz.PermissionsService
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.Permission.READ_CONTACTS
 import com.waz.content.UserPreferences._
 import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
-import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.AccountsService.InForeground
+import com.waz.service.permissions.PermissionsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.Locales.{currentLocaleOrdering, sortWithCurrentLocale}
@@ -140,9 +139,17 @@ class ContactsService(context:        Context,
   }
 
   private def shareContactsPreferred = shareContactsPref().map(teamId.isEmpty && _)
-  private def shareContactsPermissionGranted = teamId.isEmpty && permissions.isGranted(READ_CONTACTS)
+  private def shareContactsPermissionGranted = {
+    if (teamId.isDefined) Future.successful(false)
+    else readContactsPermission.orElse(Signal.const(false)).head
+  }
 
-  private lazy val contactsObserver = new ContentObserverSignal(Contacts)(context)
+  private lazy val readContactsPermission = permissions.allPermissions(Set(READ_CONTACTS))
+
+  private lazy val contactsObserver = readContactsPermission.flatMap {
+    case true => new ContentObserverSignal(Contacts)(context)
+    case _ => Signal.const(Option.empty[Instant])
+  }
   private lazy val contactsNeedReloading = new AtomicBoolean(true)
 
   private def markContactsDirty(): Unit = {
@@ -215,8 +222,6 @@ class ContactsService(context:        Context,
 
   lazy val contactsLoaded = EventStream[IndexedSeq[Contact]]()
 
-  private def isEstablished(c: ConversationData) = (c.convType == ConversationType.OneToOne || c.convType == ConversationType.Group) && c.isActive && ! c.hidden
-
   private def updateContactsAndMatches(): Future[Unit] =
     if (contactsNeedReloading.compareAndSet(true, false)) {
       def nonMatching(onWire: Vector[(UserId, ContactId)], users: GenMap[UserId, UserData], contacts: GenMap[ContactId, Contact]): GenSet[(UserId, ContactId)] =
@@ -257,30 +262,33 @@ class ContactsService(context:        Context,
 
   def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit] = storage(ContactsOnWireDao.insertOrIgnore(rels)(_)).future.map(_ => contactsOnWire.mutate(_ ++ rels))
 
-  private[waz] def requestUploadIfNeeded() = if (shareContactsPermissionGranted) {
-    atMostOncePer(accountId, uploadCheckInterval) {
-      verbose(s"requestUploadIfNeeded()")
+  private[waz] def requestUploadIfNeeded() = shareContactsPermissionGranted.flatMap {
+    case true =>
+      atMostOncePer(accountId, uploadCheckInterval) {
+        verbose(s"requestUploadIfNeeded()")
 
-      def atLeastOncePerUploadMaxDelayOrOnVersionUpgrade = for {
-        timeOfLastUpload <- lastUploadTime()
-        lastVersion <- addressBookVersionOfLastUpload()
-      } yield (lastVersion forall (_ < CurrentAddressBookVersion)) || (timeOfLastUpload exists uploadMaxDelay.elapsedSince)
+        def atLeastOncePerUploadMaxDelayOrOnVersionUpgrade = for {
+          timeOfLastUpload <- lastUploadTime()
+          lastVersion <- addressBookVersionOfLastUpload()
+        } yield (lastVersion forall (_ < CurrentAddressBookVersion)) || (timeOfLastUpload exists uploadMaxDelay.elapsedSince)
 
-      def atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn[A](current: AddressBook) = for {
-        timeOfLastUpload <- lastUploadTime() if timeOfLastUpload exists uploadMinDelay.elapsedSince
-        prev <- previouslyUploadedAddressBook() if (current - prev).nonEmpty
-        _ <- sync postAddressBook current
-      } yield ()
+        def atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn[A](current: AddressBook) = for {
+          timeOfLastUpload <- lastUploadTime() if timeOfLastUpload exists uploadMinDelay.elapsedSince
+          prev <- previouslyUploadedAddressBook() if (current - prev).nonEmpty
+          _ <- sync postAddressBook current
+        } yield ()
 
-      for {
-        priorityUpload <- atLeastOncePerUploadMaxDelayOrOnVersionUpgrade
-        sharingEnabled <- shareContactsPreferred if sharingEnabled
-        hashes <- addressBook // will be empty & only contain self hashes if sharing is disabled
-        _ <- if (priorityUpload) sync postAddressBook hashes
-        else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
-      } yield ()
-    }
-  } else Future.successful({})
+        for {
+          priorityUpload <- atLeastOncePerUploadMaxDelayOrOnVersionUpgrade
+          sharingEnabled <- shareContactsPreferred if sharingEnabled
+          hashes <- addressBook // will be empty & only contain self hashes if sharing is disabled
+          _ <- if (priorityUpload) sync postAddressBook hashes
+          else atMostOncePerUploadMinDelayAndOnlyIfThereAreNewHashesIn(hashes)
+        } yield ()
+      }
+    case false =>
+      Future.successful({})
+  }
 
   private def selfUserHashes: Future[Vector[String]] =
     for {

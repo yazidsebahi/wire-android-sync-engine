@@ -29,7 +29,7 @@ import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService
 import com.waz.sync.client.{AssetClient, AssetClientImpl}
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{MockZMessaging, RoboPermissionProvider}
+import com.waz.testutils.MockZMessaging
 import com.waz.threading.CancellableFuture
 import com.waz.utils.IoUtils
 import com.waz.znet.Request
@@ -54,7 +54,6 @@ import scala.concurrent.duration._
     override lazy val assetClient: AssetClient = new AssetClientImpl(zNetClient) {
       override def loadAsset(req: Request[Unit]) = CancellableFuture.successful(loadImageResult)
     }
-    permissions.setProvider(new RoboPermissionProvider)
   }
 
   lazy val service: AssetService = zms.assets

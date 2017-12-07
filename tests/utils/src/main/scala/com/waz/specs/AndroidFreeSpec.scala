@@ -20,6 +20,7 @@ package com.waz.specs
 import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.{LogTag, error}
+import com.waz.log.{InternalLog, SystemLogOutput}
 import com.waz.model.AccountId
 import com.waz.service.AccountsService.{AccountState, InForeground, LoggedOut}
 import com.waz.service.tracking.TrackingService
@@ -82,8 +83,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
     ZMessaging.clock = clock
 
-//    InternalLog.reset()
-//    InternalLog.add(new SystemLogOutput)
+    InternalLog.reset()
+    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 

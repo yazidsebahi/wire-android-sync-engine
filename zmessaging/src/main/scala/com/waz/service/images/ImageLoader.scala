@@ -19,13 +19,12 @@ package com.waz.service.images
 
 import java.io._
 
+import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.content.ContentResolver
 import android.graphics.BitmapFactory
 import android.media.ExifInterface
 import android.media.ExifInterface._
-import com.waz.PermissionsService
 import com.waz.ZLog._
-import com.waz.api.Permission
 import com.waz.bitmap.gif.{Gif, GifReader}
 import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
@@ -34,6 +33,7 @@ import com.waz.model.{Mime, _}
 import com.waz.service.assets.AssetService
 import com.waz.service.downloads.{AssetLoader, AssetLoaderService}
 import com.waz.service.images.ImageLoader.Metadata
+import com.waz.service.permissions.PermissionsService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest
@@ -148,19 +148,22 @@ class ImageLoaderImpl(context:                  Context,
     }
 
   private def saveImageToGallery(data: LocalData, mime: Mime) =
-    permissions.requiring(Set(Permission.WRITE_EXTERNAL_STORAGE), delayUntilProviderIsSet = false)(
     {
-      warn("permission to save image to gallery denied")
-      Future successful None
-    },
-    Future {
-      val newFile = AssetService.saveImageFile(mime)
-      IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
-      val uri = URI.fromFile(newFile)
-      context.sendBroadcast(Intent.scanFileIntent(uri))
-      Some(uri)
-    }(Threading.IO)
-    )
+      import PermissionsService._
+      permissions.requestAllPermissions(Set(WRITE_EXTERNAL_STORAGE)).flatMap {
+        case true =>
+          Future {
+            val newFile = AssetService.saveImageFile(mime)
+            IoUtils.copy(data.inputStream, new FileOutputStream(newFile))
+            val uri = URI.fromFile(newFile)
+            context.sendBroadcast(Intent.scanFileIntent(uri))
+            Some(uri)
+          }(Threading.IO)
+        case _ =>
+          warn("permission to save image to gallery denied")
+          Future successful None
+      }
+    }
 
   private def downloadAndDecode[A](asset: AssetData, decode: LocalData => CancellableFuture[A], forceDownload: Boolean): CancellableFuture[A] =
     loadLocalData(asset).flatMap( localData => downloadAndDecode(asset, decode, localData, 0, forceDownload) )
