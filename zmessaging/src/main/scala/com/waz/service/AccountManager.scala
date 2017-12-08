@@ -238,7 +238,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
   private var awaitActivationFuture = CancellableFuture successful Option.empty[AccountData]
 
   (for {
-    true      <- accounts.accountState(id).map(_ == InForeground)
+    true      <- accounts.accountState(id).map(_ == LoggedOut)
     Some(acc) <- accountsStorage.optSignal(id)
   } yield
     !acc.verified && acc.password.isDefined && (acc.pendingPhone.isDefined || acc.pendingEmail.isDefined)
@@ -441,7 +441,7 @@ class AccountManager(val id: AccountId, val global: GlobalModule, val accounts: 
       case None => CancellableFuture successful None
       case Some(data) if data.verified => CancellableFuture successful Some(data)
       case Some(data) =>
-        CancellableFuture.lift(accounts.accountState(id).map(_ == InForeground).head).flatMap {
+        CancellableFuture.lift(accounts.accountState(id).map(_ == LoggedOut).head).flatMap {
           case true => CancellableFuture.lift(activate(data.id)).flatMap {
             case Right(acc) if acc.verified => CancellableFuture successful Some(acc)
             case _ =>
