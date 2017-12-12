@@ -20,26 +20,17 @@ package com.waz.utils.events
 import android.content.Context
 import android.database.ContentObserver
 import android.net.Uri
-import com.waz.PermissionsService
-import com.waz.api.Permission
-import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.returning
 import org.threeten.bp.Instant
 
-import scala.concurrent.Future
 import scala.ref.WeakReference
-import com.waz.ZLog.ImplicitTag._
 
-class ContentObserverSignal(uri: Uri, permissions: PermissionsService, notifyForDescendents: Boolean = false)(implicit context: Context) extends SourceSignal[Option[Instant]](Some(None)) {
+class ContentObserverSignal(uri: Uri, notifyForDescendents: Boolean = false)(implicit context: Context) extends SourceSignal[Option[Instant]](Some(None)) {
   @volatile private var observer = Option.empty[Forwarder]
-  @volatile private var requestingPermissions = CancellableFuture.successful({})
 
   override protected def onWire(): Unit = {
     super.onWire()
-
-    permissions.requiring(Set(Permission.READ_CONTACTS), delayUntilProviderIsSet = true)(Future.successful({}), returning(CancellableFuture {
-      observer = Some(returning(new Forwarder(new WeakReference(this)))(o => context.getContentResolver.registerContentObserver(uri, notifyForDescendents, o)))
-    } (Threading.Background))(requestingPermissions = _))
+    observer = Some(returning(new Forwarder(new WeakReference(this)))(o => context.getContentResolver.registerContentObserver(uri, notifyForDescendents, o)))
   }
 
   override protected def onUnwire(): Unit = {
@@ -47,12 +38,9 @@ class ContentObserverSignal(uri: Uri, permissions: PermissionsService, notifyFor
     unsubscribe()
   }
 
-  private def unsubscribe(): Unit = {
-    requestingPermissions.cancel()
-    observer foreach { o =>
-      observer = None
-      context.getContentResolver.unregisterContentObserver(o)
-    }
+  private def unsubscribe(): Unit = observer foreach { o =>
+    observer = None
+    context.getContentResolver.unregisterContentObserver(o)
   }
 
   override def finalize(): Unit = unsubscribe()

@@ -349,8 +349,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       registerAcc = acc.copy(pendingEmail = Some(emailAddress), password = Some(password), name = Some(name))
       _ <- storage.updateOrCreate(registerAcc.id, _ => registerAcc, registerAcc)
       req <- registerOnBackend(registerAcc, name)
+      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
       _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
-      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(pendingEmail = Some(emailAddress))) else Future.successful(())
     } yield req
   }
 
