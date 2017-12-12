@@ -17,37 +17,47 @@
  */
 package com.waz.provision
 
-import java.io.{ByteArrayInputStream, File, FileInputStream}
+import java.io._
 import java.util.concurrent.atomic.AtomicBoolean
 
 import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
-import com.waz.api.OtrClient.DeleteCallback
+import com.waz.ZLog.LogTag
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api._
 import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
-import com.waz.content.Preferences.PrefKey
 import com.waz.content.{Database, GlobalDatabase}
+import com.waz.log.{InternalLog, LogOutput}
+import com.waz.media.manager.context.IntensityLevel
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.ClientId
-import com.waz.model.{ConvId, ConversationData, Liking, RConvId, MessageContent => _, _}
+import com.waz.model.{ConvId, Liking, RConvId, MessageContent => _, _}
+import com.waz.provision.DeviceActor.responseTimeout
 import com.waz.service._
-import com.waz.testutils.Implicits.{CoreListAsScala, _}
-import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
+import com.waz.service.call.FlowManagerService
+import com.waz.testutils.Implicits._
+import com.waz.threading._
 import com.waz.ui.UiModule
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
+import com.waz.utils.events.Signal
 import com.waz.znet.ClientWrapper
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future.successful
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
+/**
+  * Protip: checkout QAActorSpec.scala for a simple test environment that'll speed up debugging
+  */
 object DeviceActor {
+
+  val responseTimeout = 120.seconds
+
   def props(deviceName: String,
             application: Context,
             backend: BackendConfig = BackendConfig.StagingBackend,
@@ -62,16 +72,38 @@ class DeviceActor(val deviceName: String,
 
   import ActorMessage._
 
+  InternalLog.add(new LogOutput {
+    override def log(str: String, level: InternalLog.LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit = {
+      import com.waz.log.InternalLog.LogLevel._
+      level match {
+        case Error => DeviceActor.this.log.error(s"$tag: $str")
+        case Warn  => DeviceActor.this.log.warning(s"$tag: $str")
+//        case Info  => DeviceActor.this.log.info(s"$tag: $str")
+//        case Debug => DeviceActor.this.log.debug(s"$tag: $str")
+        case _     => DeviceActor.this.log.info(s"$tag: $str")
+      }
+    }
+    override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit =
+      DeviceActor.this.log.error(cause, s"$tag: $str")
+
+    override def flush() = Future.successful({})
+    override def close() = Future.successful({})
+    override val id = deviceName
+  })
+
   override val supervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 1, withinTimeRange = 10.seconds) {
       case exc: Exception =>
         log.error(exc, s"device actor '$deviceName' died")
         Stop
     }
-  lazy val delayNextAssetPosting = new AtomicBoolean(false)
 
-  lazy val globalModule = new GlobalModuleImpl(application, backend) { global =>
+  val delayNextAssetPosting = new AtomicBoolean(false)
+
+  val globalModule = new GlobalModuleImpl(application, backend) { global =>
     ZMessaging.currentGlobal = this
+    lifecycle.acquireUi()
+
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
     override lazy val clientWrapper: Future[ClientWrapper] = wrapper
 
@@ -81,55 +113,41 @@ class DeviceActor(val deviceName: String,
       override lazy val localBluetoothName: String = deviceName
     }
 
-    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(this) {
-      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule): ZMessaging =
-        new ZMessaging(teamId, clientId, user) {
+    override lazy val flowmanager = new FlowManagerService {
+      override def flowManager = None
+    }
 
-        }
+    override lazy val mediaManager = new MediaManagerService {
+      override def mediaManager = Future.failed(new Exception("No media manager available in actors"))
+      override def soundIntensity = Signal.empty[IntensityLevel]
+      override def isSpeakerOn = Signal.empty[Boolean]
+      override def setSpeaker(enable: Boolean) = Future.successful({})
     }
   }
 
-  lazy val instance = new AccountsServiceImpl(globalModule) {
-    override val activeAccountPref = global.prefs.preference(PrefKey[Option[AccountId]]("current_user_" + Random.nextInt().toHexString))
+  val accountsService = new AccountsServiceImpl(globalModule) {
+    ZMessaging.currentAccounts = this
+    Await.ready(firstTimePref := false, 5.seconds)
   }
-  lazy val ui = new UiModule(instance)
-  lazy val api = {
+
+  val ui = new UiModule(accountsService)
+  val api = {
     val api = new ZMessagingApi()(ui)
     api.onCreate(application)
     api.onResume()
     api
   }
-  def optZms = Await.result(api.ui.getCurrent, 5.seconds)
-  lazy val zmessaging = optZms.get
-  lazy val prefs = zmessaging.prefs
-  lazy val convs = api.getConversations
-  lazy val archived = convs.getArchivedConversations
 
-  //Using a large value so that the test processes will always timeout first, and not the remotes
-  implicit val defaultTimeout = 5.minutes
-  implicit val execContext = context.dispatcher.prepare()
+  val zms = accountsService.activeZms.collect { case Some(z) => z }
+  val am  = accountsService.activeAccountManager.collect { case Some(a) => a }
 
-  implicit def zmsDb: SQLiteDatabase = api.account.get.storage.db.dbHelper.getWritableDatabase
-
-  val maxConnectionAttempts = 10
-
-  def searchConvsListById(remoteId: RConvId): IConversation => Boolean = { conv =>
-    conv.data.remoteId.str == remoteId.str || conv.data.id.str == remoteId.str
-  }
-
-  def searchConvsListByName(name: String): IConversation => Boolean = _.name == name
-
-  def findConvById(remoteId: RConvId): IConversation = convs.find(searchConvsListById(remoteId)).orElse(archived.find(searchConvsListById(remoteId))).get
-  def convExistsById(remoteId: RConvId): Boolean = convs.exists(searchConvsListById(remoteId)) || archived.exists(searchConvsListById(remoteId))
-  def convExistsByName(name: String): Boolean = convs.exists(searchConvsListByName(name)) || archived.exists(searchConvsListByName(name))
-  def findConvByName(name: String): IConversation = convs.find(searchConvsListByName(name)).orElse(archived.find(searchConvsListByName(name))).get
-
-  override def receive = preProcess(active)
+  implicit val ec: DispatchQueue = new SerialDispatchQueue(name = s"DeviceActor_$deviceName")
 
   @throws[Exception](classOf[Exception])
   override def postStop(): Unit = {
     api.onPause()
     api.onDestroy()
+    globalModule.lifecycle.releaseUi()
     Await.result(api.ui.getCurrent, 5.seconds) foreach { zms =>
       zms.syncContent.syncStorage { storage =>
         storage.getJobs foreach { job => storage.remove(job.id) }
@@ -138,470 +156,349 @@ class DeviceActor(val deviceName: String,
     super.postStop()
   }
 
-  /**
-   * Intercepts all messages to perform common logic like logging, and then passes
-   * the message onto the specified handleFunction
-    *
-    * @param handleFunction the partial function to carry out the actual message processing after pre-processing
-   * @return a Receive partial function
-   */
-  def preProcess(handleFunction: Receive): Receive = {
-    case message@_ =>
+  def respondInFuture[S](receive: ActorMessage => Future[ResponseMessage]): Receive = {
+    case message: ActorMessage =>
       log.info(s"Received message: $message")
-      handleFunction(message)
+      sender() ! (Try(Await.result(receive(message), responseTimeout)) match {
+        case Success(m) => m
+        case Failure(cause) =>
+          val st = stackTrace(cause)
+          log.error(cause, "Message handling failed")
+          Failed(s"${cause.getMessage}: $st")
+      })
   }
 
-  /////////////////////////////////////////////////////////////////////
-  /// Messages that respond immediately or handle their own delays
-  /////////////////////////////////////////////////////////////////////
-  def active: Receive = activeFuture orElse {
-    case Echo(msg, _) =>
-      sender ! Echo(msg, deviceName)
+  override def receive: Receive = respondInFuture {
+    case Echo(msg, _) => Future.successful(Echo(msg, deviceName))
 
-    case RegisterPhone(phone, code, name, color) =>
-
-    case Login(email, pass) =>
-      val senderRef = sender()
-      if (api.getSelf.getUser != null) {
-        sender ! Failed(s"Process is already logged in as user: ${api.getSelf.getEmail}")
-      }
-      ZMessaging.currentAccounts.loginEmail(EmailAddress(email), pass).onComplete {
-        case util.Success(Right(())) => senderRef ! Successful
-        case util.Success(Left(ErrorResponse(code, message, label))) =>
-          log.info(s"Failed login: $code, $message, $label")
-          senderRef ! Failed(s"Failed login: $code, $message, $label")
-        case util.Failure(t) =>
-          log.info(s"Failed login: $t")
-          senderRef ! Failed(s"Failed login: $t")
-      }
+    case Login(email, pass) => accountsService.getActiveAccount.flatMap {
+      case Some(accountData) =>
+        Future.successful(Failed(s"Process is already logged in as user: ${accountData.email}"))
+      case None =>
+        accountsService.loginEmail(EmailAddress(email), pass).map {
+          case Right(()) => Successful
+          case Left(ErrorResponse(code, message, label)) => Failed(s"Failed login: $code, $message, $label")
+        }
+    }
 
     case SendRequest(userId) =>
-      val senderRef = sender()
       Option(userId) match {
-        case Some(_) =>
-          api.getUser(userId.str).connect("meep")
-          waitUntil(convs) { _.asScala.exists(_.getType == ConversationType.WaitForConnection) } onSuccess {
-            case _ => senderRef ! Successful
-          }
-        case None =>
-          senderRef ! Failed("UserId cannot be null")
+        case Some(uId) =>
+          (for {
+            z    <- zms.head
+            user <- z.users.userSignal(uId).head
+            conv <- z.connection.connectToUser(uId, "meep", user.getDisplayName)
+          } yield conv.filter(_.convType == ConversationType.WaitForConnection))
+            .map(_.fold2(Failed(s"Failed to send connect request to user $uId"), _ => Successful))
+        case _ => Future.successful(Failed("UserId cannot be null"))
       }
-
-    case message@_ =>
-      log.error(s"unknown remote api command '$message'")
-      sender ! Failed(s"unknown remote api command '$message'")
-  }
-
-  /////////////////////////////////////////////////////////////////////
-  /// Messages that respond in the future
-  /////////////////////////////////////////////////////////////////////
-  def activeFuture = FutureReceive {
 
     case GetUser =>
-      waitUntil(api.getSelf)(_.getUser != null) map { self => Successful(self.getUser.getId) }
+      waitForSelf.map(u => Successful(u.id.str))
 
     case GetUserName =>
-      waitUntil(api.getSelf)(_.getUser != null) map { self => Successful(self.getUser.getUsername)}
+      waitForSelf.map(u => Successful(u.name))
 
     case GetConv(name) =>
-      waitUntil(convs)(_ => convExistsByName(name)) map { _ =>
-        Successful(findConvByName(name).data.remoteId.str)
-      }
+      zms.flatMap(_.convsStorage.convsSignal.map(_.conversations.find(_.name == name).map(_.remoteId))).head
+        .map(_.fold2(Failed(s"Could not find a conversation with name: $name"), r => Successful(r.str)))
 
     case GetMessages(rConvId) =>
-      whenConversationExistsFuture(rConvId) { conv =>
-        for {
-          idx <- zmessaging.messagesStorage.msgsIndex(conv.id)
-          cursor <- idx.loadCursor
-        } yield {
-
-          ConvMessages(Array.tabulate(cursor.size) { i =>
-            val m = cursor(i)
-            MessageInfo(m.message.id, m.message.msgType, m.message.time)
-          })
-        }
+      for {
+        (z, convId) <- zmsWithLocalConv(rConvId)
+        idx         <- z.messagesStorage.msgsIndex(convId)
+        cursor      <- idx.loadCursor
+      } yield {
+        ConvMessages(Array.tabulate(cursor.size) { i =>
+          val m = cursor(i)
+          MessageInfo(m.message.id, m.message.msgType, m.message.time)
+        })
       }
 
     case CreateGroupConversation(users@_*) =>
-//      zmessaging.convsUi.createGroupConversation(ConvId(), users) map { _ => Successful }
-      Future.successful(Failed)
+      zms.head.flatMap(_.convsUi.createGroupConversation(members = users.toSet)).map(_ => Successful)
 
     case ClearConversation(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.clear()
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, cId) =>
+        z.convsUi.clearConversation(cId)
+      }.map(_.fold2(Failed(s"Could not find a conversation with id: $remoteId"), r => Successful))
 
     case SendText(remoteId, msg) =>
-      whenConversationExists(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, msg)
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, cId) =>
+        z.convsUi.sendMessage(cId, msg)
+      }.map(_.fold2(Failed(s"Unable to create message: $msg in conv: $remoteId"), r => Successful))
 
     case UpdateText(msgId, text) =>
-      zmessaging.messagesStorage.getMessage(msgId) flatMap {
-        case Some(msg) if msg.userId == zmessaging.selfUserId =>
-          zmessaging.convsUi.updateMessage(msg.convId, msgId, text) map { _ => Successful }
-        case Some(_) =>
-          Future successful Failed("Can not update messages from other user")
-        case None =>
-          Future successful Failed("No message found with given id")
-      }
-
-    case DeleteMessage(convId, msgId) =>
-      whenConversationExistsFuture(convId) { conv =>
-       zmessaging.messagesStorage.getMessage(msgId) flatMap {
-          case Some(msg) =>
-            zmessaging.convsUi.deleteMessage(conv.id, msgId) map { _ => Successful }
+      for {
+        z   <- zms.head
+        msg <- z.messagesStorage.getMessage(msgId)
+        res <- msg match {
+          case Some(msg) if msg.userId == z.selfUserId =>
+            z.convsUi.updateMessage(msg.convId, msgId, text).map(_ => Successful)
+          case Some(_) =>
+            Future.successful(Failed("Can not update messages from other user"))
           case None =>
-            Future successful Failed("No message found with given id")
+            Future.successful(Failed("No message found with given id"))
         }
-      }
+      } yield res
 
-    case SendGiphy(convId, searchQuery) =>
-      whenConversationExistsFuture(convId) { conv =>
+    case DeleteMessage(rConvId, msgId) =>
+      for {
+        (z, convId) <- zmsWithLocalConv(rConvId)
+        res <- z.messagesStorage.getMessage(msgId).flatMap {
+          case Some(msg) =>
+            z.convsUi.deleteMessage(convId, msgId).map(_ => Successful)
+          case None =>
+            Future.successful(Failed("No message found with given id"))
+        }
+      } yield res
+
+    case SendGiphy(rConvId, searchQuery) =>
+      zmsWithLocalConv(rConvId).flatMap { case (z, convId) =>
         searchQuery match {
           case "" =>
             waitUntil(api.getGiphy.random())(_.isReady == true) map { results =>
-              zmessaging.convsUi.sendMessage(conv.id, "Via giphy.com")
-              zmessaging.convsUi.sendMessage(conv.id, results.head)
+              z.convsUi.sendMessage(convId, "Via giphy.com")
+              z.convsUi.sendMessage(convId, results.head)
               Successful
             }
 
           case _ =>
             waitUntil(api.getGiphy.search(searchQuery))(_.isReady == true) map { results =>
-              zmessaging.convsUi.sendMessage(conv.id, "%s · via giphy.com".format(searchQuery))
-              zmessaging.convsUi.sendMessage(conv.id, results.head)
+              z.convsUi.sendMessage(convId, "%s · via giphy.com".format(searchQuery))
+              z.convsUi.sendMessage(convId, results.head)
               Successful
             }
         }
       }
 
-    case RecallMessage(convId, msgId) =>
-      whenConversationExistsFuture(convId) { conv =>
-        zmessaging.convsUi.recallMessage(conv.id, msgId).map { _ =>
-          Successful
-        }
-      }
+    case RecallMessage(rConvId, msgId) =>
+      zmsWithLocalConv(rConvId).flatMap {
+        case (z, convId) => z.convsUi.recallMessage(convId, msgId)
+      }.map(_ => Successful)
 
     case AcceptConnection(userId) =>
       Option(userId) match {
         case Some(_) =>
-          waitUntil(api.getUser(userId.str))(_.getConnectionStatus == ConnectionStatus.PendingFromOther) map { user =>
-            user.acceptConnection()
-            Successful
-          }
+          for {
+            z <- zms.head
+            _ <- z.usersStorage.signal(userId).filter(_.connection == ConnectionStatus.PendingFromOther).head
+            _ <- z.connection.acceptConnection(userId)
+          } yield Successful
         case None =>
-          Future(Failed("UserId cannot be null"))
-      }
-
-    case CancelConnection(userId) =>
-      Option(userId) match {
-        case Some(_) =>
-          waitUntil(api.getUser(userId.str))(_.getConnectionStatus == ConnectionStatus.PendingFromUser) map { user =>
-            user.cancelConnection()
-            Successful
-          }
-        case None =>
-          Future(Failed("UserId cannot be null"))
+          Future.successful(Failed("UserId cannot be null"))
       }
 
     case SendImage(remoteId, path) =>
-      whenConversationExists(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, ui.images.createImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path))))
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.sendMessage(convId, ui.images.createImageAssetFrom(IoUtils.toByteArray(new FileInputStream(path))))
+      }.map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
 
     case SendImageData(remoteId, bytes) =>
-      whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, ui.images.createImageAssetFrom(bytes)).map { _ =>
-          Successful
-        }
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.sendMessage(convId, ui.images.createImageAssetFrom(bytes))
+      }.map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
 
     case SendAsset(remoteId, bytes, mime, name, delay) =>
-      whenConversationExistsFuture(remoteId) { conv =>
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
         delayNextAssetPosting.set(delay)
         val asset = impl.AssetForUpload(AssetId(), Some(name), Mime(mime), Some(bytes.length.toLong)){
           _ => new ByteArrayInputStream(bytes)
         }
-
-        zmessaging.convsUi.sendMessage(conv.id, asset, DoNothingAndProceed).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
-      }
+        z.convsUi.sendMessage(convId, asset, DoNothingAndProceed)
+      }.map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
 
     case SendLocation(remoteId, lon, lat, name, zoom) =>
-      whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.sendMessage(conv.id, new MessageContent.Location(lon, lat, name, zoom)).map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
-      }
-
-    case CancelAssetUpload(messageId) =>
-      zmessaging.messagesStorage.getMessage(messageId).mapSome(_.assetId).flatMapSome { assetId =>
-        zmessaging.assets.cancelUpload(assetId, messageId)
-      }.map {
-        case Some(()) => Successful
-        case None     => Failed("upload not canceled: message not found or no asset ID present")
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.sendMessage(convId, new MessageContent.Location(lon, lat, name, zoom))
+      }.map(_.fold2(Failed("no message sent"), m => Successful(m.id.str)))
 
     case SendFile(remoteId, path, mime) =>
-      whenConversationExistsFuture(remoteId) { conv =>
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
         val file = new File(path)
         val assetId = AssetId()
-        zmessaging.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).map { cacheEntry =>
+        z.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).map { cacheEntry =>
           Mime(mime) match {
             case Mime.Image() =>
-              zmessaging.convsUi.sendMessage(conv.id, api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
+              z.convsUi.sendMessage(convId, api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
               Successful
             case _ =>
               val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
                 _ => new FileInputStream(file)
               }
-              zmessaging.convsUi.sendMessage(conv.id, asset, DoNothingAndProceed)
+              z.convsUi.sendMessage(convId, asset, DoNothingAndProceed)
               Successful
           }
         }
       }
 
     case AddMembers(remoteId, users@_*) =>
-      whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.addConversationMembers(conv.id, users.toSet).map { _ =>
-          Successful
-        }
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+          z.convsUi.addConversationMembers(convId, users.toSet)
+      }.map(_ => Successful)
 
     case Knock(remoteId) =>
-      whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.knock(conv.id).map { _ =>
-          Successful
-        }
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.knock(convId)
+      }.map(_.fold2(Failed("no ping sent"), m => Successful(m.id.str)))
 
     case SetEphemeral(remoteId, expiration) =>
-      whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.setEphemeral(conv.id, expiration).map { _ =>
-          Successful
-        }
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.setEphemeral(convId, expiration)
+      }.map(_.fold2(Failed("conversation was not updated successfully"), _ => Successful))
 
     case MarkEphemeralRead(convId, messageId) =>
-      zmessaging.ephemeral.onMessageRead(messageId) map {
-        case Some(_) => Successful
-        case None    => Failed(s"message not found with id: $messageId")
-      }
+      zms.head.flatMap(_.ephemeral.onMessageRead(messageId))
+        .map(_.fold2(Failed(s"message not found with id: $messageId"), _ => Successful))
 
     case Typing(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.getInputStateIndicator.textChanged()
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.typing.selfChangedInput(convId)
+      }.map(_ => Successful)
 
     case ClearTyping(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.getInputStateIndicator.textCleared()
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.typing.selfClearedInput(convId)
+      }.map(_ => Successful)
 
     case ArchiveConv(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.setArchived(true)
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.setConversationArchived(convId, archived = true)
+      }.map(_ => Successful)
 
     case UnarchiveConv(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.setArchived(false)
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.setConversationArchived(convId, archived = false)
+      }.map(_ => Successful)
 
     case MuteConv(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.setMuted(true)
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.setConversationMuted(convId, muted = true)
+      }.map(_ => Successful)
 
     case UnmuteConv(remoteId) =>
-      whenConversationExists(remoteId) { conv =>
-        conv.setMuted(false)
-        Successful
-      }
+      zmsWithLocalConv(remoteId).flatMap { case (z, convId) =>
+        z.convsUi.setConversationMuted(convId, muted = false)
+      }.map(_ => Successful)
 
     case UpdateProfileImage(path) =>
-      whenSelfLoaded { self =>
-        self.setPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path))))
-        Successful
-      }
-
-    case ClearProfileImage =>
-      whenSelfLoaded { self =>
-        self.clearPicture()
-        Successful
-      }
+      zms.head.flatMap(_.users.updateSelfPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path)))))
+        .map(_ => Successful)
 
     case UpdateProfileName(name) =>
-      whenSelfLoaded { self =>
-        self.setName(name)
-        Successful
-      }
+      zms.head.flatMap(_.users.updateSelf(name = Some(name)))
+        .map(_ => Successful)
 
     case UpdateProfileUserName(userName) =>
-      val p = Promise[ActorMessage]()
-      waitUntil(api.getSelf)(_.getUser != null).map { self =>
-        self.setUsername(userName, new CredentialsUpdateListener {
-          override def onUpdateFailed(code: Int, message: String, label: String): Unit = p.success(Failed(s"unable to update user name: $code, $message, $label"))
+      zms.head.flatMap(_.account.updateHandle(Handle(userName)))
+        .map(_.fold(err => Failed(s"unable to update user name: ${err.code}, ${err.message}, ${err.label}"), _ => Successful))
 
-          override def onUpdated(): Unit = p.success(Successful)
-        })
+    case SetStatus(status) =>
+      Availability.all.find(_.toString.toLowerCase == status.toLowerCase) match {
+        case Some(availability) => zms.head.flatMap(_.users.updateAvailability(availability)).map(_ => Successful)
+        case None => Future.successful(Failed(s"Unknown availability: $status"))
       }
-      p.future
 
     case UpdateProfileColor(color) =>
-      whenSelfLoaded { self =>
-        self.setAccent(color)
-        Successful
-      }
+      zms.head.flatMap(_.users.updateSelf(accent = Some(color)))
+        .map(_ => Successful)
 
     case UpdateProfileEmail(email) =>
-      whenSelfLoaded { self =>
-        self.setEmail(email, new CredentialsUpdateListener {
-          override def onUpdateFailed(code: Int, message: String, label: String): Unit = ()
-
-          override def onUpdated(): Unit = ()
-        })
-        Successful
-      }
+      zms.head.flatMap(_.account.updateEmail(EmailAddress(email)))
+        .map(_ => Successful)
 
     case SetMessageReaction(remoteId, messageId, action) =>
-      zmessaging.messagesStorage.getMessage(messageId) flatMap {
-        case Some(msg) if action == Liking.Action.Like =>
-          zmessaging.reactions.like(msg.convId, messageId) map { _ => Successful }
-        case Some(msg) =>
-          zmessaging.reactions.unlike(msg.convId, messageId) map { _ => Successful }
-        case None =>
-          Future successful Failed("No message found with given id")
+      zms.head.flatMap { z =>
+        z.messagesStorage.getMessage(messageId).flatMap {
+          case Some(msg) if action == Liking.Action.Like =>
+            z.reactions.like(msg.convId, messageId).map(_ => Successful)
+          case Some(msg) =>
+            z.reactions.unlike(msg.convId, messageId).map(_ => Successful)
+          case None =>
+            Future.successful(Failed("No message found with given id"))
+        }
       }
 
     case SetDeviceLabel(label) =>
-      waitUntil(api.getSelf.getOtrClient)(!_.isEmpty) map { client =>
-        client.get.setLabel(label)
-        Successful
-      }
+      for {
+        z      <- zms.head
+        client <- z.otrClientsService.selfClient.head
+        _      <- z.otrClientsService.updateClientLabel(client.id, label)
+      } yield Successful
 
     case DeleteDevice(clientId, password) =>
-      def find(cs: CoreList[OtrClient]) = cs.find(_.asInstanceOf[com.waz.api.impl.otr.OtrClient].clientId.str == clientId)
-      waitUntil(api.getSelf.getOtherOtrClients)(find(_).isDefined) map find flatMap {
-        case None => successful(Failed(s"Client not found: $clientId"))
-        case Some(client) =>
-          val p = Promise[ActorMessage]()
-          client.delete(password, new DeleteCallback {
-            override def onClientDeleted(client: OtrClient): Unit = p trySuccess Successful
-            override def onDeleteFailed(error: String): Unit = p trySuccess Failed(s"DeleteDevice failed with error: $error")
-          })
-          p.future
-      }
+      zms.head.flatMap(_.otrClientsService.deleteClient(ClientId(clientId), password))
+        .map(_.fold(err => Failed(s"Failed to delete client: ${err.code}, ${err.message}, ${err.label}"), _ => Successful))
 
     case DeleteAllOtherDevices(password) =>
-      optZms.fold[Future[ActorMessage]](successful(Failed("no zmessaging"))) { zms =>
-        for {
-          clients       <- zms.otrClientsStorage.getClients(zms.selfUserId).map(_.map(_.id))
-          others         = clients.filter(_ != zms.clientId)
-          responses     <- traverseSequential(others)(zms.otrClientsService.deleteClient(_, password))
-          failures       = responses.collect { case Left(err) => s"[unable to delete client: ${err.message}, ${err.code}, ${err.label}]" }
-        } yield if (failures.isEmpty) Successful else Failed(failures mkString ", ")
-      }
+      for {
+        z             <- zms.head
+        clients       <- z.otrClientsStorage.getClients(z.selfUserId).map(_.map(_.id))
+        others         = clients.filter(_ != z.clientId)
+        responses     <- traverseSequential(others)(z.otrClientsService.deleteClient(_, password))
+        failures       = responses.collect { case Left(err) => s"[unable to delete client: ${err.message}, ${err.code}, ${err.label}]" }
+      } yield if (failures.isEmpty) Successful else Failed(failures mkString ", ")
 
     case GetDeviceId() =>
-      waitUntil(api.getSelf.getOtrClient)(!_.isEmpty) map { client =>
-        Successful(client.get.getId);
-      }
+      zms.head.flatMap(_.otrClientsService.selfClient.head).map(c => Successful(c.id.str))
 
     case GetDeviceFingerPrint() =>
-      waitUntil(api.getSelf.getOtrClient)(!_.isEmpty) flatMap { client =>
-        waitUntil(client.get.getFingerprint)(!_.isEmpty) map { fingerPrint =>
-          Successful(new String(fingerPrint.get.getRawBytes))
-        }
-      }
+      (for {
+        z      <- zms.head
+        am     <- am.head
+        client <- z.otrClientsService.selfClient.head
+        fp     <- am.fingerprintSignal(z.selfUserId, client.id).head
+      } yield fp.map(new String(_)))
+        .map(_.fold2(Failed("Failed to get finger print for self client"), Successful(_)))
 
     case AwaitSyncCompleted =>
-      api.zmessaging flatMap {
-        case None =>  successful(Failed("no zmessaging"))
-        case Some(zms) => zms.syncContent.syncJobs.filter(_.isEmpty).head("actors").map { _ => Successful }
-      }
+      zms.flatMap(_.syncContent.syncJobs.filter(_.isEmpty)).head.map(_ => Successful)
 
     case ResetQueueStats =>
-      successful({
-              com.waz.threading.DispatchQueueStats.reset()
-              Successful
-            })
+      Future.successful({
+        com.waz.threading.DispatchQueueStats.reset()
+        Successful
+      })
 
     case GetQueueStats =>
       println(s"dispatch queue stats")
       DispatchQueueStats.printStats(10)
       successful({
-              QueueStats(DispatchQueueStats.report(10).toArray)
-            })
+        QueueStats(DispatchQueueStats.report(10).toArray)
+      })
 
     case ForceAddressBookUpload =>
       for {
-        _ <- zmessaging.contacts.lastUploadTime := Some(Instant.EPOCH)
-        _ <- zmessaging.contacts.requestUploadIfNeeded()
+        z <- zms.head
+        _ <- z.contacts.lastUploadTime := Some(Instant.EPOCH)
+        _ <- z.contacts.requestUploadIfNeeded()
       } yield Successful
+
+    case m@_ =>
+      log.error(s"unknown remote api command '$m'")
+      Future.successful(Failed(s"unknown remote api command '$m'"))
   }
 
-  def whenConversationsLoaded(task: ConversationsList => ActorMessage): Unit = {
-    waitUntil(convs)(_.size > 0) map task
+  def zmsWithLocalConv(rConvId: RConvId): Future[(ZMessaging, ConvId)] = {
+    for {
+      z   <- zms.head
+      _   = log.info(s"zms ready: $z")
+      cId <- z.convsStorage.convsSignal.map { csSet =>
+        log.info(s"all conversations: ${csSet.conversations}")
+        csSet.conversations.find(_.remoteId == rConvId)
+      }.collect { case Some(c) => c.id }.head
+      _   = log.info(s"Found local conv: $cId for remote: $rConvId")
+    } yield (z, cId)
   }
 
-  def whenSelfLoaded(task: Self => ActorMessage): Future[Any] = {
-    waitUntil(api.getSelf)(_.getUser != null) map task
-  }
+  def waitForSelf: Future[UserData] =
+    zms.flatMap(_.users.selfUser).head
 
-  def whenConversationExists(remoteId: RConvId)(task: IConversation => ActorMessage): Future[Any] = {
-    Option(remoteId) match {
-      case Some(_) =>
-        waitUntil(convs)(_ => convExistsById(remoteId)) map { _ =>
-          task(findConvById(remoteId))
-        }
-      case None =>
-        Future(Failed("Conversation remoteId cannot be null"))
-    }
-  }
-
-  def whenConversationExistsFuture(remoteId: RConvId)(task: IConversation => Future[ActorMessage]): Future[Any] = {
-    Option(remoteId) match {
-      case Some(_) =>
-        waitUntil(convs)(_ => convExistsById(remoteId)) flatMap { _ =>
-          task(findConvById(remoteId))
-        }
-      case None =>
-        Future(Failed("Conversation remoteId cannot be null"))
-    }
-  }
-
-  // Should not use withConv directly in Endpoint, because which will not wait until convId exist
-  def withConv[A](id: RConvId)(f: ConversationData => Future[A]) =
-    getConv(id) flatMap f map { _ => Successful }
-
-  // Should not use withConv directly in Endpoint, because which will not wait until convId exist
-  def getConv(id: RConvId) = zmessaging.convsContent.convByRemoteId(id) flatMap {
-    case None =>
-      log.warning(s"rconv id not found: $id")
-      zmessaging.convsContent.convById(ConvId(id.str)) collect { case Some(conv) => conv }
-    case Some(conv) =>
-      successful(conv)
-  }
-
-  def FutureReceive(receive: PartialFunction[Any, Future[Any]]): Receive = {
-    case message if receive.isDefinedAt(message) => respondInFuture(receive(message))
-  }
-
-  def respondInFuture[S](f: Future[S]) = {
-    val senderRef = sender()
-    f.onComplete {
-      case util.Success(message) =>
-        senderRef ! message
-      case util.Failure(cause) =>
-        log.error(cause, "future receive failed")
-        senderRef ! Failed(s"future receive failed: ${cause.getMessage}")
-    }
+  def stackTrace(t: Throwable) = {
+    val result = new StringWriter()
+    val printWriter = new PrintWriter(result)
+    t.printStackTrace(printWriter)
+    result.toString
   }
 
   private var listeners = Set.empty[UpdateListener] // required to keep references to the listeners as waitUntil manages to get them garbage-collected
@@ -628,7 +525,7 @@ class DeviceActor(val deviceName: String,
 
     delay = CancellableFuture.delay(timeout)
     delay.onSuccess { case _ =>
-      promise.tryFailure(new Exception(s"Waituntil did not complete before timeout of : ${timeout.toSeconds} seconds"))
+      promise.tryFailure(new Exception(s"Wait until did not complete before timeout of : ${timeout.toSeconds} seconds"))
     }
 
     promise.future.andThen {

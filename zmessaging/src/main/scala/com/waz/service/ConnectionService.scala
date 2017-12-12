@@ -87,12 +87,16 @@ class ConnectionServiceImpl(selfUserId:      UserId,
       }
 
     val lastEvents = events.groupBy(_.to).map { case (_, es) => es.maxBy(_.lastUpdated) }
-
     val fromSync: Set[UserId] = lastEvents.filter(_.localTime == Event.UnknownDateTime).map(_.to)(breakOut)
-    Future.sequence(lastEvents.map{ ev =>
+
+    verbose(s"lastEvents: $lastEvents, fromSync: $fromSync")
+
+    Future.sequence(lastEvents.map { ev =>
+      verbose(s"Updating users based on last events: $ev")
       usersStorage.updateOrCreate(ev.to, prev => updateOrCreate(ev)(Some(prev)), updateOrCreate(ev)(None)).map((_, ev.lastUpdated))
     }).map(users => (users.toSet, fromSync))
-  } flatMap { case (users, fromSync) =>
+  }.flatMap { case (users, fromSync) =>
+    verbose(s"syncing $users and fromSync: $fromSync")
     val toSync = users filter { case (user, _) => user.connection == ConnectionStatus.Accepted || user.connection == ConnectionStatus.PendingFromOther || user.connection == ConnectionStatus.PendingFromUser }
     sync.syncUsersIfNotEmpty(toSync.map(_._1.id)(breakOut)) flatMap { _ =>
       RichFuture.processSequential(users.grouped(16).toSeq) { us =>
