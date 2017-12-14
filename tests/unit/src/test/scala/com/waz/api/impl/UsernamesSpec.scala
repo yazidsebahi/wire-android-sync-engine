@@ -41,31 +41,7 @@ import scala.util.Random
   }
 
   Random.setSeed(0)
-
-  scenario ("Username u should be invalid") {
-    usernames.isUsernameValid("u").isValid should be(false)
-  }
-
-  scenario ("Username pokemon_master354 should be valid") {
-    usernames.isUsernameValid("pokemon_master354").isValid should be(true)
-  }
-
-  scenario ("Username CatZ_MasteR should be invalid") {
-    usernames.isUsernameValid("CatZ_MasteR").isValid should be(false)
-  }
-
-  scenario ("Username shiny+ufo should be invalid") {
-    usernames.isUsernameValid("shiny+ufo").isValid should be(false)
-  }
-
-  scenario ("Username super_long_username_because_whatever should be invalid") {
-    usernames.isUsernameValid("super_long_username_because_whatever").isValid should be(false)
-  }
-
-  scenario ("Username \uD83D\uDE3C孟利 should be invalid") {
-    usernames.isUsernameValid("\uD83D\uDE3C孟利").isValid should be(false)
-  }
-
+  
   scenario ("Username generation with latin characters only") {
     val genName = usernames.generateUsernameFromName("Wire", null)
     genName should be("wire")
