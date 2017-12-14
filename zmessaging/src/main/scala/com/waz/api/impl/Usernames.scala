@@ -22,13 +22,11 @@ import java.text.Normalizer
 import android.content.Context
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.{UsernameValidation, UsernameValidationError, UsernamesRequestCallback, ValidatedUsernames}
+import com.waz.api.ValidatedUsernames
 import com.waz.model.Handle
-import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.zms.R
-import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
-import com.waz.znet._
+
 import scala.util.Random
 
 object Usernames {
@@ -41,31 +39,6 @@ object Usernames {
 
 class Usernames()(implicit ui: UiModule) extends api.Usernames{
   private implicit val tag: LogTag = s"Usernames"
-
-  override def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) = {
-    ui.zms(_.zNetClient.withErrorHandling("isUsernameAvailable", Request.Head(Usernames.checkSingleAvailabilityPath + username)) {
-      case Response(SuccessHttpStatus(), _, _) => callback.onUsernameRequestResult(Array(username).map(u => UsernameValidation(u, UsernameValidationError.ALREADY_TAKEN)))
-      case Response(HttpStatus(Status.NotFound, _), _, _) => callback.onUsernameRequestResult(Array(username).map(u => UsernameValidation(u, UsernameValidationError.NONE)))
-      case Response(HttpStatus(status, _), _, _) => callback.onRequestFailed(status)
-      case _ => callback.onRequestFailed(499)
-    }(Threading.Ui))
-  }
-
-  override def isUsernameValid(username: String): UsernameValidation = {
-    val usernameRegex = s"""^([a-z]|[0-9]|_)*""".r
-
-    username match {
-      case usernameRegex(_) =>
-      case _ => return UsernameValidation(username = username, UsernameValidationError.INVALID_CHARACTERS)
-    }
-    if (username.length  > Usernames.MAX_LENGTH) {
-      return UsernameValidation(username = username, UsernameValidationError.TOO_LONG)
-    }
-    if (username.length  < Usernames.MIN_LENGTH) {
-      return UsernameValidation(username = username, UsernameValidationError.TOO_SHORT)
-    }
-    UsernameValidation(username = username, UsernameValidationError.NONE)
-  }
 
   override def generateUsernameFromName(name: String, context: Context): String = {
     var cleanName: String = Handle.transliterated(name).toLowerCase
@@ -83,12 +56,13 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
 
   override def getValidatedUsernames: ValidatedUsernames = new ValidatedHandles()
 
-  private def generateFromDictionary(context: Context): String = {
-    if (context == null) { return "" }
-    val names: Array[String] = context.getResources.getStringArray(R.array.random_names)
-    val adjectives: Array[String] = context.getResources.getStringArray(R.array.random_adjectives)
-    val namesIndex: Int = Random.nextInt(names.length)
-    val adjectivesIndex: Int = Random.nextInt(adjectives.length)
-    (adjectives(adjectivesIndex) + names(namesIndex)).toLowerCase
+  private def generateFromDictionary(context: Context): String = Option(context) match {
+    case None => ""
+    case Some(c) =>
+      val names = c.getResources.getStringArray(R.array.random_names)
+      val adjectives = c.getResources.getStringArray(R.array.random_adjectives)
+      val namesIndex = Random.nextInt(names.length)
+      val adjectivesIndex = Random.nextInt(adjectives.length)
+      (adjectives(adjectivesIndex) + names(namesIndex)).toLowerCase
   }
 }

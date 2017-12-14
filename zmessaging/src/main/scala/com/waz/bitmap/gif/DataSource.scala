@@ -79,7 +79,7 @@ trait DataSource {
     var n = count
     while (n > 0) {
       val c = skipBytes(n)
-      if (c < 0) return false
+      if (c < 0) return false //TODO remove return
       n -= c
     }
     true

@@ -148,7 +148,7 @@ object RichMediaContentParser {
 
     while (iter.hasNext) {
       val hs = iter.next()
-      if (!Character.isWhitespace(hs) && !emoji(hs)) return false
+      if (!Character.isWhitespace(hs) && !emoji(hs)) return false //TODO remove return
     }
 
     true

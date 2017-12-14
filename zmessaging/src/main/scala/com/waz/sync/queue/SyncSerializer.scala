@@ -52,7 +52,7 @@ class SyncSerializer {
       if (!handle.isCompleted) {
         if (handle.priority > nextJobMinPriority) {
           queue.enqueue(handle)
-          return
+          return //TODO remove return
         }
 
         if (handle.promise.trySuccess(())) runningJobs += 1
