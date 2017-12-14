@@ -20,8 +20,6 @@ package com.waz.api
 import android.content.Context
 
 trait Usernames {
-  def isUsernameAvailable(username: String, callback: UsernamesRequestCallback) : Unit
-  def isUsernameValid(username: String) : UsernameValidation
   def generateUsernameFromName(name: String, context: Context): String
 
   def validateUsernames(usernames: Array[String])
