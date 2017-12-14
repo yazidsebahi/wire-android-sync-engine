@@ -47,6 +47,7 @@ object ExifOrientation {
       code
     }
 
+    //TODO remove returns
     def readExif(len: Int): Int = {
       if (len < 20) return 0
       /* Read Exif head, check for "Exif" */
