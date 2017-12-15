@@ -298,6 +298,7 @@ class MessagesServiceImpl(selfUserId: UserId,
       case MemberAdded => Message.Type.OTR_MEMBER_ADDED
       case _ => Message.Type.OTR_DEVICE_ADDED
     }
+    verbose(s"addOtrUnverifiedMessage($convId, $users, $change), msgType is $msgType")
     updater.addLocalSentMessage(MessageData(MessageId(), convId, msgType, selfUserId, members = users.toSet)) map { Some(_) }
   }
 

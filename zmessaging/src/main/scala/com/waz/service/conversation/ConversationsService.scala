@@ -42,21 +42,32 @@ import scala.concurrent.Future
 import scala.concurrent.Future.successful
 import scala.util.control.NoStackTrace
 
-class ConversationsService(context:         Context,
-                           selfUserId:      UserId,
-                           push:            PushService,
-                           users:           UserServiceImpl,
-                           usersStorage:    UsersStorageImpl,
-                           membersStorage:  MembersStorageImpl,
-                           convsStorage:    ConversationStorageImpl,
-                           val content:     ConversationsContentUpdater,
-                           sync:            SyncServiceHandle,
-                           errors:          ErrorsService,
-                           messages:        MessagesServiceImpl,
-                           msgContent:      MessagesContentUpdater,
-                           userPrefs:       UserPreferences,
-                           eventScheduler:  => EventScheduler,
-                           tracking:        TrackingService) {
+trait ConversationsService {
+  def content: ConversationsContentUpdater
+  def convStateEventProcessingStage: EventScheduler.Stage
+  def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0): Future[Any]
+  def getSelfConversation: Future[Option[ConversationData]]
+  def updateConversations(conversations: Seq[ConversationResponse]): Future[Seq[ConversationData]]
+  def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
+  def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
+  def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
+}
+
+class ConversationsServiceImpl(context:         Context,
+                               selfUserId:      UserId,
+                               push:            PushService,
+                               users:           UserServiceImpl,
+                               usersStorage:    UsersStorageImpl,
+                               membersStorage:  MembersStorageImpl,
+                               convsStorage:    ConversationStorageImpl,
+                               val content:     ConversationsContentUpdater,
+                               sync:            SyncServiceHandle,
+                               errors:          ErrorsService,
+                               messages:        MessagesServiceImpl,
+                               msgContent:      MessagesContentUpdater,
+                               userPrefs:       UserPreferences,
+                               eventScheduler:  => EventScheduler,
+                               tracking:        TrackingService) extends ConversationsService {
 
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
@@ -85,7 +96,7 @@ class ConversationsService(context:         Context,
       convsStorage.setUnknownVerification(conv)
   }
 
-  def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0): Future[Any] = ev match {
+  def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0) = ev match {
     case CreateConversationEvent(rConvId, time, from, data) =>
       updateConversations(selfUserId, Seq(data)) flatMap { case (_, created) => Future.traverse(created) (created =>
         messages.addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
@@ -109,7 +120,7 @@ class ConversationsService(context:         Context,
       }
   }
 
-  private def processUpdateEvent(conv: ConversationData, ev: ConversationEvent): Future[Any] = ev match {
+  private def processUpdateEvent(conv: ConversationData, ev: ConversationEvent) = ev match {
     case RenameConversationEvent(_, _, _, name) => content.updateConversationName(conv.id, name)
 
     case MemberJoinEvent(_, _, _, userIds, _) =>
@@ -154,7 +165,7 @@ class ConversationsService(context:         Context,
     }
   }
 
-  def getSelfConversation: Future[Option[ConversationData]] = {
+  def getSelfConversation = {
     val selfConvId = ConvId(selfUserId.str)
     content.convById(selfConvId).flatMap {
       case Some(c) => successful(Some(c))
@@ -167,16 +178,13 @@ class ConversationsService(context:         Context,
     }
   }
 
-  def updateConversations(conversations: Seq[ConversationResponse]): Future[Seq[ConversationData]] =
-    Future.traverse(conversations) { conv =>
-      eventScheduler.post(conv.conversation.remoteId) {
-        updateConversations(selfUserId, Seq(conv)) flatMap { case (all, created) =>
-          messages.addDeviceStartMessages(created, selfUserId) map (_ => all)
-        }
+  def updateConversations(conversations: Seq[ConversationResponse]) = Future.traverse(conversations) { conv =>
+    eventScheduler.post(conv.conversation.remoteId) {
+      updateConversations(selfUserId, Seq(conv)) flatMap { case (all, created) =>
+        messages.addDeviceStartMessages(created, selfUserId) map (_ => all)
       }
-    }.map(_.foldLeft(Vector.empty[ConversationData])(_ ++ _))
-
-
+    }
+  }.map(_.foldLeft(Vector.empty[ConversationData])(_ ++ _))
 
   private def updateConversations(selfUserId: UserId, convs: Seq[ConversationResponse]): Future[(Seq[ConversationData], Seq[ConversationData])] = {
 
@@ -239,13 +247,12 @@ class ConversationsService(context:         Context,
       (convs.toSeq, created)
   }
 
-  def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]] =
-    content.updateConversationArchived(id, archived) flatMap {
-      case Some((_, conv)) =>
-        sync.postConversationState(id, ConversationState(archived = Some(conv.archived), archiveTime = Some(conv.archiveTime))) map { _ => Some(conv) }
-      case None =>
-        Future successful None
-    }
+  def setConversationArchived(id: ConvId, archived: Boolean) = content.updateConversationArchived(id, archived) flatMap {
+    case Some((_, conv)) =>
+      sync.postConversationState(id, ConversationState(archived = Some(conv.archived), archiveTime = Some(conv.archiveTime))) map { _ => Some(conv) }
+    case None =>
+      Future successful None
+  }
 
   private def deleteConversation(convId: ConvId) = for {
     _ <- convsStorage.remove(convId)

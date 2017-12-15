@@ -29,10 +29,9 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Asset
 import com.waz.model.{Mime, _}
 import com.waz.service._
-import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.ClientMismatch
 import com.waz.sync.handler.AssetSyncHandler
-import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
+import com.waz.sync.otr.{OtrMessage, OtrSyncHandler, OtrSyncHandlerImpl}
 import com.waz.sync.queue.ConvLock
 import com.waz.testutils.Matchers._
 import com.waz.testutils.MockZMessaging
@@ -65,6 +64,7 @@ import scala.concurrent.{Await, Future}
   def storage = zms.storage.db
 
   lazy val userId = UserId()
+  lazy val teamId = TeamId()
   lazy val conv = ConversationData(ConvId(), RConvId(), None, userId, ConversationType.Group)
 
   implicit lazy val lock = ConvLock(conv.id, zms.syncRequests.scheduler.queue)
@@ -73,7 +73,10 @@ import scala.concurrent.{Await, Future}
 
     usersStorage.addOrOverwrite(UserData(test.userId, "selfUser"))
 
-    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandlerImpl(otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage, users, messages, errors, otrClientsSync, cache, push) {
+    override lazy val otrSync: OtrSyncHandler = new OtrSyncHandlerImpl(
+      otrClient, messagesClient, assetClient, otrService, assets, conversations, convsStorage,
+      users, messages, errors, otrClientsSync, cache, push, usersClient, teamId, usersStorage
+    ) {
       override def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean) = postMessageResponse
     }
 

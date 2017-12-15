@@ -24,23 +24,30 @@ import com.waz.model.AssetStatus.UploadDone
 import com.waz.model._
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.events.EventStream
+import com.waz.utils.events.{EventStream, SourceStream}
 import com.waz.utils.{CachedStorageImpl, TrimmingLruCache, _}
 
 import scala.concurrent.Future
 
-class AssetsStorage(context: Context, storage: Database) extends CachedStorageImpl[AssetId, AssetData](new TrimmingLruCache(context, Fixed(100)), storage)(AssetDataDao, "AssetsStorage") {
+trait AssetsStorage extends CachedStorage[AssetId, AssetData] {
+  def onUploadFailed: SourceStream[AssetData]
+  def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]]
+  def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]]
+  def mergeOrCreateAsset(newData: Option[AssetData]): Future[Option[AssetData]]
+}
+
+class AssetsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[AssetId, AssetData](new TrimmingLruCache(context, Fixed(100)), storage)(AssetDataDao, "AssetsStorage") with AssetsStorage {
   private implicit val dispatcher = new SerialDispatchQueue(name = "AssetsStorage")
 
-  val onUploadFailed = EventStream[AssetData]()
+  override val onUploadFailed = EventStream[AssetData]()
 
   //allows overwriting of asset data
-  def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]] = update(id, updater).mapOpt {
+  override def updateAsset(id: AssetId, updater: AssetData => AssetData): Future[Option[AssetData]] = update(id, updater).mapOpt {
     case (_, updated) => Some(updated)
   }
 
-  def mergeOrCreateAsset(newData: AssetData): Future[Option[AssetData]] = mergeOrCreateAsset(Some(newData))
-  def mergeOrCreateAsset(newData: Option[AssetData]): Future[Option[AssetData]] = newData.map(nd => updateOrCreate(nd.id, cur => merge(cur, nd), nd).map(Some(_))).getOrElse(Future.successful(None))
+  override def mergeOrCreateAsset(newData: AssetData) = mergeOrCreateAsset(Some(newData))
+  override def mergeOrCreateAsset(newData: Option[AssetData]) = newData.map(nd => updateOrCreate(nd.id, cur => merge(cur, nd), nd).map(Some(_))).getOrElse(Future.successful(None))
 
   //Useful for receiving parts of an asset message or remote data. Note, this only merges non-defined properties, any current data remaining as is.
   private def merge(cur: AssetData, newData: AssetData): AssetData = {

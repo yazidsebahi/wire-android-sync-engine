@@ -51,12 +51,15 @@ trait UserService {
   def syncIfNeeded(users: UserData*): Future[Unit]
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
   def acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
+  def updateAvailability(availability: Availability): Future[Option[UserData]]
+
+  def processAvailability(availability: Map[UserId, Availability]): Future[Any]
 }
 
 class UserServiceImpl(override val selfUserId: UserId,
                       account:        AccountId,
-                      accounts:       AccountsServiceImpl,
-                      usersStorage:   UsersStorageImpl,
+                      accounts:       AccountsService,
+                      usersStorage:   UsersStorage,
                       userPrefs:      UserPreferences,
                       push:           PushService,
                       assets:         AssetService,
@@ -126,6 +129,11 @@ class UserServiceImpl(override val selfUserId: UserId,
       case Some((prev, updated)) if prev != updated => Some(updated)
       case _ => None
     }
+
+  def updateAvailability(availability: Availability): Future[Option[UserData]] = {
+    verbose(s"updateAvailability($availability)")
+    updateSelfAndSync(_.copy(availability = availability), _ => sync.postAvailability(availability))
+  }
 
   def updateUserData(id: UserId, updater: UserData => UserData) = usersStorage.update(id, updater)
 
@@ -259,6 +267,12 @@ class UserServiceImpl(override val selfUserId: UserId,
 
   def updateUserDeleted(userIds: Vector[UserId]): Future[Any] =
     usersStorage.updateAll2(userIds, _.copy(deleted = true))
+
+  def processAvailability(avMap: Map[UserId, Availability]): Future[Any] = {
+    def update(user: UserData): UserData = avMap.get(user.id).fold(user){ av => user.copy(availability = av) }
+
+    usersStorage.updateAll2(avMap.keySet, update)
+  }
 }
 
 object UserService {

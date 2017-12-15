@@ -25,7 +25,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model._
-import com.waz.service.conversation.ConversationsService
+import com.waz.service.conversation.{ConversationsService, ConversationsServiceImpl}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
 import com.waz.sync.client._
@@ -68,10 +68,10 @@ import scala.concurrent.{Await, Future}
     lifecycle.acquireUi()
 
     override lazy val conversations: ConversationsService =
-      new ConversationsService(context, selfUserId, push, users, usersStorage, membersStorage,
+      new ConversationsServiceImpl(context, selfUserId, push, users, usersStorage, membersStorage,
         convsStorage, convsContent, sync, errors, messages, messagesContent, userPrefs, eventScheduler, tracking) {
 
-        override def updateConversations(conversations: Seq[ConversationResponse]) = Future.successful(Nil)
+        override def updateConversations(conversations: Seq[ConversationResponse]) = Future.successful(Vector.empty[ConversationData])
       }
 
     override lazy val convClient = new ConversationsClient(zNetClient) {
@@ -104,7 +104,6 @@ import scala.concurrent.{Await, Future}
   }
 
   after {
-    service.errors.errorsStorage.deleteAll().await()
     service.convsContent.storage.deleteAll().await()
   }
 

@@ -64,15 +64,18 @@ class MessageEventProcessor(selfUserId:          UserId,
   }
 
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
-    val afterCleared = events.filter(e => conv.cleared.isBefore(e.time.instant))
+    val toProcess = events.filter {
+      case GenericMessageEvent(_, _, _, msg) if GenericMessage.isBroadcastMessage(msg) => false
+      case e => conv.cleared.isBefore(e.time.instant)
+    }
 
-    val recalls = afterCleared collect { case GenericMessageEvent(_, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
+    val recalls = toProcess collect { case GenericMessageEvent(_, time, from, msg @ GenericMessage(_, MsgRecall(_))) => (msg, from, time.instant) }
 
-    val edits = afterCleared collect { case GenericMessageEvent(_, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
+    val edits = toProcess collect { case GenericMessageEvent(_, time, from, msg @ GenericMessage(_, MsgEdit(_, _))) => (msg, from, time.instant) }
 
     for {
-      as    <- updateAssets(afterCleared)
-      msgs  = afterCleared map { createMessage(conv, _) } filter (_ != MessageData.Empty)
+      as    <- updateAssets(toProcess)
+      msgs  = toProcess map { createMessage(conv, _) } filter (_ != MessageData.Empty)
       _     = verbose(s"messages from events: ${msgs.map(m => m.id -> m.msgType)}")
       res   <- content.addMessages(conv.id, msgs)
       _     <- updateLastReadFromOwnMessages(conv.id, msgs)
@@ -269,6 +272,7 @@ class MessageEventProcessor(selfUserId:          UserId,
     Future.traverse(updates) {
       case (prev, up) if up.verified == Verification.VERIFIED => msgsService.addOtrVerifiedMessage(up.id)
       case (prev, up) if prev.verified == Verification.VERIFIED =>
+        verbose(s"addMessagesAfterVerificationUpdate with prev=${prev.verified} and up=${up.verified}")
         val convId = up.id
         val changedUsers = convUsers(convId).filter(!_.isVerified).flatMap { u => changes.get(u.id).map(u.id -> _) }
         val (users, change) =

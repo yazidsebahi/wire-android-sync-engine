@@ -39,6 +39,7 @@ public enum SyncCommand {
     PostTypingState("post-typing-state"),
     PostConnectionStatus("post-conn-status"),
     PostSelfPicture("post-picture"),
+    PostAvailability("post-availability"),
     PostMessage("post-message"),
     PostDeleted("post-deleted"),
     PostRecalled("post-recalled"),

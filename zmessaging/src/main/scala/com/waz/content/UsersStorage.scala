@@ -36,6 +36,8 @@ trait UsersStorage extends CachedStorage[UserId, UserData] {
   def removeByTeam(teams: Set[TeamId]): Future[Set[UserData]]
   def listAll(ids: Traversable[UserId]): Future[Vector[UserData]]
   def listSignal(ids: Traversable[UserId]): Signal[Vector[UserData]]
+  def listUsersByConnectionStatus(p: Set[ConnectionStatus]): Future[Map[UserId, UserData]]
+  def getOrElseUpdate(id: UserId, default: => UserData): Future[UserData]
 }
 
 class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
@@ -75,7 +77,7 @@ class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedSto
     }
   }
 
-  def getOrElseUpdate(id: UserId, default: => UserData) = getOrCreate(id, default)
+  override def getOrElseUpdate(id: UserId, default: => UserData): Future[UserData] = getOrCreate(id, default)
 
   override def listAll(ids: Traversable[UserId]) = getAll(ids).map(_.collect { case Some(x) => x }(breakOut))
 

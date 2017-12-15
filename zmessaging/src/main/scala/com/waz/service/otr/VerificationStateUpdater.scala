@@ -50,10 +50,12 @@ class VerificationStateUpdater(selfUserId:     UserId,
   var updateProcessor: VerificationStateUpdate => Future[Unit] = { _ => Future.successful(()) } // FIXME: ideally this would just be an event stream, but we want to wait until everything is processed
 
   clientsStorage.onAdded { ucs =>
+    verbose(s"clientsStorage.onAdded: $ucs")
     onClientsChanged(ucs.map { uc => uc.user -> (uc, ClientAdded)} (breakOut))
   }
 
   clientsStorage.onUpdated { updates =>
+    verbose(s"clientsStorage.onUpdated: $updates")
     onClientsChanged(updates.map {
       case update @ (_, uc) => uc.user -> (uc, VerificationChange(update))
     } (breakOut))
@@ -86,6 +88,7 @@ class VerificationStateUpdater(selfUserId:     UserId,
         case (_, u) => u.id -> (if (u.isVerified) Other else changes(u.id)._2)
       } (breakOut)
 
+    verbose(s"onClientsChanged: ${changes.values.map(_._1)}")
     for {
       updates     <- updateUsers()
       userChanges = collectUserChanges(updates)
@@ -122,6 +125,8 @@ class VerificationStateUpdater(selfUserId:     UserId,
 
       conv.copy(verified = state)
     }
+
+    verbose(s"updateConversations: $ids")
 
     for {
       users     <- convUsers

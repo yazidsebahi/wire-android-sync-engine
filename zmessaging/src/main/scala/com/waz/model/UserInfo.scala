@@ -39,7 +39,8 @@ case class UserInfo(id:           UserId,
                     trackingId:   Option[TrackingId]      = None,
                     deleted:      Boolean                 = false,
                     handle:       Option[Handle]          = None,
-                    privateMode:  Option[Boolean]         = None) {
+                    privateMode:  Option[Boolean]         = None
+                   ) {
   //TODO Dean - this will actually prevent deleting profile pictures, since the empty seq will be mapped to a None,
   //And so in UserData, the current picture will be used instead...
   def mediumPicture = picture.flatMap(_.collectFirst { case a@AssetData.IsImageWithTag(Medium) => a })
