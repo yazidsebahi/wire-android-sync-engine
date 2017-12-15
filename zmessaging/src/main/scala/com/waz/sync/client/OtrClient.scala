@@ -24,8 +24,9 @@ import com.waz.ZLog._
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.model.otr._
 import com.waz.model.{AccountId, UserId}
+import com.waz.sync.otr.OtrMessage
 import com.waz.utils._
-import com.waz.znet.Response.SuccessHttpStatus
+import com.waz.znet.Response.{HttpStatus, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
 import com.wire.cryptobox.PreKey
@@ -58,6 +59,8 @@ class OtrClient(netClient: ZNetClient) {
         o.put(u.str, JsonEncoder.arrString(cs.map(_.str)))
       }
     }
+
+    verbose(s"loadPreKeys: $users")
     netClient.withErrorHandling("loadPreKeys", Request.Post(prekeysPath, data)) {
       case Response(SuccessHttpStatus(), PreKeysResponse(map), _) => map.toMap
     }
@@ -122,6 +125,12 @@ class OtrClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), _, _) => ()
     }
   }
+
+  def broadcastMessage(content: OtrMessage, ignoreMissing: Boolean, receivers: Set[UserId] = Set.empty): ErrorOrResponse[MessageResponse] =
+    netClient.withErrorHandling("broadcastMessage", Request.Post(broadcastMessagesPath(ignoreMissing, receivers), content)) {
+      case Response(SuccessHttpStatus(), ClientMismatchResponse(mismatch), _) => MessageResponse.Success(mismatch)
+      case Response(HttpStatus(Response.Status.PreconditionFailed, _), ClientMismatchResponse(mismatch), _) => MessageResponse.Failure(mismatch)
+    }
 }
 
 object OtrClient {
@@ -129,11 +138,18 @@ object OtrClient {
 
   val clientsPath = "/clients"
   val prekeysPath = "/users/prekeys"
+  val broadcastPath = "/broadcast/otr/messages"
+
   def clientPath(id: ClientId) = s"/clients/$id"
   def clientKeyIdsPath(id: ClientId) = s"/clients/$id/prekeys"
   def userPreKeysPath(user: UserId) = s"/users/$user/prekeys"
   def userClientsPath(user: UserId) = s"/users/$user/clients"
   def clientPreKeyPath(user: UserId, client: ClientId) = s"/users/$user/prekeys/$client"
+
+  def broadcastMessagesPath(ignoreMissing: Boolean, receivers: Set[UserId] = Set.empty) =
+    if (ignoreMissing) Request.query(broadcastPath, "ignore_missing" -> "true")
+    else if (receivers.isEmpty) ""
+    else Request.query(broadcastPath, "report_missing" -> receivers.map(_.str).mkString(","))
 
   import JsonDecoder._
 

@@ -25,21 +25,20 @@ import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.cache.{CacheService, LocalData}
-import com.waz.content.ConversationStorageImpl
+import com.waz.content.{ConversationStorage, UsersStorage}
 import com.waz.model.AssetData.RemoteData
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
-import com.waz.service.messages.MessagesServiceImpl
-import com.waz.service.otr.OtrServiceImpl
+import com.waz.service.messages.MessagesService
+import com.waz.service.otr.OtrService
 import com.waz.service.push.PushService
-import com.waz.service.{ErrorsService, UserServiceImpl}
+import com.waz.service.{ErrorsService, UserService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.AssetClient.UploadResponse
-import com.waz.sync.client.MessagesClient.OtrMessage
 import com.waz.sync.client.OtrClient.{ClientMismatch, EncryptedContent, MessageResponse}
-import com.waz.sync.client.{AssetClient, MessagesClient, OtrClient}
+import com.waz.sync.client.{AssetClient, MessagesClient, OtrClient, UsersClient}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.crypto.AESUtils
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -52,50 +51,52 @@ trait OtrSyncHandler {
   def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None, nativePush: Boolean = true): Future[Either[ErrorResponse, Date]]
   def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]]
   def postSessionReset(convId: ConvId, user: UserId, client: ClientId): Future[SyncResult]
+  def broadcastMessage(message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty): Future[Either[ErrorResponse, Date]]
 }
 
-class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrServiceImpl, assets: AssetService,
-                         convs: ConversationsService, convStorage: ConversationStorageImpl, users: UserServiceImpl, messages: MessagesServiceImpl,
-                         errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService, push: PushService) extends OtrSyncHandler {
+class OtrSyncHandlerImpl(otrClient: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
+                         convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: MessagesService,
+                         errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService, push: PushService, usersClient: UsersClient,
+                         teamId: Option[TeamId], usersStorage: UsersStorage) extends OtrSyncHandler {
 
   import OtrSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
 
-  def postOtrMessage(conv: ConversationData, message: GenericMessage): Future[Either[ErrorResponse, Date]] =
-    postOtrMessage(conv.id, conv.remoteId, message)
+  def postOtrMessage(conv: ConversationData, message: GenericMessage) = postOtrMessage(conv.id, conv.remoteId, message)
 
-  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None, nativePush: Boolean = true): Future[Either[ErrorResponse, Date]] = push.afterProcessing {
+  def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None, nativePush: Boolean = true) = push.afterProcessing {
     service.clients.getSelfClient flatMap {
-      case Some(otrClient) =>
+      case Some(selfClient) =>
         postEncryptedMessage(convId, message, recipients = recipients) {
           case (content, retry) if content.estimatedSize < MaxContentSize =>
-            msgClient.postMessage(remoteId, OtrMessage(otrClient.id, content, nativePush = nativePush), ignoreMissing(retry), recipients)
+            msgClient.postMessage(remoteId, OtrMessage(selfClient.id, content, nativePush = nativePush), ignoreMissing = retry > 1, recipients)
           case (content, retry) =>
             verbose(s"Message content too big, will post as External. Estimated size: ${content.estimatedSize}")
-            postExternalMessage(otrClient.id, convId, remoteId, message, recipients, nativePush)
+            postExternalMessage(selfClient.id, convId, remoteId, message, recipients, nativePush)
         }
       case None =>
         successful(Left(internalError("Client is not registered")))
     }
+
   }
 
   // will retry 3 times, at first we try to send message in normal way,
   // when it fails we will try sending empty messages to contacts for which we can not encrypt the message
   // in last try we will use 'ignore_missing' flag
-  private def postEncryptedMessage(convId: ConvId, message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty, recipients: Option[Set[UserId]] = None)(f: (EncryptedContent, Int) => ErrorOrResponse[MessageResponse]): Future[Either[ErrorResponse, Date]] =
-  convStorage.get(convId) flatMap {
+  private def postEncryptedMessage(convId: ConvId, message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty, recipients: Option[Set[UserId]] = None)
+                                  (f: (EncryptedContent, Int) => ErrorOrResponse[MessageResponse]): Future[Either[ErrorResponse, Date]] = convStorage.get(convId) flatMap {
     case Some(conv) if conv.verified == Verification.UNVERIFIED && message.hasCalling =>
       successful(Left(ErrorResponse.Unverified))
     case Some(conv) if conv.verified == Verification.UNVERIFIED =>
       // refusing to send messages to 'degraded' conversation, UI should show error and ask user to verify devices (or ignore it - which will change state to UNKNOWN)
       errors.addConvUnverifiedError(convId, MessageId(message.messageId)) map { _ => Left(ErrorResponse.Unverified) }
     case _ =>
-      service.encryptMessage(convId, message, retry > 0, previous, recipients) flatMap { content =>
+      service.encryptConvMessage(convId, message, retry > 0, previous, recipients) flatMap { content =>
         f(content, retry).future flatMap {
-          case Right(MessageResponse.Success(ClientMismatch(redundant, _, deleted, time))) =>
+          case Right(MessageResponse.Success(ClientMismatch(_, _, deleted, time))) =>
             // XXX: we are ignoring redundant clients, we rely on members list to encrypt messages, so if user left the conv then we won't use his clients on next message
             service.deleteClients(deleted) map { _ => Right(time) }
-          case Right(MessageResponse.Failure(ClientMismatch(redundant, missing, deleted, _))) =>
+          case Right(MessageResponse.Failure(ClientMismatch(_, missing, deleted, _))) =>
             service.deleteClients(deleted) flatMap { _ =>
               if (retry > 2)
                 successful(Left(internalError(s"postEncryptedMessage failed with missing clients after several retries: $missing")))
@@ -120,15 +121,13 @@ class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClie
       }
   }
 
-  private def ignoreMissing(retry: Int) = retry > 1
-
   private def postExternalMessage(clientId: ClientId, convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]], nativePush: Boolean): ErrorOrResponse[MessageResponse] = {
     val key = AESKey()
     val (sha, data) = AESUtils.encrypt(key, GenericMessage.toByteArray(message))
 
     CancellableFuture.lift {
       postEncryptedMessage(convId, GenericMessage(Uid(message.messageId), Proto.External(key, sha)), recipients = recipients) { (content, retry) =>
-        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data), nativePush), ignoreMissing(retry), recipients)
+        msgClient.postMessage(remoteId, OtrMessage(clientId, content, Some(data), nativePush), ignoreMissing = retry > 1, recipients)
       } map {
         // that's a bit of a hack, but should be harmless
         case Right(time) => Right(MessageResponse.Success(ClientMismatch(Map.empty, Map.empty, Map.empty, time)))
@@ -137,23 +136,64 @@ class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClie
     }
   }
 
-  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default): CancellableFuture[Either[ErrorResponse, RemoteData]] =
-    CancellableFuture.lift(service.clients.getSelfClient).flatMap {
-      case Some(otrClient) =>
-        key match {
-          case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
-            case (sha, encrypted, encryptionAlg) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
-              case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha), Some(encryptionAlg)))
-              case Left(err) => Left(err)
-            }
+  // TODO: merge the common part of the logic here and in postEncryptedMessage
+  def broadcastMessage(message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty): Future[Either[ErrorResponse, Date]] = push.afterProcessing {
+    def broadcastRecipients = for {
+      acceptedOrBlocked <- users.acceptedOrBlockedUsers.head
+      myTeam <- teamId.fold(Future.successful(Set.empty[UserData]))(id => usersStorage.getByTeam(Set(id)))
+      myTeamIds = myTeam.map(_.id)
+    } yield acceptedOrBlocked.keySet ++ myTeamIds
+
+    service.clients.getSelfClient.flatMap {
+      case Some(selfClient) => broadcastRecipients.flatMap { recp =>
+        verbose(s"recipients: $recp")
+        service.encryptBroadcastMessage(message, useFakeOnError = retry > 0, previous, recp).flatMap { content =>
+          otrClient.broadcastMessage(OtrMessage(selfClient.id, content), ignoreMissing = retry > 1, recp).future.flatMap {
+
+            case Right(MessageResponse.Success(ClientMismatch(_, _, deleted, time))) =>
+              verbose(s"post success")
+              service.deleteClients(deleted) map { _ => Right(time) }
+
+            case Right(MessageResponse.Failure(ClientMismatch(_, missing, deleted, _))) =>
+              verbose(s"post failure, clients mismatch")
+              service.deleteClients(deleted) flatMap { _ =>
+                if (retry > 2) successful(Left(internalError(s"broadcastMessage failed with missing clients after several retries: $missing")))
+                else clientsSyncHandler.syncSessions(missing) flatMap {
+                  case None => broadcastMessage(message, retry + 1, content)
+                  case Some(err) if retry < 3 =>
+                    error(s"syncSessions for missing clients failed: $err")
+                    broadcastMessage(message, retry + 1, content)
+                  case Some(err) => successful(Left(err))
+                }
+              }
+
+            case Left(err) =>
+              error(s"broadcastMessage failed with error: $err")
+              successful(Left(err))
           }
-          case _ => assetClient.uploadAsset(data, mime, public = true).map {
-            case Right(UploadResponse(rId, _, _)) => Right(RemoteData(Some(rId)))
+        }
+      }
+
+      case None => successful(Left(internalError("Client is not registered")))
+    }
+  }
+
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default) = CancellableFuture.lift(service.clients.getSelfClient).flatMap {
+    case Some(selfClient) =>
+      key match {
+        case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
+          case (sha, encrypted, encryptionAlg) => assetClient.uploadAsset(encrypted, Mime.Default).map { //encrypted data => Default mime
+            case Right(UploadResponse(rId, _, token)) => Right(RemoteData(Some(rId), token, key, Some(sha), Some(encryptionAlg)))
             case Left(err) => Left(err)
           }
         }
-      case None => CancellableFuture.successful(Left(internalError("Client is not registered")))
-    }
+        case _ => assetClient.uploadAsset(data, mime, public = true).map {
+          case Right(UploadResponse(rId, _, _)) => Right(RemoteData(Some(rId)))
+          case Left(err) => Left(err)
+        }
+      }
+    case None => CancellableFuture.successful(Left(internalError("Client is not registered")))
+  }
 
   def postSessionReset(convId: ConvId, user: UserId, client: ClientId) = {
 
@@ -177,11 +217,11 @@ class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClie
       case Some(conv) =>
         service.clients.getSelfClient flatMap {
           case None => successful(SyncResult(internalError(s"client not registered")))
-          case Some(otrClient) =>
+          case Some(selfClient) =>
             msgContent flatMap {
               case None => successful(SyncResult(internalError(s"session not found for $user, $client")))
               case Some(content) =>
-                msgClient.postMessage(conv.remoteId, OtrMessage(otrClient.id, content), ignoreMissing = true).future map {
+                msgClient.postMessage(conv.remoteId, OtrMessage(selfClient.id, content), ignoreMissing = true).future map {
                   case Right(_) => SyncResult.Success
                   case Left(err) => SyncResult(err)
                 }
@@ -194,9 +234,4 @@ class OtrSyncHandlerImpl(client: OtrClient, msgClient: MessagesClient, assetClie
 object OtrSyncHandler {
   val MaxInlineSize  = 10 * 1024
   val MaxContentSize = 256 * 1024 // backend accepts 256KB for otr messages, but we would prefer to send less
-
-  def apply(client: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrServiceImpl, assets: AssetService,
-            convs: ConversationsService, convStorage: ConversationStorageImpl, users: UserServiceImpl, messages: MessagesServiceImpl,
-            errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService, push: PushService): OtrSyncHandler =
-    new OtrSyncHandlerImpl(client, msgClient, assetClient, service, assets, convs, convStorage, users, messages, errors, clientsSyncHandler, cache, push)
 }

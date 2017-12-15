@@ -27,14 +27,15 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future.traverse
 
-class GenericMessageService(messages: MessagesContentUpdater, convs: ConversationsContentUpdaterImpl,
-                            convEvents: ConversationOrderEventsService, reactions: ReactionsService,
-                            receipts: ReceiptService) {
+class GenericMessageService(selfUserId: UserId, messages: MessagesContentUpdater,
+                            convs: ConversationsContentUpdaterImpl, convEvents: ConversationOrderEventsService,
+                            reactions: ReactionsService, receipts: ReceiptService, users: UserService) {
 
   private implicit val tag: LogTag = logTagFor[GenericMessageService]
   import com.waz.threading.Threading.Implicits.Background
 
-  val eventProcessingStage = EventScheduler.Stage[GenericMessageEvent] { (convId, events) =>
+  val eventProcessingStage = EventScheduler.Stage[GenericMessageEvent] { (_, events) =>
+    verbose(s"got events: ${events.map(_.from)}")
 
     def lastForConv(items: Seq[(RConvId, Instant)]) = items.groupBy(_._1).map { case (conv, times) => times.maxBy(_._2.toEpochMilli) }
 
@@ -47,7 +48,7 @@ class GenericMessageService(messages: MessagesContentUpdater, convs: Conversatio
     })
 
     val cleared = lastForConv(events collect {
-      case GenericMessageEvent(_, _, _, GenericMessage(_, Cleared(conv, time))) => (conv, time)
+      case GenericMessageEvent(_, _, userId, GenericMessage(_, Cleared(conv, time))) if userId == selfUserId => (conv, time)
     })
 
     val deleted = events collect {
@@ -57,6 +58,10 @@ class GenericMessageService(messages: MessagesContentUpdater, convs: Conversatio
     val confirmed = events collect {
       case GenericMessageEvent(_, _, _, GenericMessage(_, Receipt(msg))) => msg
     }
+
+    val availability = (events collect {
+      case GenericMessageEvent(_, _, userId, GenericMessage(_, AvailabilityStatus(available))) => userId -> available
+    }).toMap
 
     for {
       _ <- messages.deleteOnUserRequest(deleted)
@@ -68,6 +73,7 @@ class GenericMessageService(messages: MessagesContentUpdater, convs: Conversatio
         convs.processConvWithRemoteId(remoteId, retryAsync = true) { conv => convs.updateConversationCleared(conv.id, timestamp) }
       }
       _ <- receipts.processReceipts(confirmed)
+      _ <- users.processAvailability(availability)
     } yield ()
   }
 }

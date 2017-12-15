@@ -28,25 +28,36 @@ import com.waz.content.ZmsDatabase
 import com.waz.service.AccountsService.InForeground
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.events.RefreshingSignal
+import com.waz.utils.events.{RefreshingSignal, Signal}
 import com.waz.utils.{CachedStorageImpl, TrimmingLruCache}
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 import com.waz.utils._
 
-class ErrorsService(accountId: AccountId,
+trait ErrorsService {
+  def onErrorDismissed(handler: PartialFunction[ErrorData, Future[_]]): CancellableFuture[Unit]
+  def getErrors: Signal[Vector[ErrorData]]
+  def dismissError(id: Uid): Future[Unit]
+  def dismissAllErrors(): Future[Unit]
+  def addErrorWhenActive(error: ErrorData): Future[Any]
+  def addAssetTooLargeError(convId: ConvId, messageId: MessageId): Future[ErrorData]
+  def addAssetFileNotFoundError(assetId: AssetId): Future[Option[ErrorData]]
+  def addConvUnverifiedError(conv: ConvId, message: MessageId): Future[ErrorData]
+}
+
+class ErrorsServiceImpl(accountId: AccountId,
                     context:   Context,
                     storage:   ZmsDatabase,
                     accounts:  AccountsService,
-                    messages:  MessagesStorageImpl) {
+                    messages:  MessagesStorageImpl) extends ErrorsService {
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ErrorsService")
 
   private var dismissHandler: PartialFunction[ErrorData, Future[_]] = PartialFunction.empty
 
-  val errorsStorage = new CachedStorageImpl[Uid, ErrorData](new TrimmingLruCache(context, Fixed(128)), storage)(ErrorDataDao, "ErrorStorage")
+  private val errorsStorage = new CachedStorageImpl[Uid, ErrorData](new TrimmingLruCache(context, Fixed(128)), storage)(ErrorDataDao, "ErrorStorage")
 
   private val errors = new mutable.HashMap[Uid, ErrorData]()
 
@@ -62,24 +73,24 @@ class ErrorsService(accountId: AccountId,
     errors
   }
 
-  val onChanged = errorsStorage.onChanged.map(_ => System.currentTimeMillis()).union(errorsStorage.onDeleted.map(_ => System.currentTimeMillis()))
+   private val onChanged = errorsStorage.onChanged.map(_ => System.currentTimeMillis()).union(errorsStorage.onDeleted.map(_ => System.currentTimeMillis()))
 
-  def onErrorDismissed(handler: PartialFunction[ErrorData, Future[_]]) = dispatcher {
+  def onErrorDismissed(handler: PartialFunction[ErrorData, Future[_]]): CancellableFuture[Unit] = dispatcher {
     dismissHandler = dismissHandler.orElse(handler)
   }
 
-  def getErrors = new RefreshingSignal[Vector[ErrorData], Long](CancellableFuture { errors.values.toVector.sortBy(_.time) }, onChanged)
+  def getErrors: Signal[Vector[ErrorData]] = new RefreshingSignal[Vector[ErrorData], Long](CancellableFuture { errors.values.toVector.sortBy(_.time) }, onChanged)
 
-  def dismissError(id: Uid) =
+  def dismissError(id: Uid): Future[Unit] =
     storage { ErrorDataDao.getById(id)(_) }
       .future.flatMap {
         case Some(error) => dismissed(error) flatMap { _ => delete(error) }
         case _ =>
           warn(s"no error found with id: $id")
-          Future.successful(0)
+          Future.successful({})
       }
 
-  def dismissAllErrors() = errorsStorage.list() flatMap { errors =>
+  def dismissAllErrors(): Future[Unit] = errorsStorage.list() flatMap { errors =>
     Future.sequence(errors map dismissed) flatMap { _ => delete(errors: _*) }
   }
 
@@ -92,22 +103,22 @@ class ErrorsService(accountId: AccountId,
     errorsStorage.removeAll(errors.map(_.id))
   }
 
-  def addErrorWhenActive(error: ErrorData) =
+  def addErrorWhenActive(error: ErrorData): Future[Any] =
     accounts.accountState(accountId).head.flatMap {
       case InForeground => errorsStorage.insert(error)
       case _            => dismissed(error)
     }
 
-  def addError(error: ErrorData) = errorsStorage.insert(error)
+  private def addError(error: ErrorData) = errorsStorage.insert(error)
 
-  def addAssetTooLargeError(convId: ConvId, messageId: MessageId) =
+  def addAssetTooLargeError(convId: ConvId, messageId: MessageId): Future[ErrorData] =
     addError(ErrorData(Uid(), ErrorType.CANNOT_SEND_ASSET_TOO_LARGE, convId = Some(convId), messages = Seq(messageId)))
 
-  def addAssetFileNotFoundError(assetId: AssetId) = messages.get(MessageId(assetId.str)) flatMapOpt { msg =>
+  def addAssetFileNotFoundError(assetId: AssetId): Future[Option[ErrorData]] = messages.get(MessageId(assetId.str)) flatMapOpt { msg =>
     addError(ErrorData(Uid(), ErrorType.CANNOT_SEND_ASSET_FILE_NOT_FOUND, convId = Some(msg.convId), messages = Seq(msg.id))) map { Some(_) }
   }
 
-  def addConvUnverifiedError(conv: ConvId, message: MessageId) = {
+  def addConvUnverifiedError(conv: ConvId, message: MessageId): Future[ErrorData] = {
     def matches(err: ErrorData) =
       err.convId.contains(conv) && err.errType == ErrorType.CANNOT_SEND_MESSAGE_TO_UNVERIFIED_CONVERSATION
 

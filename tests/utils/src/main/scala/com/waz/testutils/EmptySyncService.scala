@@ -19,7 +19,7 @@ package com.waz.testutils
 
 import com.waz.api.EphemeralExpiration
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model._
+import com.waz.model.{Availability, _}
 import com.waz.model.otr.ClientId
 import com.waz.model.sync.ReceiptType
 import com.waz.model.sync.SyncJob.Priority
@@ -53,6 +53,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postDeleted(conv: ConvId, msg: MessageId): Future[SyncId] = sid
   override def postRecalled(conv: ConvId, msg: MessageId, recalled: MessageId): Future[SyncId] = sid
   override def postSelfPicture(picture: Option[AssetId]) = sid
+  override def postAvailability(status: Availability) = sid
   override def postConversationName(id: ConvId, n: String) = sid
   override def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = sid
   override def postConversationMemberLeave(id: ConvId, member: UserId) = sid

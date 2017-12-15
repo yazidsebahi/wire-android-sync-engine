@@ -31,7 +31,7 @@ import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.service.tracking.{LoggedOutEvent, TrackingService}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient
-import com.waz.sync.otr.OtrClientsSyncHandler
+import com.waz.sync.otr.{OtrClientsSyncHandler, OtrClientsSyncHandlerImpl}
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, Signal}
@@ -73,7 +73,7 @@ class UserModule(val userId: UserId, val account: AccountManager, tracking: Trac
 
   lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
-  lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandler]
+  lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl]
   lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdaterImpl]
   lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
   lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]

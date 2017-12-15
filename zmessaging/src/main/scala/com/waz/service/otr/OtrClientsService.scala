@@ -123,6 +123,8 @@ class OtrClientsService(accountId: AccountId,
         if (needsSync.exists(_.user == userId)) sync.syncClientsLocation() else Future.successful(())
     }
 
+    verbose(s"updateClients: $ucs, replace = $replace")
+
     storage.updateOrCreateAll(ucs.map { case (u, cs) => u -> updateOrCreate(u, cs) } (breakOut)) map { res =>
       requestLocationSyncIfNeeded(res)
       res

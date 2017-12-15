@@ -165,12 +165,14 @@ class DeviceActor(val deviceName: String,
       if (api.getSelf.getUser != null) {
         sender ! Failed(s"Process is already logged in as user: ${api.getSelf.getEmail}")
       }
-      ZMessaging.currentAccounts.loginEmail(EmailAddress(email), pass).map {
-        case Right(()) =>
-          senderRef ! Successful
-        case Left(ErrorResponse(code, message, label)) =>
+      ZMessaging.currentAccounts.loginEmail(EmailAddress(email), pass).onComplete {
+        case util.Success(Right(())) => senderRef ! Successful
+        case util.Success(Left(ErrorResponse(code, message, label))) =>
           log.info(s"Failed login: $code, $message, $label")
           senderRef ! Failed(s"Failed login: $code, $message, $label")
+        case util.Failure(t) =>
+          log.info(s"Failed login: $t")
+          senderRef ! Failed(s"Failed login: $t")
       }
 
     case SendRequest(userId) =>
