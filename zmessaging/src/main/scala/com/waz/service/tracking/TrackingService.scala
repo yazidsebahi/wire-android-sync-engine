@@ -30,6 +30,7 @@ import com.waz.utils.events.{EventContext, EventStream}
 import scala.annotation.tailrec
 import scala.concurrent.Future.successful
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 trait TrackingService {
   def events: EventStream[(Option[ZMessaging], TrackingEvent)]
@@ -85,10 +86,8 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
     case None => e
   }
 
-  private def details(rootCause: Throwable) = {
-    val stack = rootCause.getStackTrace
-    if (stack != null && stack.nonEmpty) stack(0).toString else ""
-  }
+  private def details(rootCause: Throwable) =
+    Try(rootCause.getStackTrace).toOption.filter(_.nonEmpty).map(_(0).toString).getOrElse("")
 
   override def assetContribution(assetId: AssetId, accountId: AccountId): Unit = zmsProvider(accountId).map {
     case Some(z) =>
