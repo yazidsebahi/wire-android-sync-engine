@@ -295,7 +295,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
       if (retry == 0) baseName else s"${retry}_$baseName"
 
     def getTargetFile(dir: File): Option[File] = {
-      val baseName = asset.name.getOrElse("wire_downloaded_file." + asset.mime.extension) // XXX: should get default file name form resources
+      val baseName = asset.name.getOrElse("wire_downloaded_file." + asset.mime.extension).replace("/", "") // XXX: should get default file name form resources
       // prepend a number to the name to get unique file name,
       // will try sequential numbers from 0 - 10 first, and then fallback to random ones
       // will give up after 100 tries
