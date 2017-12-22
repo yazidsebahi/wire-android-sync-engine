@@ -149,7 +149,7 @@ class MessagesStorageImpl(context: Context,
   def countUnread(conv: ConvId, lastReadTime: Instant): Future[UnreadCount] = {
     storage { MessageDataDao.findMessagesFrom(conv, lastReadTime)(_) }.future.map { msgs =>
       msgs.acquire { msgs =>
-        val unread = msgs.filter { m => !m.isLocal && m.convId == conv && m.time.isAfter(lastReadTime) && !m.isDeleted && m.userId != userId } .toVector
+        val unread = msgs.filter { m => !m.isLocal && m.convId == conv && m.time.isAfter(lastReadTime) && !m.isDeleted && m.userId != userId && m.msgType != Message.Type.UNKNOWN } .toVector
         UnreadCount(
           unread.count(m => !m.isSystemMessage && m.msgType != Message.Type.KNOCK),
           unread.count(_.msgType == Message.Type.MISSED_CALL),
