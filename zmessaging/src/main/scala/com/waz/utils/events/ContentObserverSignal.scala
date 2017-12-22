@@ -38,7 +38,7 @@ class ContentObserverSignal(uri: Uri, notifyForDescendents: Boolean = false)(imp
     unsubscribe()
   }
 
-  private def unsubscribe(): Unit = observer foreach { o =>
+  private def unsubscribe(): Unit = observer.foreach { o =>
     observer = None
     context.getContentResolver.unregisterContentObserver(o)
   }

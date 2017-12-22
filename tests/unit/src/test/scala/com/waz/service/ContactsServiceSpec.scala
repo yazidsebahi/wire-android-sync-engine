@@ -25,7 +25,7 @@ import com.waz.model.AddressBook.ContactHashes
 import com.waz.model._
 import com.waz.service.ContactsService.{CurrentAddressBookVersion, MayNotYetCheckAgainException, zUserAndTimeOfLastCheck}
 import com.waz.testutils.Matchers._
-import com.waz.testutils.{EmptySyncService, MockZMessaging, RoboPermissionProvider, prepareAddressBookEntries}
+import com.waz.testutils.{EmptySyncService, MockZMessaging, prepareAddressBookEntries}
 import com.waz.threading.CancellableFuture.delay
 import com.waz.utils._
 import org.scalatest._
@@ -58,7 +58,6 @@ import com.waz.ZLog.ImplicitTag._
       }
     }
 
-    permissions.setProvider(new RoboPermissionProvider)
   }
   
   lazy val service = zms.contacts

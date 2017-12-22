@@ -21,12 +21,12 @@ package com.waz.service.assets
 import java.io._
 import java.util.concurrent.atomic.AtomicReference
 
+import android.Manifest.permission.WRITE_EXTERNAL_STORAGE
 import android.content.Context
-import android.graphics.{Bitmap => ABitmap}
 import android.os.Environment
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.Permission
+import com.waz.api
 import com.waz.api.ProgressIndicator.State
 import com.waz.api.impl.ProgressIndicator.ProgressData
 import com.waz.api.impl._
@@ -42,12 +42,12 @@ import com.waz.service.ErrorsService
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
 import com.waz.service.downloads._
 import com.waz.service.images.ImageAssetGenerator
+import com.waz.service.permissions.PermissionsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Bitmap, URI}
-import com.waz.{PermissionsService, api}
 
 import scala.collection.breakOut
 import scala.concurrent.Future
@@ -328,16 +328,15 @@ class AssetServiceImpl(storage:         AssetsStorage,
       } (Threading.IO)
 
     val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-    if (dir.isDirectory)
-      permissions.requiring(Set(Permission.WRITE_EXTERNAL_STORAGE), delayUntilProviderIsSet = false) (
-        {
+    if (dir.isDirectory) {
+      permissions.requestAllPermissions(Set(WRITE_EXTERNAL_STORAGE)).flatMap {
+        case true =>
+          getTargetFile(dir).fold(successful(Option.empty[File]))(saveAssetData)
+        case _ =>
           warn("permission to save asset to downloads denied")
           successful(None)
-        },
-        getTargetFile(dir).fold(successful(Option.empty[File]))(saveAssetData)
-      )
-    else
-      successful(None)
+      }
+    } else successful(None)
   }
 
 }

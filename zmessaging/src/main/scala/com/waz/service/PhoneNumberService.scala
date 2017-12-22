@@ -21,9 +21,8 @@ import android.content.Context
 import android.telephony.TelephonyManager
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.google.i18n.phonenumbers.Phonenumber.{PhoneNumber => GooglePhoneNumber}
-import com.waz.PermissionsService
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.model.PhoneNumber
 import com.waz.threading.SerialDispatchQueue
 
@@ -37,7 +36,7 @@ trait PhoneNumberService {
   def normalizeNotThreadSafe(phone: PhoneNumber, util: PhoneNumberUtil): Option[PhoneNumber]
 }
 
-class PhoneNumberServiceImpl(context: Context, permissions: PermissionsService) extends PhoneNumberService{
+class PhoneNumberServiceImpl(context: Context) extends PhoneNumberService{
   private implicit val dispatcher = new SerialDispatchQueue(name = "PhoneNumberService")
 
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
