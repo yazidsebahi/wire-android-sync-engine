@@ -23,7 +23,6 @@ import com.typesafe.config.ConfigFactory
 import com.waz.RoboProcess
 import com.waz.ShadowLogging._
 import com.waz.ZLog._
-import com.waz.api.Permission
 import com.waz.service.BackendConfig
 import com.waz.utils.LoggedTry
 import com.waz.znet.TestClientWrapper
@@ -58,7 +57,7 @@ class RemoteProcess extends RoboProcess {
 
     val processActor = actorSystem.actorOf(RemoteProcessActor.props(Robolectric.application, processName, coordinatorActor, backend, TestClientWrapper()), processName.replaceAll("\\s+", "_"))
 
-    Robolectric.getShadowApplication.grantPermissions(Permission.values.map(_.id):_*)
+//    Robolectric.getShadowApplication.grantPermissions(Permission.values.map(_.id):_*)
 
     // watch remote process actor termination and shutdown actor system
     actor(new Act {

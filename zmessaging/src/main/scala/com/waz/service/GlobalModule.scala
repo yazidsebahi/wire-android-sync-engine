@@ -19,7 +19,6 @@ package com.waz.service
 
 import android.content.{Context => AContext}
 import com.softwaremill.macwire._
-import com.waz.PermissionsService
 import com.waz.api.ZmsVersion
 import com.waz.bitmap.BitmapDecoder
 import com.waz.bitmap.video.VideoTranscoder
@@ -30,6 +29,7 @@ import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService, GlobalCallingService}
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
+import com.waz.service.permissions.PermissionsService
 import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
 import com.waz.service.tracking.{TrackingService, TrackingServiceImpl}
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
@@ -111,7 +111,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
 
   lazy val phoneNumbers:        PhoneNumberService               = wire[PhoneNumberServiceImpl]
   lazy val timeouts                                              = wire[Timeouts]
-  lazy val permissions:         PermissionsService               = wire[PermissionsService]
+  lazy val permissions:         PermissionsService               = new PermissionsService
   lazy val avs:                 Avs                              = wire[AvsImpl]
 
   lazy val reporting                                             = wire[GlobalReportingService]

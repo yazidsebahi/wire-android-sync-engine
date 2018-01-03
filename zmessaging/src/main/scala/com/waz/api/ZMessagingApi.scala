@@ -39,9 +39,6 @@ trait ZMessagingApi {
 
   def onInit(callback: InitListener): Unit
 
-  def setPermissionProvider(p: PermissionProvider): Unit
-  def removePermissionProvider(p: PermissionProvider): Unit
-
   def logout(): Unit
 
   def getSelf: Self
