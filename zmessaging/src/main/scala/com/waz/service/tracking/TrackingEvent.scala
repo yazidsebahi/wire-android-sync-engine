@@ -25,8 +25,11 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConversationData, Mime}
 import com.waz.service.push.ReceivedPushData
 import com.waz.utils.returning
+import org.json
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
+
+import scala.util.Try
 
 trait TrackingEvent {
   val name: String
@@ -148,4 +151,9 @@ object LoggedOutEvent {
   val SelfDeleted = "self_deleted"
   val ResetPassword = "reset_password"
   val Manual = "manual"
+}
+
+case class AVSMetricsEvent(jsonStr: String) extends TrackingEvent {
+  override val name = "calling.avs_metrics_ended_call"
+  override val props = Try(new json.JSONObject(jsonStr)).toOption
 }

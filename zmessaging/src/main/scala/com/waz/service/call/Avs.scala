@@ -19,7 +19,7 @@ package com.waz.service.call
 
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{error, verbose}
+import com.waz.ZLog._
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.call.Avs.WCall
@@ -57,6 +57,17 @@ class AvsImpl() extends Avs {
 
   private val available = Calling.avsAvailable.map { _ =>
     returning(Calling.wcall_init()) { res =>
+      Calling.wcall_set_log_handler(new LogHandler {
+        override def onLog(level: Int, msg: String, arg: WCall): Unit = {
+          level match {
+            case LogLevelDebug => debug(msg)("AVS")
+            case LogLevelInfo  => info(msg)("AVS")
+            case LogLevelWarn  => warn(msg)("AVS")
+            case LogLevelError => error(msg)("AVS")
+            case _             => verbose(msg)("AVS")
+          }
+        }
+      }, null)
       verbose(s"AVS initialized: $res")
     }
   }.map(_ => {})
@@ -169,13 +180,17 @@ class AvsImpl() extends Avs {
 }
 
 object Avs {
-
   type WCall = Pointer
 
   def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)
 
   def uint32_tTime(instant: Instant) =
     returning(Uint32_t((instant.toEpochMilli / 1000).toInt))(t => verbose(s"uint32_tTime for $instant = ${t.value}"))
+
+  /**
+    * NOTE: All values should be kept up to date as defined in:
+    * https://github.com/wearezeta/avs/blob/master/include/avs_wcall.h
+    */
 
   /**
     *   WCALL_REASON_NORMAL              0
@@ -206,4 +221,15 @@ object Avs {
   object VideoReceiveState extends Enumeration {
     val Stopped, Started, BadConnection, Unknown = Value
   }
+
+  /**
+    * WCALL_LOG_LEVEL_DEBUG 0
+    * WCALL_LOG_LEVEL_INFO  1
+    * WCALL_LOG_LEVEL_WARN  2
+    * WCALL_LOG_LEVEL_ERROR 3
+    */
+  val LogLevelDebug = 0
+  val LogLevelInfo  = 1
+  val LogLevelWarn  = 2
+  val LogLevelError = 3
 }

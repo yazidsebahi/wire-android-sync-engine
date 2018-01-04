@@ -88,6 +88,8 @@ object Calling {
 
   @native def wcall_set_state_handler(inst: Pointer, wcall_state_change_h: CallStateChangeHandler): Unit
 
+  @native def wcall_set_log_handler(wcall_log_h: LogHandler, arg: Pointer): Unit
+
   /* This will be called when the calling system is ready for calling.
      * The version parameter specifies the config obtained version to use
      * for calling.
@@ -142,6 +144,10 @@ object Calling {
 
   trait MetricsHandler extends Callback {
     def onMetricsReady(convId: String, metricsJson: String, arg: Pointer): Unit
+  }
+
+  trait LogHandler extends Callback {
+    def onLog(level: Int, msg: String, arg: Pointer): Unit
   }
 
   trait CallConfigRequestHandler extends Callback {
