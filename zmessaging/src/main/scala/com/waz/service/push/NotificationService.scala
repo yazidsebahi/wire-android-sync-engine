@@ -68,7 +68,7 @@ class GlobalNotificationsService {
 
             for {
               silent <- shouldBeSilent.orElse(Signal.const(false))
-              nots <- notifications
+              nots <- notifications.orElse(Signal.const(Seq.empty[NotificationInfo]))
             } yield {
               verbose(s"groupedNotifications for account: ${z.accountId} -> (silent: $silent, notsCount: ${nots.size})")
               z.accountId -> (silent, nots)
@@ -289,7 +289,7 @@ class NotificationService(context:         Context,
 
               val groupConv = if (!conv.exists(_.team.isDefined)) conv.exists(_.convType == ConversationType.Group)
               else membersCount > 2
-
+              verbose(s"processing notif complete: ${notificationData.id}")
               NotificationInfo(
                 notificationData.id,
                 notificationData.msgType,
