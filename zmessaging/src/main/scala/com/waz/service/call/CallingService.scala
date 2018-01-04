@@ -35,6 +35,7 @@ import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
+import com.waz.service.tracking.{AVSMetricsEvent, TrackingService}
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
@@ -46,6 +47,7 @@ import com.waz.znet._
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
+import scala.util.Try
 import scala.util.control.NonFatal
 
 class GlobalCallingService() {
@@ -85,7 +87,8 @@ class CallingService(val selfUserId:      UserId,
                      network:             NetworkModeService,
                      netClient:           ZNetClient,
                      errors:              ErrorsService,
-                     userPrefs:           UserPreferences)(implicit accountContext: AccountContext) { self =>
+                     userPrefs:           UserPreferences,
+                     tracking:            TrackingService)(implicit accountContext: AccountContext) { self =>
 
   import CallingService._
 
@@ -101,8 +104,6 @@ class CallingService(val selfUserId:      UserId,
   val currentCall: Signal[Option[CallInfo]] = callProfile.map(_.activeCall)
   val previousCall: SourceSignal[Option[CallInfo]] = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
 
-  val onMetricsAvailable = EventStream[String]()
-  
   //exposed for tests only
   lazy val wCall = returningF(avs.registerAccount(this)) { call =>
     call.onFailure {
@@ -223,10 +224,8 @@ class CallingService(val selfUserId:      UserId,
     }
   }
 
-  def onMetricsReady(convId: RConvId, metricsJson: String) = {
-    verbose(s"Call metrics for $convId, metrics: $metricsJson")
-    onMetricsAvailable ! metricsJson
-  }
+  def onMetricsReady(convId: RConvId, metricsJson: String) =
+    tracking.track(AVSMetricsEvent(metricsJson), Some(account))
 
   def onConfigRequest(wcall: WCall): Int = {
     verbose("onConfigRequest")
