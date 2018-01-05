@@ -68,7 +68,7 @@ class GlobalNotificationsService {
 
             for {
               silent <- shouldBeSilent.orElse(Signal.const(false))
-              nots <- notifications.orElse(Signal.const(Seq.empty[NotificationInfo]))
+              nots <- notifications
             } yield {
               verbose(s"groupedNotifications for account: ${z.accountId} -> (silent: $silent, notsCount: ${nots.size})")
               z.accountId -> (silent, nots)
@@ -274,8 +274,8 @@ class NotificationService(context:         Context,
           case _ =>
             for {
               msg  <- data.referencedMessage.fold2(Future.successful(None), messages.getMessage)
-              conv <- convs.get(data.conv) if conv.isDefined
-              membersCount <- members.getByConv(conv.get.id).map(_.map(_.userId).size)
+              conv <- convs.get(data.conv)
+              membersCount <- conv.fold2(Future.successful(0), c => members.getByConv(c.id).map(_.map(_.userId).size))
             } yield {
               val (notificationData, maybeLikedContent) =
                 if (data.msgType == LIKE) (data.copy(msg = msg.fold("")(_.contentString)), msg.map { m =>
