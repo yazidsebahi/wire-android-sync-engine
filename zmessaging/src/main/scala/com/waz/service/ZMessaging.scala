@@ -183,6 +183,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val openGraphClient    = wire[OpenGraphClient]
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
   lazy val handlesClient      = wire[HandlesClient]
+  lazy val integrationsClient = wire[IntegrationsClient]
 
   lazy val convsContent: ConversationsContentUpdaterImpl = wire[ConversationsContentUpdaterImpl]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]

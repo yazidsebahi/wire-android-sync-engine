@@ -299,3 +299,29 @@ object NotId {
   def apply(id: (MessageId, UserId)): NotId = NotId(s"$LIKE-${id._1.str}-${id._2.str}")
   def apply(msgId: MessageId): NotId = NotId(msgId.str)
 }
+
+case class ProviderId(str: String) {
+  override def toString: String = str
+}
+
+object ProviderId extends (String => ProviderId) {
+  def apply(): ProviderId = Id.random()
+
+  implicit object Id extends Id[ProviderId] {
+    override def random(): ProviderId = ProviderId(Uid().toString)
+    override def decode(str: String): ProviderId = ProviderId(str)
+  }
+}
+
+case class IntegrationId(str: String) {
+  override def toString: String = str
+}
+
+object IntegrationId extends (String => IntegrationId) {
+  def apply(): IntegrationId = Id.random()
+
+  implicit object Id extends Id[IntegrationId] {
+    override def random(): IntegrationId = IntegrationId(Uid().toString)
+    override def decode(str: String): IntegrationId = IntegrationId(str)
+  }
+}
