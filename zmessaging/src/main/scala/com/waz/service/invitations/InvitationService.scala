@@ -19,24 +19,30 @@ package com.waz.service.invitations
 
 import java.util.Locale
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
+import com.waz.api.impl.ErrorResponse
 import com.waz.content.ZmsDatabase
 import com.waz.model.Contact.{EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.conversation.ConversationsService
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.InvitationClient
+import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.{EventContext, Signal}
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.threeten.bp.Instant
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
 class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connections: ConnectionService, contacts: ContactsService,
-                        conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts) {
+                        conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts, client: InvitationClient,
+                        teamId: Option[TeamId]) {
 
   import EventContext.Implicits.global
   import timeouts.contacts._
@@ -46,6 +52,8 @@ class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connection
 
   private lazy val invitedContactsSource = Signal[Set[ContactId]]()
   def invitedContacts: Signal[Set[ContactId]] = invitedContactsSource
+
+  val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
   storage.read { implicit db =>
     returning(InvitedContacts.load)(invited => verbose(s"loaded ${invited.size} previous invitation(s)"))
@@ -85,6 +93,28 @@ class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connection
         Future.successful(())
     }
 
+  def inviteToTeam(emailAddress: EmailAddress, name: Option[String], locale: Option[Locale] = None): ErrorOrResponse[ConfirmedTeamInvitation] =
+    teamId match {
+      case Some(tid) =>
+        val invitation = TeamInvitation(tid, emailAddress, name.getOrElse(" "), locale)
+        client.postTeamInvitation(invitation).map { returning(_) { r =>
+            if(r.isRight) invitedToTeam.mutate { _ ++ ListMap(invitation -> Some(r)) }
+        }
+      }
+      case None => CancellableFuture.successful(Left(ErrorResponse.internalError("Not a team account")))
+    }
+
+  def postTeamInvitations(emails: Seq[EmailAddress], name: Option[String]): Future[Unit] = {
+    teamId match {
+      case Some(tid) =>
+        val invites = emails.map { e => TeamInvitation(tid, e, name.getOrElse(" "), None)}
+        val map = invites.map(i => i -> Option.empty[Either[ErrorResponse, ConfirmedTeamInvitation]]).toMap
+        invitedToTeam.mutate(_ ++ map)
+        sync.postTeamInvitations(invites).map(_ => ())
+      case _ => Future.successful(())
+    }
+  }
+
   def onInvitationSuccess(inv: Invitation, genesis: Instant): Future[Unit] = {
     verbose(s"invitation of ${inv.id} succeeded at $genesis")
     for {
@@ -112,6 +142,10 @@ class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connection
       _  <- contacts.addContactsOnWire(cs.iterator.map(c => (event.to, c)).to[ArrayBuffer])
       _   = invitedContactsSource mutate (_ -- cs)
     } yield ()
+  }
+
+  def onTeamInvitationResponse(invitation: TeamInvitation, response: Either[ErrorResponse, ConfirmedTeamInvitation]): Unit = {
+    invitedToTeam.mutate { _ ++ Map(invitation -> Some(response)) }
   }
 
   private def similarTo(method: Either[EmailAddress, PhoneNumber]) = storage.read(db => method.fold(EmailAddressesDao.findBy(_)(db), PhoneNumbersDao.findBy(_)(db)))
