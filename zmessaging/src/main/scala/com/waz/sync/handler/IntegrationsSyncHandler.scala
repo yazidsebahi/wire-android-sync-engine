@@ -19,7 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.ProviderId
+import com.waz.model.{IntegrationId, ProviderId}
 import com.waz.service.IntegrationsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.IntegrationsClient
@@ -28,23 +28,34 @@ import com.waz.threading.Threading
 import scala.concurrent.Future
 
 trait IntegrationsSyncHandler {
-  def syncProvider(id: ProviderId): Future[SyncResult]
   def syncIntegrations(name: String): Future[SyncResult]
+  def syncIntegration(pId: ProviderId, iId: IntegrationId): Future[SyncResult]
+
+  def syncProvider(pId: ProviderId): Future[SyncResult]
 }
 
 class IntegrationsSyncHandlerImpl(client: IntegrationsClient, service: IntegrationsService) extends IntegrationsSyncHandler {
   import Threading.Implicits.Background
 
-  override def syncProvider(id: ProviderId) = client.getProvider(id).future.flatMap {
+  override def syncProvider(pId: ProviderId) = client.getProvider(pId).future.flatMap {
     case Right(data) =>
-      debug(s"quering for provider with id $id returned $data")
-      service.onProviderSynced(id, data).map(_ => SyncResult.Success)
+      debug(s"quering for provider with id $pId returned $data")
+      service.onProviderSynced(pId, data).map(_ => SyncResult.Success)
     case Left(error) =>
-      debug(s"quering for provider with id $id returned $error")
+      debug(s"quering for provider with id $pId returned $error")
       Future.successful(SyncResult(error))
   }
 
-  override def syncIntegrations(name: String) = client.getIntegrations(name).future.flatMap {
+  override def syncIntegration(pId: ProviderId, iId: IntegrationId) = client.getIntegration(pId, iId).future.flatMap {
+    case Right(data) =>
+      debug(s"quering for integration with pId $pId and iId $iId returned $data")
+      service.onIntegrationSynced(pId, iId, data).map(_ => SyncResult.Success)
+    case Left(error) =>
+      debug(s"quering for provider with pId $pId and iId $iId returned $error")
+      Future.successful(SyncResult(error))
+  }
+
+  override def syncIntegrations(name: String) = client.searchIntegrations(name).future.flatMap {
     case Right(data) =>
       debug(s"quering for integrations with name $name returned $data")
       service.onIntegrationsSynced(name, data).map(_ => SyncResult.Success)

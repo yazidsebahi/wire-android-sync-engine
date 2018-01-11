@@ -19,13 +19,14 @@ package com.waz.service
 
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.SyncServiceHandle
+import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.sync.client.IntegrationsClient
 import com.waz.sync.handler.IntegrationsSyncHandlerImpl
+import com.waz.sync.queue.SyncScheduler
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.wrappers.URI
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 class IntegrationsServiceSpec extends AndroidFreeSpec {
   import IntegrationsServiceSpec._
@@ -35,13 +36,23 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
   val sync = mock[SyncServiceHandle]
   val client = mock[IntegrationsClient]
 
-  val service: IntegrationsService = new IntegrationsServiceImpl(sync)
+  private var syncMap = Map[SyncId, Promise[SyncResult]]()
+
+  val syncScheduler = mock[SyncScheduler]
+  (syncScheduler.await(_: SyncId)).expects(*).anyNumberOfTimes().onCall( (sid: SyncId) => { syncMap(sid).future } )
+
+  val srs = mock[SyncRequestService]
+  (srs.scheduler _).expects().anyNumberOfTimes().returning(syncScheduler)
+
+  val service: IntegrationsService = new IntegrationsServiceImpl(sync, srs)
 
   val handler = new IntegrationsSyncHandlerImpl(client, service)
 
   (sync.syncProvider _).expects(*).anyNumberOfTimes().onCall((id: ProviderId) => Future {
-    handler.syncProvider(id)
-    SyncId()
+    val sid = SyncId()
+    syncMap += (sid -> Promise[SyncResult]())
+    handler.syncProvider(id).map { _ => syncMap(sid).success(SyncResult.Success) }
+    sid
   })
 
   (sync.syncIntegrations _).expects(*).anyNumberOfTimes().onCall((startWith: String) => Future {
@@ -54,7 +65,7 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
     case None       => CancellableFuture.failed(new Exception(s"no provider with id $id"))
   })
 
-  (client.getIntegrations _).expects(*).anyNumberOfTimes().onCall((startWith: String) => CancellableFuture.successful(Right(integrations.values.filter(_.name.startsWith(startWith)).toSeq)))
+  (client.searchIntegrations _).expects(*).anyNumberOfTimes().onCall((startWith: String) => CancellableFuture.successful(Right(integrations.values.filter(_.name.startsWith(startWith)).toSeq)))
 
   feature("integrations") {
     scenario("get all integrations") {

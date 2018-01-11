@@ -222,6 +222,10 @@ object SyncRequest {
     override val mergeKey = (cmd, startWith)
   }
 
+  case class SyncIntegration(pId: ProviderId, iId: IntegrationId) extends BaseRequest(Cmd.SyncIntegration) {
+    override val mergeKey = (cmd, iId)
+  }
+
   case class SyncProvider(id: ProviderId) extends BaseRequest(Cmd.SyncProvider) {
     override val mergeKey = (cmd, id)
   }
@@ -333,6 +337,7 @@ object SyncRequest {
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
           case Cmd.SyncIntegrations      => SyncIntegrations(decodeString('startWith))
+          case Cmd.SyncIntegration       => SyncIntegration(decodeId[ProviderId]('providerId), decodeId[IntegrationId]('integrationId))
           case Cmd.SyncProvider          => SyncProvider(decodeId[ProviderId]('providerId))
           case Cmd.ExactMatchHandle      => ExactMatchHandle(Handle(decodeString('handle)))
           case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team)
@@ -404,6 +409,9 @@ object SyncRequest {
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
         case SyncIntegrations(startWith)      => o.put("startWith", startWith)
+        case SyncIntegration(pId, iId)        =>
+          o.put("providerId", pId.str)
+          o.put("integrationId", iId.str)
         case SyncProvider(providerId)         => o.put("providerId", providerId.str)
         case ExactMatchHandle(handle)         => o.put("handle", handle.string)
         case SyncTeamMember(userId)           => o.put("user", userId.str)

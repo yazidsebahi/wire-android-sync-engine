@@ -29,22 +29,28 @@ import com.waz.znet.ZNetClient.ErrorOrResponse
 import scala.util.Try
 
 trait IntegrationsClient {
+  def searchIntegrations(startWith: String): ErrorOrResponse[Seq[IntegrationData]]
+  def getIntegration(providerId: ProviderId, integrationId: IntegrationId): ErrorOrResponse[IntegrationData]
   def getProvider(id: ProviderId): ErrorOrResponse[ProviderData]
-  def getIntegrations(name: String): ErrorOrResponse[Seq[IntegrationData]]
 }
 
 class IntegrationsClientImpl(netClient: ZNetClient) extends IntegrationsClient {
   import IntegrationsClient._
   import Threading.Implicits.Background
 
+  def searchIntegrations(startWith: String) =
+    netClient.withErrorHandling("searchIntegrations", Request.Get(integrationsSearchPath(startWith))) {
+      case Response(SuccessHttpStatus(), IntegrationsSearchResponse(data), _) => data
+    }
+
+  def getIntegration(providerId: ProviderId, integrationId: IntegrationId) =
+    netClient.withErrorHandling("getIntegration", Request.Get(integrationPath(providerId, integrationId))) {
+      case Response(SuccessHttpStatus(), IntegrationResponse(data), _) => data
+    }
+
   def getProvider(id: ProviderId) =
     netClient.withErrorHandling("getProvider", Request.Get(providerPath(id))) {
       case Response(SuccessHttpStatus(), ProviderResponse(data), _) => data
-    }
-
-  def getIntegrations(name: String) =
-    netClient.withErrorHandling("getIntegrations", Request.Get(integrationsPath(name))) {
-      case Response(SuccessHttpStatus(), IntegrationResponse(data), _) => data
     }
 }
 
@@ -56,11 +62,15 @@ object IntegrationsClient {
   val DefaultTag = "tutorial"
   val ProvidersPath = "/providers"
 
-  def integrationsPath(name: String): String =
-    if (name.isEmpty) Request.query(IntegrationsPath, "tags" -> DefaultTag)
-    else Request.query(IntegrationsPath, "tags" -> DefaultTag, "name" -> name)
+  def integrationsSearchPath(startWith: String): String =
+    if (startWith.isEmpty) Request.query(IntegrationsPath, "tags" -> DefaultTag)
+    else Request.query(IntegrationsPath, "tags" -> DefaultTag, "name" -> startWith)
 
-  object IntegrationResponse {
+  def integrationPath(providerId: ProviderId, integrationId: IntegrationId): String = s"$ProvidersPath/$providerId/services/$integrationId"
+
+  def providerPath(id: ProviderId): String = s"$ProvidersPath/$id"
+
+  object IntegrationsSearchResponse {
     import JsonDecoder._
 
     def unapply(resp: ResponseContent): Option[Seq[IntegrationData]] = resp match {
@@ -71,7 +81,14 @@ object IntegrationsClient {
     }
   }
 
-  def providerPath(id: ProviderId): String = s"$ProvidersPath/$id"
+  object IntegrationResponse {
+    def unapply(resp: ResponseContent): Option[IntegrationData] = resp match {
+      case JsonObjectResponse(js) => Try(IntegrationData.Decoder(js)).toOption
+      case response =>
+        warn(s"Unexpected response: $response")
+        None
+    }
+  }
 
   object ProviderResponse {
     def unapply(resp: ResponseContent): Option[ProviderData] = resp match {

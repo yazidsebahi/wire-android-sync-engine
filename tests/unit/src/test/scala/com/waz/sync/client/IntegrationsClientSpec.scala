@@ -18,7 +18,7 @@
 package com.waz.sync.client
 
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.{IntegrationData, ProviderData, ProviderId}
+import com.waz.model.{IntegrationData, IntegrationId, ProviderData, ProviderId}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.Response.{HttpStatus, InternalError}
@@ -33,40 +33,6 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
 
   implicit val ctx = Threading.Background
 
-  private val nc = mock[ZNetClient]
-  (nc.apply(_: Request[Unit]))
-    .expects(*)
-    .anyNumberOfTimes()
-    .onCall { request: Request[Unit] =>
-
-      val jsonOpt = request.resourcePath.get match {
-        case path if path.contains("/services") => createIntegrationsJson(path)
-        case path if path.contains("/providers") => createProviderJson(path)
-        case _ => None
-      }
-
-      val response = jsonOpt match {
-        case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
-        case None => Response(InternalError(s"Invalid request: $request"))
-      }
-
-      CancellableFuture { response }
-    }
-
-  (nc.withErrorHandling[Unit, Seq[IntegrationData]](_: String, _: Request[Unit])(_: PartialFunction[Response, Seq[IntegrationData]])(_: ExecutionContext))
-    .expects(*, *, *, *)
-    .anyNumberOfTimes()
-    .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Seq[IntegrationData]], ec: ExecutionContext) =>
-      nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
-    }
-
-  (nc.withErrorHandling[Unit, ProviderData](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderData])(_: ExecutionContext))
-    .expects(*, *, *, *)
-    .anyNumberOfTimes()
-    .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, ProviderData], ec: ExecutionContext) =>
-      nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
-    }
-
   feature("integrations") {
 
     val nc = mock[ZNetClient]
@@ -76,7 +42,8 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
       .onCall { request: Request[Unit] =>
 
         val jsonOpt = request.resourcePath.get match {
-          case path if path.contains("/services") => createIntegrationsJson(path)
+          case path if path.contains("/providers") && path.contains("/services") => getIntegrationJson(path)
+          case path if path.contains("/services") => searchIntegrationsJson(path)
           case _ => None
         }
 
@@ -88,39 +55,47 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
         CancellableFuture { response }
       }
 
-    (nc.withErrorHandling[Unit, Seq[IntegrationData]](_: String, _: Request[Unit])(_: PartialFunction[Response, Seq[IntegrationData]])(_: ExecutionContext))
+    (nc.withErrorHandling[Unit, Any](_: String, _: Request[Unit])(_: PartialFunction[Response, Any])(_: ExecutionContext))
       .expects(*, *, *, *)
       .anyNumberOfTimes()
-      .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Seq[IntegrationData]], ec: ExecutionContext) =>
+      .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Any], ec: ExecutionContext) =>
         nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
       }
 
+    def searchIntegrations(startWith: String) = new IntegrationsClientImpl(nc).searchIntegrations(startWith).future.flatMap {
+      case Right(data) => Future.successful(data)
+      case Left(error) => Future.failed(new Exception(error.message))
+    }
 
-    def integrationsFuture(startWith: String) = new IntegrationsClientImpl(nc).getIntegrations(startWith).future.flatMap {
-      case Right(ints) => Future.successful(ints)
+    def getIntegration(providerId: ProviderId, integrationId: IntegrationId) = new IntegrationsClientImpl(nc).getIntegration(providerId, integrationId).future.flatMap {
+      case Right(data) => Future.successful(data)
       case Left(error) => Future.failed(new Exception(error.message))
     }
 
     scenario("get all integrations") {
-      result(integrationsFuture("")).size shouldEqual 3
+      result(searchIntegrations("")).size shouldEqual 3
     }
 
     scenario("get collectionsbot") {
-      val res = result(integrationsFuture("collectionsbot"))
+      val res = result(searchIntegrations("collectionsbot"))
 
       res.size shouldEqual 1
       res.head.name shouldEqual "collectionsbot"
     }
 
     scenario("get Echo bots") {
-      val res = result(integrationsFuture("Echo"))
+      val res = result(searchIntegrations("Echo"))
 
       res.size shouldEqual 2
       res.forall(_.name.startsWith("Echo")) shouldEqual true
     }
 
     scenario("get Echo bots - letter case important") {
-      result(integrationsFuture("echo")).isEmpty shouldEqual true
+      result(searchIntegrations("echo")).isEmpty shouldEqual true
+    }
+
+    scenario("get integration by id") {
+      result(getIntegration(ProviderId(providerId1), IntegrationId(integrationId1)))
     }
 
   }
@@ -134,7 +109,7 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
       .onCall { request: Request[Unit] =>
 
         val jsonOpt = request.resourcePath.get match {
-          case path if path.contains("/providers") => createProviderJson(path)
+          case path if path.contains("/providers") => getProviderJson(path)
           case _ => None
         }
 
@@ -279,42 +254,57 @@ object IntegrationsClientSpec {
        |    }
     """.stripMargin
 
-  val integrationResponses = Map(
+  val integrationNames = Map(
     integrationName1 -> integrationResponse1,
     integrationName2 -> integrationResponse2,
     integrationName3 -> integrationResponse3
   )
 
-  def integrationResponseJson(startWith: String): String = {
-    val resps = integrationResponses.flatMap {
-      case (name, jsonStr) if name.startsWith(startWith) => Some(jsonStr)
-      case _ => None
-    }.mkString(",")
+  val integrationIds = Map(
+    (providerId1, integrationId1) -> integrationResponse1,
+    (providerId2, integrationId2) -> integrationResponse2,
+    (providerId3, integrationId3) -> integrationResponse3
+  )
 
-    s"""
-       |{
-       |  "has_more" : false,
-       |  "services" : [
-       |    $resps
-       |  ]
-       |}
-     """.stripMargin
-  }
+  private val startWithRegex = """.*name=([A-Za-z0-9_]+)""".r
 
-  private val nameRegex = """.*name=([A-Za-z0-9_]+)""".r
-
-  def createIntegrationsJson(path: String): Option[JSONObject] =
+  def searchIntegrationsJson(path: String): Option[JSONObject] =
     (path match {
-      case nameRegex(n) => Some(n)
+      case startWithRegex(startWith) => Some(startWith)
       case _ => Some("")
-    }).map(n => new JSONObject(integrationResponseJson(n)))
+    }).map(startWith => {
 
-  private val idRegex = """.*/([A-Za-z0-9\\-]+)""".r
+      val resps = integrationNames.flatMap {
+        case (name, jsonStr) if name.startsWith(startWith) => Some(jsonStr)
+        case _ => None
+      }.mkString(",")
 
-  def createProviderJson(path: String): Option[JSONObject] =
+      val str =
+        s"""
+           |{
+           |  "has_more" : false,
+           |  "services" : [
+           |    $resps
+           |  ]
+           |}
+     """.stripMargin
+
+      new JSONObject(str)
+    })
+
+  private val providerIdRegex = """.*/providers/([A-Za-z0-9\\-]+)""".r
+
+  def getProviderJson(path: String): Option[JSONObject] =
     (path match {
-      case idRegex(id) => Some(id)
+      case providerIdRegex(pId) => Some(pId)
       case _ => None
     }).flatMap(pId => providers.get(pId)).map(new JSONObject(_))
 
+  private val integrationIdRegex = """.*/providers/([A-Za-z0-9\\-]+)/services/([A-Za-z0-9\\-]+)""".r
+
+  def getIntegrationJson(path: String): Option[JSONObject] = path match {
+    case integrationIdRegex(pId, iId) if integrationIds.contains((pId, iId)) =>
+      Option(new JSONObject(integrationIds((pId, iId))))
+    case _ => None
+  }
 }

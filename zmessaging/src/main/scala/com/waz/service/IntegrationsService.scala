@@ -17,8 +17,9 @@
  */
 package com.waz.service
 
-import com.waz.model.{IntegrationData, ProviderData, ProviderId}
-import com.waz.sync.SyncServiceHandle
+import com.waz.model.{IntegrationData, IntegrationId, ProviderData, ProviderId}
+import com.waz.sync.{SyncRequestService, SyncServiceHandle}
+import com.waz.threading.Threading
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.returning
 
@@ -26,43 +27,49 @@ import scala.concurrent.Future
 
 trait IntegrationsService {
   def searchIntegrations(startWith: String): Signal[Seq[IntegrationData]]
+  def getIntegration(pId: ProviderId, iId: IntegrationId): Future[IntegrationData]
   def getProvider(id: ProviderId): Future[ProviderData]
 
   def onIntegrationsSynced(name: String, data: Seq[IntegrationData]): Future[Unit]
-  def onProviderSynced(id: ProviderId, data: ProviderData): Future[Unit]
+  def onProviderSynced(pId: ProviderId, data: ProviderData): Future[Unit]
+  def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData): Future[Unit]
 }
 
-class IntegrationsServiceImpl(sync: SyncServiceHandle) extends IntegrationsService {
+class IntegrationsServiceImpl(sync: SyncServiceHandle, syncRequestService: SyncRequestService) extends IntegrationsService {
+  implicit val ctx = Threading.Background
 
   override def searchIntegrations(startWith: String) =
-    intDataMap.getOrElse(startWith, returning(Signal[Seq[IntegrationData]]()) { sig =>
-      intDataMap += (startWith -> sig)
+    integrationSearch.getOrElse(startWith, returning(Signal[Seq[IntegrationData]]()) { sig =>
+      integrationSearch += (startWith -> sig)
       sync.syncIntegrations(startWith)
     })
 
-  override def getProvider(id: ProviderId) =
-    provDataMap.getOrElse(id, returning(Signal[ProviderData]()) { sig =>
-      provDataMap += (id -> sig)
-      sync.syncProvider(id)
-    }).head
+  override def getIntegration(pId: ProviderId, iId: IntegrationId) =
+    if (integrations.contains(iId)) Future.successful(integrations(iId))
+    else sync.syncIntegration(pId, iId).flatMap(syncRequestService.scheduler.await).map(_ => integrations(iId))
 
-  override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) = intDataMap.get(name) match {
+  override def getProvider(pId: ProviderId) =
+    if (providers.contains(pId)) Future.successful(providers(pId))
+    else sync.syncProvider(pId).flatMap(syncRequestService.scheduler.await).map(_ => providers(pId))
+
+  override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) = integrationSearch.get(name) match {
     case Some(signal) =>
       signal ! data
       Future.successful({})
     case None => Future.failed(new Exception(s"received sync data for unknown integrations name: $name"))
   }
 
-  override def onProviderSynced(id: ProviderId, data: ProviderData) = provDataMap.get(id) match {
-    case Some(signal) =>
-      signal ! data
-      Future.successful({})
-    case None => Future.failed(new Exception(s"received sync data for unknown provider: $id"))
+  override def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData) = {
+    integrations += iId -> data
+    Future.successful({})
   }
 
-  // TODO: switch to storage
-  private var intDataMap = Map[String, SourceSignal[Seq[IntegrationData]]]()
-  private var provDataMap = Map[ProviderId, SourceSignal[ProviderData]]()
+  override def onProviderSynced(id: ProviderId, data: ProviderData) = {
+    providers += id -> data
+    Future.successful({})
+  }
 
-
+  private var integrationSearch  = Map[String, SourceSignal[Seq[IntegrationData]]]()
+  private var providers = Map[ProviderId, ProviderData]()
+  private var integrations = Map[IntegrationId, IntegrationData]()
 }

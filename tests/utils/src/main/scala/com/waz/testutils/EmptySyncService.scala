@@ -45,6 +45,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncConnections(dependsOn: Option[SyncId] = None) = sid
   override def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId] = sid
   override def syncIntegrations(startWith: String) = sid
+  override def syncIntegration(id: ProviderId, iId: IntegrationId) = sid
   override def syncProvider(id: ProviderId) = sid
 
   override def postConnection(user: UserId, name: String, message: String) = sid
