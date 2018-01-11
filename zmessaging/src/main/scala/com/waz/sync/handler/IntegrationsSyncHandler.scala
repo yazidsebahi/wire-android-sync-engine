@@ -20,6 +20,7 @@ package com.waz.sync.handler
 import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model.ProviderId
+import com.waz.service.IntegrationsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.IntegrationsClient
 import com.waz.threading.Threading
@@ -31,22 +32,22 @@ trait IntegrationsSyncHandler {
   def syncIntegrations(name: String): Future[SyncResult]
 }
 
-class IntegrationsSyncHandlerImpl(client: IntegrationsClient) extends IntegrationsSyncHandler {
+class IntegrationsSyncHandlerImpl(client: IntegrationsClient, service: IntegrationsService) extends IntegrationsSyncHandler {
   import Threading.Implicits.Background
 
   override def syncProvider(id: ProviderId) = client.getProvider(id).future.flatMap {
-    case Right(provider) =>
-      debug(s"quering for provider with id $id returned $provider")
-      Future.successful(SyncResult.Success)
+    case Right(data) =>
+      debug(s"quering for provider with id $id returned $data")
+      service.onProviderSynced(id, data).map(_ => SyncResult.Success)
     case Left(error) =>
       debug(s"quering for provider with id $id returned $error")
       Future.successful(SyncResult(error))
   }
 
   override def syncIntegrations(name: String) = client.getIntegrations(name).future.flatMap {
-    case Right(integrations) =>
-      debug(s"quering for integrations with name $name returned $integrations")
-      Future.successful(SyncResult.Success)
+    case Right(data) =>
+      debug(s"quering for integrations with name $name returned $data")
+      service.onIntegrationsSynced(name, data).map(_ => SyncResult.Success)
     case Left(error) =>
       debug(s"quering for integrations with name $name returned $error")
       Future.successful(SyncResult(error))

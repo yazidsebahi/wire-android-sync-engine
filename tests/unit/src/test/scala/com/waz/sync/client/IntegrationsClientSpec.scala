@@ -18,9 +18,8 @@
 package com.waz.sync.client
 
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.ProviderId
+import com.waz.model.{IntegrationData, ProviderData, ProviderId}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.client.IntegrationsClient.{IntegrationEntry, ProviderEntry}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.Response.{HttpStatus, InternalError}
 import com.waz.znet.{JsonObjectResponse, Request, Response, ZNetClient}
@@ -29,8 +28,144 @@ import org.json.JSONObject
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class IntegrationsClientSpec  extends AndroidFreeSpec {
+class IntegrationsClientSpec extends AndroidFreeSpec {
+  import IntegrationsClientSpec._
+
   implicit val ctx = Threading.Background
+
+  private val nc = mock[ZNetClient]
+  (nc.apply(_: Request[Unit]))
+    .expects(*)
+    .anyNumberOfTimes()
+    .onCall { request: Request[Unit] =>
+
+      val jsonOpt = request.resourcePath.get match {
+        case path if path.contains("/services") => createIntegrationsJson(path)
+        case path if path.contains("/providers") => createProviderJson(path)
+        case _ => None
+      }
+
+      val response = jsonOpt match {
+        case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
+        case None => Response(InternalError(s"Invalid request: $request"))
+      }
+
+      CancellableFuture { response }
+    }
+
+  (nc.withErrorHandling[Unit, Seq[IntegrationData]](_: String, _: Request[Unit])(_: PartialFunction[Response, Seq[IntegrationData]])(_: ExecutionContext))
+    .expects(*, *, *, *)
+    .anyNumberOfTimes()
+    .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Seq[IntegrationData]], ec: ExecutionContext) =>
+      nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+    }
+
+  (nc.withErrorHandling[Unit, ProviderData](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderData])(_: ExecutionContext))
+    .expects(*, *, *, *)
+    .anyNumberOfTimes()
+    .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, ProviderData], ec: ExecutionContext) =>
+      nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+    }
+
+  feature("integrations") {
+
+    val nc = mock[ZNetClient]
+    (nc.apply(_: Request[Unit]))
+      .expects(*)
+      .anyNumberOfTimes()
+      .onCall { request: Request[Unit] =>
+
+        val jsonOpt = request.resourcePath.get match {
+          case path if path.contains("/services") => createIntegrationsJson(path)
+          case _ => None
+        }
+
+        val response = jsonOpt match {
+          case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
+          case None => Response(InternalError(s"Invalid request: $request"))
+        }
+
+        CancellableFuture { response }
+      }
+
+    (nc.withErrorHandling[Unit, Seq[IntegrationData]](_: String, _: Request[Unit])(_: PartialFunction[Response, Seq[IntegrationData]])(_: ExecutionContext))
+      .expects(*, *, *, *)
+      .anyNumberOfTimes()
+      .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Seq[IntegrationData]], ec: ExecutionContext) =>
+        nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+      }
+
+
+    def integrationsFuture(startWith: String) = new IntegrationsClientImpl(nc).getIntegrations(startWith).future.flatMap {
+      case Right(ints) => Future.successful(ints)
+      case Left(error) => Future.failed(new Exception(error.message))
+    }
+
+    scenario("get all integrations") {
+      result(integrationsFuture("")).size shouldEqual 3
+    }
+
+    scenario("get collectionsbot") {
+      val res = result(integrationsFuture("collectionsbot"))
+
+      res.size shouldEqual 1
+      res.head.name shouldEqual "collectionsbot"
+    }
+
+    scenario("get Echo bots") {
+      val res = result(integrationsFuture("Echo"))
+
+      res.size shouldEqual 2
+      res.forall(_.name.startsWith("Echo")) shouldEqual true
+    }
+
+    scenario("get Echo bots - letter case important") {
+      result(integrationsFuture("echo")).isEmpty shouldEqual true
+    }
+
+  }
+
+  feature("providers") {
+
+    val nc = mock[ZNetClient]
+    (nc.apply(_: Request[Unit]))
+      .expects(*)
+      .anyNumberOfTimes()
+      .onCall { request: Request[Unit] =>
+
+        val jsonOpt = request.resourcePath.get match {
+          case path if path.contains("/providers") => createProviderJson(path)
+          case _ => None
+        }
+
+        val response = jsonOpt match {
+          case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
+          case None => Response(InternalError(s"Invalid request: $request"))
+        }
+
+        CancellableFuture { response }
+      }
+
+    (nc.withErrorHandling[Unit, ProviderData](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderData])(_: ExecutionContext))
+      .expects(*, *, *, *)
+      .anyNumberOfTimes()
+      .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, ProviderData], ec: ExecutionContext) =>
+        nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+      }
+
+    def providerFuture(id: ProviderId) = new IntegrationsClientImpl(nc).getProvider(id).future.flatMap {
+      case Right(provider) => Future.successful(provider)
+      case Left(error) => Future.failed(new Exception(error.message))
+    }
+
+    scenario("get provider") {
+      result(providerFuture(ProviderId(providerId0))).name equals "Wire Swiss GmbH"
+    }
+  }
+
+}
+
+object IntegrationsClientSpec {
 
   val providerId0 = "19c092cb-27cf-42f9-812e-a10de4f2dcae"
   val providerResponse0 =
@@ -91,57 +226,57 @@ class IntegrationsClientSpec  extends AndroidFreeSpec {
   val integrationName1 = "collectionsbot"
   val integrationResponse1 =
     s"""
-      |    {
-      |      "assets" : [
-      |
+       |    {
+       |      "assets" : [
+       |
       |      ],
-      |      "provider" : "$providerId1",
-      |      "enabled" : true,
-      |      "id" : "$integrationId1",
-      |      "description" : "Helps you fill your library",
-      |      "name" : "$integrationName1",
-      |      "tags" : [
-      |        "tutorial"
-      |      ]
-      |    }
+       |      "provider" : "$providerId1",
+       |      "enabled" : true,
+       |      "id" : "$integrationId1",
+       |      "description" : "Helps you fill your library",
+       |      "name" : "$integrationName1",
+       |      "tags" : [
+       |        "tutorial"
+       |      ]
+       |    }
     """.stripMargin
 
   val integrationId2 = "748bda63-7783-42d4-80c2-030e3daef5c7"
   val integrationName2 = "Echo"
   val integrationResponse2 =
     s"""
-      |{
-      |      "assets" : [
-      |
+       |{
+       |      "assets" : [
+       |
       |      ],
-      |      "provider" : "$providerId2",
-      |      "enabled" : true,
-      |      "id" : "$integrationId2",
-      |      "description" : "Echo",
-      |      "name" : "$integrationName2",
-      |      "tags" : [
-      |        "tutorial"
-      |      ]
-      |    }
+       |      "provider" : "$providerId2",
+       |      "enabled" : true,
+       |      "id" : "$integrationId2",
+       |      "description" : "Echo",
+       |      "name" : "$integrationName2",
+       |      "tags" : [
+       |        "tutorial"
+       |      ]
+       |    }
     """.stripMargin
 
   val integrationId3 = "f21ef724-64cc-45e3-b78d-d1b18a7c02a5"
   val integrationName3 = "Echo_stage"
   val integrationResponse3 =
     s"""
-      |{
-      |      "assets" : [
-      |
+       |{
+       |      "assets" : [
+       |
       |      ],
-      |      "provider" : "$providerId3",
-      |      "enabled" : true,
-      |      "id" : "$integrationId3",
-      |      "description" : "blah",
-      |      "name" : "$integrationName3",
-      |      "tags" : [
-      |        "tutorial"
-      |      ]
-      |    }
+       |      "provider" : "$providerId3",
+       |      "enabled" : true,
+       |      "id" : "$integrationId3",
+       |      "description" : "blah",
+       |      "name" : "$integrationName3",
+       |      "tags" : [
+       |        "tutorial"
+       |      ]
+       |    }
     """.stripMargin
 
   val integrationResponses = Map(
@@ -168,7 +303,7 @@ class IntegrationsClientSpec  extends AndroidFreeSpec {
 
   private val nameRegex = """.*name=([A-Za-z0-9_]+)""".r
 
-  private def createIntegrationsJson(path: String): Option[JSONObject] =
+  def createIntegrationsJson(path: String): Option[JSONObject] =
     (path match {
       case nameRegex(n) => Some(n)
       case _ => Some("")
@@ -176,140 +311,10 @@ class IntegrationsClientSpec  extends AndroidFreeSpec {
 
   private val idRegex = """.*/([A-Za-z0-9\\-]+)""".r
 
-  private def createProviderJson(path: String): Option[JSONObject] =
+  def createProviderJson(path: String): Option[JSONObject] =
     (path match {
       case idRegex(id) => Some(id)
       case _ => None
     }).flatMap(pId => providers.get(pId)).map(new JSONObject(_))
-
-  private val nc = mock[ZNetClient]
-  (nc.apply(_: Request[Unit]))
-    .expects(*)
-    .anyNumberOfTimes()
-    .onCall { request: Request[Unit] =>
-
-      val jsonOpt = request.resourcePath.get match {
-        case path if path.contains("/services") => createIntegrationsJson(path)
-        case path if path.contains("/providers") => createProviderJson(path)
-        case _ => None
-      }
-
-      val response = jsonOpt match {
-        case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
-        case None => Response(InternalError(s"Invalid request: $request"))
-      }
-
-      CancellableFuture { response }
-    }
-
-  (nc.withErrorHandling[Unit, Seq[IntegrationEntry]](_: String, _: Request[Unit])(_: PartialFunction[Response, Seq[IntegrationEntry]])(_: ExecutionContext))
-    .expects(*, *, *, *)
-    .anyNumberOfTimes()
-    .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Seq[IntegrationEntry]], ec: ExecutionContext) =>
-      nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
-    }
-
-  (nc.withErrorHandling[Unit, ProviderEntry](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderEntry])(_: ExecutionContext))
-    .expects(*, *, *, *)
-    .anyNumberOfTimes()
-    .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, ProviderEntry], ec: ExecutionContext) =>
-      nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
-    }
-
-  feature("integrations") {
-
-    val nc = mock[ZNetClient]
-    (nc.apply(_: Request[Unit]))
-      .expects(*)
-      .anyNumberOfTimes()
-      .onCall { request: Request[Unit] =>
-
-        val jsonOpt = request.resourcePath.get match {
-          case path if path.contains("/services") => createIntegrationsJson(path)
-          case _ => None
-        }
-
-        val response = jsonOpt match {
-          case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
-          case None => Response(InternalError(s"Invalid request: $request"))
-        }
-
-        CancellableFuture { response }
-      }
-
-    (nc.withErrorHandling[Unit, Seq[IntegrationEntry]](_: String, _: Request[Unit])(_: PartialFunction[Response, Seq[IntegrationEntry]])(_: ExecutionContext))
-      .expects(*, *, *, *)
-      .anyNumberOfTimes()
-      .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Seq[IntegrationEntry]], ec: ExecutionContext) =>
-        nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
-      }
-
-
-    def integrationsFuture(startWith: String) = new IntegrationsClientImpl(nc).getIntegrations(startWith).future.flatMap {
-      case Right(ints) => Future.successful(ints)
-      case Left(error) => Future.failed(new Exception(error.message))
-    }
-
-    scenario("get all integrations") {
-      result(integrationsFuture("")).size shouldEqual 3
-    }
-
-    scenario("get collectionsbot") {
-      val res = result(integrationsFuture("collectionsbot"))
-
-      res.size shouldEqual 1
-      res.head.name shouldEqual "collectionsbot"
-    }
-
-    scenario("get Echo bots") {
-      val res = result(integrationsFuture("Echo"))
-
-      res.size shouldEqual 2
-      res.forall(_.name.startsWith("Echo")) shouldEqual true
-    }
-
-    scenario("get Echo bots - letter case important") {
-      result(integrationsFuture("echo")).isEmpty shouldEqual true
-    }
-
-  }
-
-  feature("providers") {
-
-    val nc = mock[ZNetClient]
-    (nc.apply(_: Request[Unit]))
-      .expects(*)
-      .anyNumberOfTimes()
-      .onCall { request: Request[Unit] =>
-
-        val jsonOpt = request.resourcePath.get match {
-          case path if path.contains("/providers") => createProviderJson(path)
-          case _ => None
-        }
-
-        val response = jsonOpt match {
-          case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
-          case None => Response(InternalError(s"Invalid request: $request"))
-        }
-
-        CancellableFuture { response }
-      }
-
-    (nc.withErrorHandling[Unit, ProviderEntry](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderEntry])(_: ExecutionContext))
-      .expects(*, *, *, *)
-      .anyNumberOfTimes()
-      .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, ProviderEntry], ec: ExecutionContext) =>
-        nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
-      }
-
-    def providerFuture(id: ProviderId) = new IntegrationsClientImpl(nc).getProvider(id).future.flatMap {
-      case Right(provider) => Future.successful(provider)
-      case Left(error) => Future.failed(new Exception(error.message))
-    }
-
-    scenario("get provider") {
-      result(providerFuture(ProviderId(providerId0))).name equals "Wire Swiss GmbH"
-    }
-  }
 
 }

@@ -58,6 +58,8 @@ public enum SyncCommand {
     SyncClients("sync-user-clients"),
     SyncClientLocation("sync-client-location"),
     SyncPreKeys("sync-prekeys"),
+    SyncIntegrations("sync-integrations"),
+    SyncProvider("sync-provider"),
     PostClientLabel("post-client-label"),
     PostLiking("post-liking"),
     PostSessionReset("post-session-reset"),

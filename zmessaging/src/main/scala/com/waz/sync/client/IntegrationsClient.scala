@@ -19,21 +19,18 @@ package com.waz.sync.client
 
 import com.waz.ZLog.warn
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.{AssetId, EmailAddress, IntegrationId, ProviderId}
-import com.waz.sync.client.IntegrationsClient.{IntegrationEntry, ProviderEntry}
+import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
-import com.waz.utils.wrappers.URI
 import com.waz.znet.Response.SuccessHttpStatus
-import com.waz.znet.{Request, _}
+import com.waz.znet._
 import com.waz.znet.ZNetClient.ErrorOrResponse
-import org.json.JSONObject
 
 import scala.util.Try
 
 trait IntegrationsClient {
-  def getProvider(id: ProviderId): ErrorOrResponse[ProviderEntry]
-  def getIntegrations(name: String): ErrorOrResponse[Seq[IntegrationEntry]]
+  def getProvider(id: ProviderId): ErrorOrResponse[ProviderData]
+  def getIntegrations(name: String): ErrorOrResponse[Seq[IntegrationData]]
 }
 
 class IntegrationsClientImpl(netClient: ZNetClient) extends IntegrationsClient {
@@ -42,12 +39,12 @@ class IntegrationsClientImpl(netClient: ZNetClient) extends IntegrationsClient {
 
   def getProvider(id: ProviderId) =
     netClient.withErrorHandling("getProvider", Request.Get(providerPath(id))) {
-      case Response(SuccessHttpStatus(), ProviderEntryResponse(data), _) => data
+      case Response(SuccessHttpStatus(), ProviderResponse(data), _) => data
     }
 
   def getIntegrations(name: String) =
-    netClient.withErrorHandling("getProvider", Request.Get(integrationsPath(name))) {
-      case Response(SuccessHttpStatus(), IntegrationEntryResponse(data), _) => data
+    netClient.withErrorHandling("getIntegrations", Request.Get(integrationsPath(name))) {
+      case Response(SuccessHttpStatus(), IntegrationResponse(data), _) => data
     }
 }
 
@@ -63,41 +60,11 @@ object IntegrationsClient {
     if (name.isEmpty) Request.query(IntegrationsPath, "tags" -> DefaultTag)
     else Request.query(IntegrationsPath, "tags" -> DefaultTag, "name" -> name)
 
-  case class IntegrationAsset(assetType: String, id: AssetId)
-  case class IntegrationEntry(id: IntegrationId,
-                              provider: ProviderId,
-                              name: String,
-                              description: String,
-                              assets: Seq[IntegrationAsset],
-                              tags: Seq[String],
-                              enabled: Boolean)
-
-  object IntegrationEntry {
+  object IntegrationResponse {
     import JsonDecoder._
 
-    implicit lazy val AssetDecoder: JsonDecoder[IntegrationAsset] = new JsonDecoder[IntegrationAsset] {
-      override def apply(implicit js: JSONObject): IntegrationAsset = IntegrationAsset('type, decodeId[AssetId]('key))
-    }
-
-    implicit lazy val Decoder: JsonDecoder[IntegrationEntry] = new JsonDecoder[IntegrationEntry] {
-      override def apply(implicit js: JSONObject): IntegrationEntry =
-        IntegrationEntry(
-          decodeId[IntegrationId]('id),
-          decodeId[ProviderId]('provider),
-          'name,
-          'description,
-          decodeSeq[IntegrationAsset]('assets),
-          decodeStringSeq('tags),
-          'enabled
-        )
-    }
-  }
-
-  object IntegrationEntryResponse {
-    import JsonDecoder._
-
-    def unapply(resp: ResponseContent): Option[Seq[IntegrationEntry]] = resp match {
-      case JsonObjectResponse(js) if js.has("services") => Try(decodeSeq('services)(js, IntegrationEntry.Decoder)).toOption
+    def unapply(resp: ResponseContent): Option[Seq[IntegrationData]] = resp match {
+      case JsonObjectResponse(js) if js.has("services") => Try(decodeSeq('services)(js, IntegrationData.Decoder)).toOption
       case response =>
         warn(s"Unexpected response: $response")
         None
@@ -106,20 +73,9 @@ object IntegrationsClient {
 
   def providerPath(id: ProviderId): String = s"$ProvidersPath/$id"
 
-  case class ProviderEntry(id: ProviderId, name: String, email: EmailAddress, url: URI, description: String)
-
-  object ProviderEntry {
-    import JsonDecoder._
-
-    implicit lazy val Decoder: JsonDecoder[ProviderEntry] = new JsonDecoder[ProviderEntry] {
-      override def apply(implicit js: JSONObject): ProviderEntry =
-        ProviderEntry(decodeId[ProviderId]('id), 'name, EmailAddress('email), URI.parse('uri), 'description)
-    }
-  }
-
-  object ProviderEntryResponse {
-    def unapply(resp: ResponseContent): Option[ProviderEntry] = resp match {
-      case JsonObjectResponse(js) => Try(ProviderEntry.Decoder(js)).toOption
+  object ProviderResponse {
+    def unapply(resp: ResponseContent): Option[ProviderData] = resp match {
+      case JsonObjectResponse(js) => Try(ProviderData.Decoder(js)).toOption
       case response =>
         warn(s"Unexpected response: $response")
         None

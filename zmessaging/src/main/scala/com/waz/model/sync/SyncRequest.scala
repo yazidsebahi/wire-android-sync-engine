@@ -218,6 +218,14 @@ object SyncRequest {
     }
   }
 
+  case class SyncIntegrations(startWith: String) extends BaseRequest(Cmd.SyncIntegrations) {
+    override val mergeKey = (cmd, startWith)
+  }
+
+  case class SyncProvider(id: ProviderId) extends BaseRequest(Cmd.SyncProvider) {
+    override val mergeKey = (cmd, id)
+  }
+
   case class PostLiking(convId: ConvId, liking: Liking) extends RequestForConversation(Cmd.PostLiking) {
     override val mergeKey = (cmd, convId, liking.id)
   }
@@ -324,6 +332,8 @@ object SyncRequest {
           case Cmd.SyncUser              => SyncUser(users)
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
+          case Cmd.SyncIntegrations      => SyncIntegrations(decodeString('startWith))
+          case Cmd.SyncProvider          => SyncProvider(decodeId[ProviderId]('providerId))
           case Cmd.ExactMatchHandle      => ExactMatchHandle(Handle(decodeString('handle)))
           case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team)
           case Cmd.PostConvName          => PostConvName(convId, 'name)
@@ -393,6 +403,8 @@ object SyncRequest {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
+        case SyncIntegrations(startWith)      => o.put("startWith", startWith)
+        case SyncProvider(providerId)         => o.put("providerId", providerId.str)
         case ExactMatchHandle(handle)         => o.put("handle", handle.string)
         case SyncTeamMember(userId)           => o.put("user", userId.str)
         case DeletePushToken(token)           => putId("token", token)

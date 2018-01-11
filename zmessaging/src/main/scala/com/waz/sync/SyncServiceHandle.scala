@@ -47,6 +47,8 @@ trait SyncServiceHandle {
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId]
+  def syncIntegrations(startWith: String): Future[SyncId]
+  def syncProvider(id: ProviderId): Future[SyncId]
 
   def postSelfUser(info: UserInfo): Future[SyncId]
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
@@ -79,6 +81,7 @@ trait SyncServiceHandle {
   def postClientLabel(id: ClientId, label: String): Future[SyncId]
   def syncClients(user: UserId): Future[SyncId]
   def syncClientsLocation(): Future[SyncId]
+
   def syncPreKeys(user: UserId, clients: Set[ClientId]): Future[SyncId]
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId]
 
@@ -111,6 +114,8 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
+  def syncIntegrations(startWith: String) = addRequest(SyncIntegrations(startWith))
+  def syncProvider(id: ProviderId) = addRequest(SyncProvider(id))
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
@@ -187,6 +192,8 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case SyncSearchQuery(query)                => zms.usersearchSync.syncSearchQuery(query)
     case ExactMatchHandle(query)               => zms.usersearchSync.exactMatchHandle(query)
     case SyncRichMedia(messageId)              => zms.richmediaSync.syncRichMedia(messageId)
+    case SyncIntegrations(startWith)           => zms.integrationsSync.syncIntegrations(startWith)
+    case SyncProvider(id)                      => zms.integrationsSync.syncProvider(id)
     case DeletePushToken(token)                => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
