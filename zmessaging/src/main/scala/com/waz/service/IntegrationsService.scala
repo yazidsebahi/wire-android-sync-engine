@@ -17,7 +17,7 @@
  */
 package com.waz.service
 
-import com.waz.model.{IntegrationData, IntegrationId, ProviderData, ProviderId}
+import com.waz.model._
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.Threading
 import com.waz.utils.events.{Signal, SourceSignal}
@@ -33,6 +33,9 @@ trait IntegrationsService {
   def onIntegrationsSynced(name: String, data: Seq[IntegrationData]): Future[Unit]
   def onProviderSynced(pId: ProviderId, data: ProviderData): Future[Unit]
   def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData): Future[Unit]
+
+  def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[Unit]
+  def removeBot(cId: ConvId, botId: UserId): Future[Unit]
 }
 
 class IntegrationsServiceImpl(sync: SyncServiceHandle, syncRequestService: SyncRequestService) extends IntegrationsService {
@@ -68,6 +71,15 @@ class IntegrationsServiceImpl(sync: SyncServiceHandle, syncRequestService: SyncR
     providers += id -> data
     Future.successful({})
   }
+
+  // pId here is redundant - we can take it from our 'integrations' map
+  override def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = for {
+    _ <- sync.postAddBot(cId, pId, iId)
+  } yield ()
+
+  override def removeBot(cId: ConvId, botId: UserId) = for {
+    _ <- sync.postRemoveBot(cId, botId)
+  } yield ()
 
   private var integrationSearch  = Map[String, SourceSignal[Seq[IntegrationData]]]()
   private var providers = Map[ProviderId, ProviderData]()

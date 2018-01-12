@@ -18,8 +18,9 @@
 package com.waz.sync.client
 
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.{IntegrationData, IntegrationId, ProviderData, ProviderId}
+import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.client.IntegrationsClient.NewBotData
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.Response.{HttpStatus, InternalError}
 import com.waz.znet.{JsonObjectResponse, Request, Response, ZNetClient}
@@ -35,8 +36,8 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
 
   feature("integrations") {
 
-    val nc = mock[ZNetClient]
-    (nc.apply(_: Request[Unit]))
+    val zNetClient = mock[ZNetClient]
+    (zNetClient.apply(_: Request[Unit]))
       .expects(*)
       .anyNumberOfTimes()
       .onCall { request: Request[Unit] =>
@@ -55,19 +56,19 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
         CancellableFuture { response }
       }
 
-    (nc.withErrorHandling[Unit, Any](_: String, _: Request[Unit])(_: PartialFunction[Response, Any])(_: ExecutionContext))
+    (zNetClient.withErrorHandling[Unit, Any](_: String, _: Request[Unit])(_: PartialFunction[Response, Any])(_: ExecutionContext))
       .expects(*, *, *, *)
       .anyNumberOfTimes()
       .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, Any], ec: ExecutionContext) =>
-        nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+        zNetClient.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
       }
 
-    def searchIntegrations(startWith: String) = new IntegrationsClientImpl(nc).searchIntegrations(startWith).future.flatMap {
+    def searchIntegrations(startWith: String) = new IntegrationsClientImpl(zNetClient).searchIntegrations(startWith).future.flatMap {
       case Right(data) => Future.successful(data)
       case Left(error) => Future.failed(new Exception(error.message))
     }
 
-    def getIntegration(providerId: ProviderId, integrationId: IntegrationId) = new IntegrationsClientImpl(nc).getIntegration(providerId, integrationId).future.flatMap {
+    def getIntegration(providerId: ProviderId, integrationId: IntegrationId) = new IntegrationsClientImpl(zNetClient).getIntegration(providerId, integrationId).future.flatMap {
       case Right(data) => Future.successful(data)
       case Left(error) => Future.failed(new Exception(error.message))
     }
@@ -102,8 +103,8 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
 
   feature("providers") {
 
-    val nc = mock[ZNetClient]
-    (nc.apply(_: Request[Unit]))
+    val zNetClient = mock[ZNetClient]
+    (zNetClient.apply(_: Request[Unit]))
       .expects(*)
       .anyNumberOfTimes()
       .onCall { request: Request[Unit] =>
@@ -121,14 +122,14 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
         CancellableFuture { response }
       }
 
-    (nc.withErrorHandling[Unit, ProviderData](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderData])(_: ExecutionContext))
+    (zNetClient.withErrorHandling[Unit, ProviderData](_: String, _: Request[Unit])(_: PartialFunction[Response, ProviderData])(_: ExecutionContext))
       .expects(*, *, *, *)
       .anyNumberOfTimes()
       .onCall { (name: String, request: Request[Unit], pf: PartialFunction[Response, ProviderData], ec: ExecutionContext) =>
-        nc.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+        zNetClient.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
       }
 
-    def providerFuture(id: ProviderId) = new IntegrationsClientImpl(nc).getProvider(id).future.flatMap {
+    def providerFuture(id: ProviderId) = new IntegrationsClientImpl(zNetClient).getProvider(id).future.flatMap {
       case Right(provider) => Future.successful(provider)
       case Left(error) => Future.failed(new Exception(error.message))
     }
@@ -136,6 +137,52 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
     scenario("get provider") {
       result(providerFuture(ProviderId(providerId0))).name equals "Wire Swiss GmbH"
     }
+  }
+
+  feature("bots") {
+   /* val zNetClient = mock[ZNetClient]
+
+    (zNetClient.apply(_: Request[JSONObject]))
+      .expects(*)
+      .anyNumberOfTimes()
+      .onCall { request: Request[JSONObject] =>
+
+        val jsonOpt = request.getBody match {
+          case JSONObject(js) => getAddBotJson(path)
+          case _ => None
+        }
+
+        val response = jsonOpt match {
+          case Some(json) => Response(HttpStatus(200, "HTTP/1.1 200 OK"), JsonObjectResponse(json))
+          case None => Response(InternalError(s"Invalid request: $request"))
+        }
+
+        CancellableFuture { response }
+      }
+
+    (zNetClient.withErrorHandling[JSONObject, NewBotData](_: String, _: Request[JSONObject])(_: PartialFunction[Response, NewBotData])(_: ExecutionContext))
+      .expects(*, *, *, *)
+      .anyNumberOfTimes()
+      .onCall { (name: String, request: Request[JSONObject], pf: PartialFunction[Response, NewBotData], ec: ExecutionContext) =>
+        zNetClient.apply(request).map(pf.andThen(Right(_)).orElse(errorHandling(name)))(ec)
+      }
+
+    scenario("add bot to a conversation") {
+      val f = new IntegrationsClientImpl(zNetClient).addBot(ConvId(conversationId), ProviderId(providerId1), IntegrationId(integrationId1)).future.flatMap {
+        case Right(data) => Future.successful(data)
+        case Left(error) => Future.failed(new Exception(error.message))
+      }
+
+      val data = result(f)
+
+      data.id shouldEqual UserId(botId)
+      data.assets.size shouldEqual 1
+      data.assets.head.id shouldEqual AssetId(assetId)
+      data.event.convId shouldEqual RConvId(conversationId)
+      data.event.from shouldEqual UserId(selfId)
+      data.event.userIds.size shouldEqual 1
+      data.event.userIds.head shouldEqual UserId(botId)
+    }*/
   }
 
 }
@@ -242,7 +289,7 @@ object IntegrationsClientSpec {
        |{
        |      "assets" : [
        |
-      |      ],
+       |      ],
        |      "provider" : "$providerId3",
        |      "enabled" : true,
        |      "id" : "$integrationId3",
@@ -266,7 +313,7 @@ object IntegrationsClientSpec {
     (providerId3, integrationId3) -> integrationResponse3
   )
 
-  private val startWithRegex = """.*name=([A-Za-z0-9_]+)""".r
+  private val startWithRegex = """.*start=([A-Za-z0-9_]+)""".r
 
   def searchIntegrationsJson(path: String): Option[JSONObject] =
     (path match {
@@ -305,6 +352,36 @@ object IntegrationsClientSpec {
   def getIntegrationJson(path: String): Option[JSONObject] = path match {
     case integrationIdRegex(pId, iId) if integrationIds.contains((pId, iId)) =>
       Option(new JSONObject(integrationIds((pId, iId))))
+    case _ => None
+  }
+
+  private val addBotRegex = """.*/conversations/([A-Za-z0-9\\-]+)/bots/([A-Za-z0-9\\-]+)""".r
+
+  val conversationId = "0fa26937-1c2b-4aef-8556-da0fb3ec882d"
+  val botId = "d7473851-c0bf-4963-8df4-a0ed7c53d124"
+  val selfId = "62c2157d-2081-46f0-b8aa-088d7a48142d"
+  val assetId = "3-1-cb21f0ce-6bd4-400e-9776-26ad5dd7cd62"
+
+  def addBotResponse(convId: String, botId: String) =
+    s"""
+       | {
+       |    "id": "$botId",
+       |    "client": "a1b2c3b4d5",
+       |    "name": "Otto",
+       |    "accent_id": 1,
+       |    "assets": [{"type": "image", "key": "$assetId"}],
+       |    "event": {
+       |       "type": "conversation.member-join",
+       |       "conversation": "$convId",
+       |       "from": "$selfId",
+       |       "time": "2016-08-16T13:29:14.123Z",
+       |       "data": {"user_ids": ["$botId"]}
+       |    }
+       | }
+     """.stripMargin
+
+  def getAddBotJson(path: String): Option[JSONObject] = path match {
+    case addBotRegex(convId, botId) => Option(new JSONObject(addBotResponse(convId, botId)))
     case _ => None
   }
 }

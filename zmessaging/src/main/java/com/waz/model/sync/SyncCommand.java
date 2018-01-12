@@ -61,6 +61,8 @@ public enum SyncCommand {
     SyncIntegrations("sync-integrations"),
     SyncIntegration("sync-integration"),
     SyncProvider("sync-provider"),
+    PostAddBot("post-add-bot"),
+    PostRemoveBot("post-remove-bot"),
     PostClientLabel("post-client-label"),
     PostLiking("post-liking"),
     PostSessionReset("post-session-reset"),

@@ -18,6 +18,7 @@
 package com.waz.service
 
 import com.waz.model._
+import com.waz.service.conversation.ConversationsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.sync.client.IntegrationsClient
@@ -44,9 +45,11 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
   val srs = mock[SyncRequestService]
   (srs.scheduler _).expects().anyNumberOfTimes().returning(syncScheduler)
 
+  val convs = mock[ConversationsService]
+
   val service: IntegrationsService = new IntegrationsServiceImpl(sync, srs)
 
-  val handler = new IntegrationsSyncHandlerImpl(client, service)
+  val handler = new IntegrationsSyncHandlerImpl(UserId(), client, service, convs)
 
   (sync.syncProvider _).expects(*).anyNumberOfTimes().onCall((id: ProviderId) => Future {
     val sid = SyncId()
@@ -73,6 +76,12 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
 
       result(integrations.head).size shouldEqual 3
     }
+
+    scenario("get all integrations starting with 'Ech'") {
+      val integrations = service.searchIntegrations("Ech")
+
+      result(integrations.head).size shouldEqual 2
+    }
   }
 
   feature("providers") {
@@ -80,6 +89,7 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
       result(service.getProvider(provider0.id)) shouldEqual provider0
     }
   }
+  
 }
 
 object IntegrationsServiceSpec {

@@ -19,8 +19,9 @@ package com.waz.sync.handler
 
 import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.{IntegrationId, ProviderId}
+import com.waz.model.{ConvId, IntegrationId, ProviderId, UserId}
 import com.waz.service.IntegrationsService
+import com.waz.service.conversation.ConversationsService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.IntegrationsClient
 import com.waz.threading.Threading
@@ -28,13 +29,18 @@ import com.waz.threading.Threading
 import scala.concurrent.Future
 
 trait IntegrationsSyncHandler {
+  def syncProvider(pId: ProviderId): Future[SyncResult]
   def syncIntegrations(name: String): Future[SyncResult]
   def syncIntegration(pId: ProviderId, iId: IntegrationId): Future[SyncResult]
 
-  def syncProvider(pId: ProviderId): Future[SyncResult]
+  def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[SyncResult]
+  def removeBot(cId: ConvId, botId: UserId): Future[SyncResult]
 }
 
-class IntegrationsSyncHandlerImpl(client: IntegrationsClient, service: IntegrationsService) extends IntegrationsSyncHandler {
+class IntegrationsSyncHandlerImpl(selfUserId: UserId,
+                                  client:     IntegrationsClient,
+                                  service:    IntegrationsService,
+                                  convs:      ConversationsService) extends IntegrationsSyncHandler {
   import Threading.Implicits.Background
 
   override def syncProvider(pId: ProviderId) = client.getProvider(pId).future.flatMap {
@@ -63,4 +69,24 @@ class IntegrationsSyncHandlerImpl(client: IntegrationsClient, service: Integrati
       debug(s"quering for integrations with name $name returned $error")
       Future.successful(SyncResult(error))
   }
+
+  override def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[SyncResult] =
+    client.addBot(cId, pId, iId).future.flatMap {
+      case Right(newBot) =>
+        debug(s"addBot($cId, $pId, $iId)")
+        convs.processConversationEvent(newBot.event, selfUserId).map(_ => SyncResult.Success)
+      case Left(error) =>
+        debug(s"addBot returned $error")
+        Future.successful(SyncResult(error))
+    }
+
+  override def removeBot(cId: ConvId, userId: UserId): Future[SyncResult] =
+    client.removeBot(cId, userId).future.flatMap {
+      case Right(memberLeaveEvent) =>
+        debug(s"removeBot($cId, $userId)")
+        convs.processConversationEvent(memberLeaveEvent, selfUserId).map(_ => SyncResult.Success)
+      case Left(error) =>
+        debug(s"removeBot returned $error")
+        Future.successful(SyncResult(error))
+    }
 }

@@ -53,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 97
+  val DbVersion = 98
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -176,6 +176,10 @@ object ZMessagingDB {
     },
     Migration(96, 97) { db =>
       db.execSQL("ALTER TABLE Users ADD COLUMN availability INTEGER DEFAULT 0")
+    },
+    Migration(97, 98) { db =>
+      db.execSQL("ALTER TABLE Users ADD COLUMN provider_id TEXT DEFAULT null")
+      db.execSQL("ALTER TABLE Users ADD COLUMN integration_id TEXT DEFAULT null")
     }
   )
 }

@@ -30,6 +30,8 @@ import org.json.{JSONArray, JSONObject}
 
 import scala.util.Try
 
+import com.waz.model.UserInfo.Service
+
 case class UserInfo(id:           UserId,
                     name:         Option[String]          = None,
                     accentId:     Option[Int]             = None,
@@ -39,7 +41,8 @@ case class UserInfo(id:           UserId,
                     trackingId:   Option[TrackingId]      = None,
                     deleted:      Boolean                 = false,
                     handle:       Option[Handle]          = None,
-                    privateMode:  Option[Boolean]         = None
+                    privateMode:  Option[Boolean]         = None,
+                    service:      Option[Service]         = None
                    ) {
   //TODO Dean - this will actually prevent deleting profile pictures, since the empty seq will be mapped to a None,
   //And so in UserData, the current picture will be used instead...
@@ -48,6 +51,11 @@ case class UserInfo(id:           UserId,
 
 object UserInfo {
   import JsonDecoder._
+
+  case class Service(id: IntegrationId, provider: ProviderId)
+
+  def decodeService(s: Symbol)(implicit js: JSONObject): Service = Service(decodeId[IntegrationId]('id), decodeId[ProviderId]('provider))
+  def decodeOptService(s: Symbol)(implicit js: JSONObject): Option[Service] = opt(s, decodeService(s)(_))
 
   implicit object Decoder extends JsonDecoder[UserInfo] {
 
@@ -100,7 +108,9 @@ object UserInfo {
       //prefer v3 ("assets") over v2 ("picture") - this will prevent unnecessary uploading of v3 if a v2 also exists.
       val pic = getAssets.orElse(getPicture(id)).toSeq
       val privateMode = decodeOptBoolean('privateMode)
-      UserInfo(id, 'name, accentId, 'email, 'phone, Some(pic), decodeOptString('tracking_id) map (TrackingId(_)), deleted = 'deleted, handle = 'handle, privateMode = privateMode)
+      UserInfo(
+        id, 'name, accentId, 'email, 'phone, Some(pic), decodeOptString('tracking_id) map (TrackingId(_)),
+        deleted = 'deleted, handle = 'handle, privateMode = privateMode, service = decodeOptService('service))
     }
   }
 
@@ -122,6 +132,11 @@ object UserInfo {
     arr
   }
 
+  def encodeService(service: Service): JSONObject = JsonEncoder { o =>
+    o.put("id", service.id)
+    o.put("provider", service.provider)
+  }
+
   implicit lazy val Encoder: JsonEncoder[UserInfo] = new JsonEncoder[UserInfo] {
     override def apply(info: UserInfo): JSONObject = JsonEncoder { o =>
       o.put("id", info.id.str)
@@ -131,6 +146,7 @@ object UserInfo {
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
       info.picture.foreach(ps => o.put("assets", encodeAsset(ps)))
+      info.service.foreach( s => o.put("service", encodeService(s)))
     }
   }
 
@@ -139,6 +155,7 @@ object UserInfo {
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
       info.picture.foreach(ps => o.put("assets", encodeAsset(ps)))
+      info.service.foreach( s => o.put("service", encodeService(s)))
     }
   }
 }

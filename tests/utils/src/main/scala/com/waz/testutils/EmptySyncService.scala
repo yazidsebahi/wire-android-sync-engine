@@ -70,6 +70,8 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postTypingState(id: ConvId, t: Boolean) = sid
   override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
   override def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType) = sid
+  override def postAddBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = sid
+  override def postRemoveBot(cId: ConvId, botId: UserId) = sid
 
   override def registerPush(token: PushToken) = sid
   override def deletePushToken(token: PushToken) = sid

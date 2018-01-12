@@ -25,6 +25,7 @@ case class IntegrationAsset(assetType: String, id: AssetId)
 case class IntegrationData(id: IntegrationId,
                            provider: ProviderId,
                            name: String,
+                           summary: String,
                            description: String,
                            assets: Seq[IntegrationAsset],
                            tags: Seq[String],
@@ -42,11 +43,12 @@ object IntegrationData {
       IntegrationData(
         decodeId[IntegrationId]('id),
         decodeId[ProviderId]('provider),
-        'name,
-        'description,
+        decodeString('name),
+        decodeString('summary),
+        decodeString('description),
         decodeSeq[IntegrationAsset]('assets),
         decodeStringSeq('tags),
-        'enabled
+        decodeBool('enabled)
       )
   }
 }
