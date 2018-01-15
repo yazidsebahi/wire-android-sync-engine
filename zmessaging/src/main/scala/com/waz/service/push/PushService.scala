@@ -201,71 +201,80 @@ class PushServiceImpl(context:              Context,
         .andThen { case _ => processing ! false }
     }
 
-  case class Results(notifications: Vector[PushNotificationEncoded], time: Option[Instant], historyLost: Boolean)
+  case class Results(notifications: Vector[PushNotificationEncoded], time: Option[Instant], firstSync: Boolean, historyLost: Boolean)
 
   private def futureHistoryResults(notifications: Vector[PushNotificationEncoded] = Vector.empty,
                                    time: Option[Instant] = None,
+                                   firstSync: Boolean = false,
                                    historyLost: Boolean = false) =
-    CancellableFuture.successful(Results(notifications, time, historyLost))
+    CancellableFuture.successful(Results(notifications, time, firstSync, historyLost))
 
   //expose retry loop to tests
   protected[push] val waitingForRetry: SourceSignal[Boolean] = Signal(false).disableAutowiring()
 
   override def syncHistory(reason: String, withRetries: Boolean = true): Future[Unit] = {
-    def load(lastId: Option[Uid], attempts: Int = 0): CancellableFuture[Results] = client.loadNotifications(lastId, clientId).flatMap {
-      case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time)
-      case Right(LoadNotificationsResponse(nots, true, time)) =>
-        load(nots.lastOption.map(_.id)).flatMap { results =>
-          futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, results.historyLost)
-        }
-      case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
-        warn(s"/notifications failed with 404, history lost")
-        load(None).flatMap { case Results(nots, time, _) => futureHistoryResults(nots, time, historyLost = true) }
-      case Left(err) =>
-        warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again? $withRetries")
-        if (!withRetries) CancellableFuture.failed(FetchFailedException(err))
-        else {
-          //We want to retry the download after the backoff is elapsed and the network is available,
-          //OR on a network state change (that is not offline/unknown)
-          //OR on a websocket state change
-          val retry = Promise[Unit]()
 
-          network.networkMode.onChanged.filter(!Set(UNKNOWN, OFFLINE).contains(_)).next.map(_ => retry.trySuccess({}))
-          webSocket.connected.onChanged.next.map(_ => retry.trySuccess({}))
-
-          for {
-            _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
-            _ <- lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
-          } yield retry.trySuccess({})
-
-          waitingForRetry ! true
-          lift(retry.future).flatMap { _ =>
-            waitingForRetry ! false
-            load(lastId, attempts + 1)
+    def load(lastId: Option[Uid], firstSync: Boolean = false, attempts: Int = 0): CancellableFuture[Results] =
+      (lastId match {
+        case None => if (firstSync) client.loadLastNotification(clientId) else client.loadNotifications(None, clientId)
+        case id   => client.loadNotifications(id, clientId)
+      }).flatMap {
+        case Right(LoadNotificationsResponse(nots, false, time)) => futureHistoryResults(nots, time, firstSync = firstSync)
+        case Right(LoadNotificationsResponse(nots, true, time)) =>
+          load(nots.lastOption.map(_.id)).flatMap { results =>
+            futureHistoryResults(nots ++ results.notifications, if (results.time.isDefined) results.time else time, historyLost = results.historyLost)
           }
-        }
-    }
+        case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
+          warn(s"/notifications failed with 404, history lost")
+          load(None).flatMap { case Results(nots, time, _, _) => futureHistoryResults(nots, time, historyLost = true) }
+        case Left(err) =>
+          warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again? $withRetries")
+          if (!withRetries) CancellableFuture.failed(FetchFailedException(err))
+          else {
+            //We want to retry the download after the backoff is elapsed and the network is available,
+            //OR on a network state change (that is not offline/unknown)
+            //OR on a websocket state change
+            val retry = Promise[Unit]()
+
+            network.networkMode.onChanged.filter(!Set(UNKNOWN, OFFLINE).contains(_)).next.map(_ => retry.trySuccess({}))
+            webSocket.connected.onChanged.next.map(_ => retry.trySuccess({}))
+
+            for {
+              _ <- CancellableFuture.delay(syncHistoryBackoff.delay(attempts))
+              _ <- lift(network.networkMode.filter(!Set(UNKNOWN, OFFLINE).contains(_)).head)
+            } yield retry.trySuccess({})
+
+            waitingForRetry ! true
+            lift(retry.future).flatMap { _ =>
+              waitingForRetry ! false
+              load(lastId, firstSync, attempts + 1)
+            }
+          }
+      }
 
     def syncHistory(lastId: Option[Uid]): Future[Unit] =
-      (for {
-        Results(nots, time, historyLost) <- load(lastId).future
-        _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
-        drift  <- beDrift.head
-        nw     <- network.networkMode.head
-        pushes <- receivedPushes.list()
-        _ <- receivedPushes.removeAll(pushes.map(_.id))
-        _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
-        inBackground <- lifeCycle.uiActive.map(!_).head
-    } yield {
-        if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
-          tracking.track(MissedPushEvent(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName))
+      load(lastId, firstSync = lastId.isEmpty).future.flatMap {
+        case Results(nots, time, firstSync, historyLost) =>
+          if (firstSync) idPref := nots.headOption.map(_.id)
+          else
+            (for {
+              _ <- if (historyLost) sync.performFullSync().map(_ => onHistoryLost ! clock.instant()) else Future.successful({})
+              drift  <- beDrift.head
+              nw     <- network.networkMode.head
+              pushes <- receivedPushes.list()
+              _ <- receivedPushes.removeAll(pushes.map(_.id))
+              _ <- beDriftPref.mutate(v => time.map(clock.instant.until(_)).getOrElse(v))
+              inBackground <- lifeCycle.uiActive.map(!_).head
+            } yield {
+              if (nots.map(_.id).size > pushes.map(_.id).size) //we didn't get pushes for some returned notifications
+                tracking.track(MissedPushEvent(clock.instant + drift, nots.size - pushes.size, inBackground, nw, network.getNetworkOperatorName))
 
-        if (pushes.nonEmpty)
-          pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift)))).foreach(p => tracking.track(ReceivedPushEvent(p)))
+              if (pushes.nonEmpty)
+                pushes.map(p => p.copy(toFetch = Some(p.receivedAt.until(clock.instant + drift)))).foreach(p => tracking.track(ReceivedPushEvent(p)))
 
-        nots
-      }).flatMap(storeNotifications)
-
+              nots
+            }).flatMap(storeNotifications)
+      }
     if (fetchInProgress.isCompleted) {
       verbose(s"Sync history in response to $reason")
       fetchInProgress = idPref().flatMap(syncHistory)
