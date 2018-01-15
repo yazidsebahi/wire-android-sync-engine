@@ -26,6 +26,7 @@ import com.waz.api.{ClientRegistrationState, KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
+import com.waz.content.UserPreferences
 import com.waz.model._
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -413,7 +414,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
               email           = acc.pendingEmail,
               pendingEmail    = None,
               pendingTeamName = None
-            )).map(_ => Right(()))
+            )).flatMap(_ => getZMessaging(acc.id).map(_.map(_.userPrefs.preference(UserPreferences.CreatingTeam) := true)))
+              .map(_ => Right(()))
         case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
           info(s"register($acc.id) failed: invalid-code")
           storage.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))

@@ -379,4 +379,6 @@ object UserPreferences {
   lazy val VibrateEnabled    = PrefKey[Boolean]("vibrate_enabled")
   lazy val SendButtonEnabled = PrefKey[Boolean]("send_button_enabled", customDefault = true)
 
+  lazy val CreatingTeam = PrefKey[Boolean]("creating_team", customDefault = false)
+
 }
