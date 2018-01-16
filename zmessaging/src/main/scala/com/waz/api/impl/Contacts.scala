@@ -22,7 +22,7 @@ import java.util.{Collection, Locale}
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model._
-import com.waz.service.ContactsService.{TopContactsOnWire, UnifiedContacts}
+import com.waz.service.ContactsServiceImpl.{TopContactsOnWire, UnifiedContacts}
 import com.waz.service.SearchKey
 import com.waz.threading.Threading
 import com.waz.ui._

@@ -412,10 +412,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
               code            = None,
               firstLogin      = false,
               email           = acc.pendingEmail,
-              pendingEmail    = None,
-              pendingTeamName = None
-            )).flatMap(_ => getZMessaging(acc.id).map(_.map(_.userPrefs.preference(UserPreferences.CreatingTeam) := true)))
-              .map(_ => Right(()))
+              pendingEmail    = None
+            )).map(_ => Right(()))
         case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
           info(s"register($acc.id) failed: invalid-code")
           storage.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))

@@ -101,14 +101,11 @@ object InvitationClient {
 
   case class ConfirmedTeamInvitation(id: InvitationId, emailAddress: EmailAddress, createdAt: Instant, teamId:TeamId)
   object ConfirmedTeamInvitation {
+    import com.waz.utils.JsonDecoder._
     def unapply(resp: ResponseContent): Option[ConfirmedTeamInvitation] = resp match {
       case JsonObjectResponse(js) =>
-        Try(ConfirmedTeamInvitation(
-          InvitationId(js.getString("id")),
-          EmailAddress(js.getString("email")),
-          Instant.parse(js.getString("created_at")),
-          TeamId(js.getString("team"))
-        )).toOption
+        implicit val jObject: JSONObject = js
+        Try(ConfirmedTeamInvitation('id, 'email, 'created_at, 'team)).toOption
       case _ => None
     }
   }

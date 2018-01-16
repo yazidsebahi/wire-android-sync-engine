@@ -92,7 +92,7 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
     }
   }
 
-  def getUpdatedConversation(service: ConnectionService, event: UserConnectionEvent): ConversationData = {
+  def getUpdatedConversation(service: ConnectionServiceImpl, event: UserConnectionEvent): ConversationData = {
     var updatedConversation = ConversationData.Empty
 
     (convsStorage.update _).expects(*,*).once().onCall { (convId, updater) =>
@@ -105,7 +105,7 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
     updatedConversation
   }
 
-  def initConnectionService(): ConnectionService = {
+  def initConnectionService(): ConnectionServiceImpl = {
     (convs.storage _).expects().once().returning(convsStorage)
     (usersStorage.updateOrCreate _).expects(*,*,*).anyNumberOfTimes().onCall{ (_, _, creator) =>
         Future.successful(creator)
@@ -128,6 +128,6 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
     (users.withSelfUserFuture[Unit] _).expects(*).anyNumberOfTimes().onCall{ (f: UserId => Future[Unit]) =>
       f(selfUserId)
     }
-    new ConnectionService(push, convs, members, messagesService, messagesStorage, users, usersStorage, sync)
+    new ConnectionServiceImpl(push, convs, members, messagesService, messagesStorage, users, usersStorage, sync)
   }
 }

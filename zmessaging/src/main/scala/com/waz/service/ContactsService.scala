@@ -53,22 +53,28 @@ import scala.concurrent.duration._
 import scala.util.Success
 import scala.util.control.NoStackTrace
 
-class ContactsService(context:        Context,
-                      accountId:      AccountId,
-                      teamId:         Option[TeamId],
-                      accountStorage: AccountsStorage,
-                      accounts:       AccountsService,
-                      userPrefs:      UserPreferences,
-                      users:          UserServiceImpl,
-                      usersStorage:   UsersStorageImpl,
-                      timeouts:       Timeouts,
-                      phoneNumbers:   PhoneNumberService,
-                      storage:        ZmsDatabase,
-                      sync:           SyncServiceHandle,
-                      convs:          ConversationStorageImpl,
-                      permissions:    PermissionsService) {
+trait ContactsService {
+  def contactsOnWire: Signal[BiRelation[UserId, ContactId]]
+  def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit]
+}
 
-  import ContactsService._
+class ContactsServiceImpl(context:        Context,
+                          accountId:      AccountId,
+                          teamId:         Option[TeamId],
+                          accountStorage: AccountsStorage,
+                          accounts:       AccountsService,
+                          userPrefs:      UserPreferences,
+                          users:          UserServiceImpl,
+                          usersStorage:   UsersStorageImpl,
+                          timeouts:       Timeouts,
+                          phoneNumbers:   PhoneNumberService,
+                          storage:        ZmsDatabase,
+                          sync:           SyncServiceHandle,
+                          convs:          ConversationStorageImpl,
+                          permissions:    PermissionsService)
+  extends ContactsService {
+
+  import ContactsServiceImpl._
   import EventContext.Implicits.global
   import Threading.Implicits.Background
   import timeouts.contacts._
@@ -436,7 +442,7 @@ class ContactsService(context:        Context,
   }
 }
 
-object ContactsService {
+object ContactsServiceImpl {
   val CurrentAddressBookVersion = 3
   val InitialContactsBatchSize = 101
 

@@ -22,7 +22,7 @@ import java.util.Locale
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.ZmsDatabase
+import com.waz.content.Database
 import com.waz.model.Contact.{EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model._
 import com.waz.service._
@@ -40,7 +40,7 @@ import scala.collection.immutable.ListMap
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
-class InvitationService(storage: ZmsDatabase, users: UserServiceImpl, connections: ConnectionService, contacts: ContactsService,
+class InvitationService(storage: Database, users: UserService, connections: ConnectionService, contacts: ContactsService,
                         conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts, client: InvitationClient,
                         teamId: Option[TeamId]) {
 
