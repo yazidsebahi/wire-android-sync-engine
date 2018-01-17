@@ -116,7 +116,7 @@ class CallingService(val selfUserId:      UserId,
       verbose(s"Account $account logged out, unregistering from AVS")
       wCall.map(avs.unregisterAccount)
     case true =>
-  })
+  } (EventContext.Global))
 
   callProfile.onChanged { p =>
     verbose(s"Call profile changed. active call: ${p.activeCall}, non active calls: ${p.nonActiveCalls}")

@@ -47,6 +47,8 @@ trait AccountsService {
 
   def loggedInAccountIds: Signal[Set[AccountId]] = loggedInAccounts.map(_.map(_.id))
 
+  def activeAccount: Signal[Option[AccountData]]
+
   def activeZms: Signal[Option[ZMessaging]]
 
   def zms(accountId: AccountId): Signal[Option[ZMessaging]]
