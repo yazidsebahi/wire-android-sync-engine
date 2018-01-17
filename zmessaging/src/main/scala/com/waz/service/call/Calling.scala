@@ -114,6 +114,9 @@ object Calling {
   }
 
   trait AnsweredCallHandler extends Callback {
+    /**
+      * Note, only relevant for one-to-one calls
+      */
     def onAnsweredCall(convId: String, arg: Pointer): Unit
   }
 
@@ -127,7 +130,7 @@ object Calling {
   }
 
   trait CbrStateChangeHandler extends Callback {
-    def onBitRateStateChanged(enabled: Boolean, arg: Pointer): Unit
+    def onBitRateStateChanged(userId: String, enabled: Boolean, arg: Pointer): Unit
   }
 
   trait CallStateChangeHandler extends Callback {
@@ -135,7 +138,7 @@ object Calling {
   }
 
   trait VideoReceiveStateHandler extends Callback {
-    def onVideoReceiveStateChanged(state: Int, arg: Pointer): Unit
+    def onVideoReceiveStateChanged(userId: String, state: Int, arg: Pointer): Unit
   }
 
   trait GroupChangedHandler extends Callback {

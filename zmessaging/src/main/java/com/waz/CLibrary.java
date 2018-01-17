@@ -45,10 +45,11 @@ public interface CLibrary extends Library {
         public static class ByReference extends Member implements Structure.ByReference { }
         public String userid;
         public int audio_estab;
+        public int video_recv;
 
         @Override
         protected List getFieldOrder() {
-            return Arrays.asList(new String[] {"userid", "audio_estab"});
+            return Arrays.asList(new String[] {"userid", "audio_estab", "video_recv"});
         }
     }
 }
