@@ -41,6 +41,8 @@ import scala.concurrent.{Awaitable, Future}
 
 trait UserService {
   def selfUserId: UserId
+  def getSelfUserId: Future[Option[UserId]]
+  def getSelfUser: Future[Option[UserData]]
   def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
   def getOrCreateUser(id: UserId): Future[UserData]
   def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]

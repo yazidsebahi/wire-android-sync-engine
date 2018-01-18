@@ -33,7 +33,7 @@ import com.waz.cache.CacheEntryData
 import com.waz.content.MsgCursor
 import com.waz.model.GenericContent.Text
 import com.waz.model.{otr => _, _}
-import com.waz.service.ContactsService
+import com.waz.service.ContactsServiceImpl
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, FlatMapSignal, Signal, Subscription}
@@ -194,14 +194,14 @@ package object testutils {
 
   lazy val knownMimeTypes = returning(classOf[MimeUtils].getDeclaredField("mimeTypeToExtensionMap"))(_.setAccessible(true)).get(null).asInstanceOf[java.util.Map[String, String]].asScala.keys.toVector.map(Mime(_))
 
-  import ContactsService.Col
+  import ContactsServiceImpl.Col
 
   def prepareAddressBookEntries(emailAddresses: Seq[(String, String)], phoneNumbers: Seq[(String, String)])(implicit context: Context): Unit = {
     ShadowContentResolver2.reset()
     ShadowContentResolver2.registerProvider(ContactsContract.AUTHORITY, new TestContentProvider {
       override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = uri match {
-        case ContactsService.Emails => cursor(Vector(Col.ContactId, Col.EmailAddress), emailAddresses map { case (a, b) => Seq(a, b) })
-        case ContactsService.Phones => cursor(Vector(Col.ContactId, Col.PhoneNumber), phoneNumbers map { case (a, b) => Seq(a, b) })
+        case ContactsServiceImpl.Emails => cursor(Vector(Col.ContactId, Col.EmailAddress), emailAddresses map { case (a, b) => Seq(a, b) })
+        case ContactsServiceImpl.Phones => cursor(Vector(Col.ContactId, Col.PhoneNumber), phoneNumbers map { case (a, b) => Seq(a, b) })
         case _ => null
       }
     })
@@ -217,9 +217,9 @@ package object testutils {
       override def query(uri: Uri, projection: Array[String], selection: String, selectionArgs: Array[String], sortOrder: String): Cursor = {
         def checking(cols: String*) = returning(cols.toVector)(_ => require(projection.toVector == cols, s"projections should match; expected ${cols.toVector.mkString(", ")} but received ${projection.toVector.mkString(", ")}"))
         uri match {
-          case ContactsService.Emails => cursor(checking(Col.ContactId, Col.EmailAddress), emailAddresses)
-          case ContactsService.Phones => cursor(checking(Col.ContactId, Col.PhoneNumber), phoneNumbers)
-          case ContactsService.Contacts =>
+          case ContactsServiceImpl.Emails => cursor(checking(Col.ContactId, Col.EmailAddress), emailAddresses)
+          case ContactsServiceImpl.Phones => cursor(checking(Col.ContactId, Col.PhoneNumber), phoneNumbers)
+          case ContactsServiceImpl.Contacts =>
             cursor(checking(Col.RowId, Col.Name, Col.NameSource, Col.SortKeyPrimary), contacts.sortBy(_.sortKey).map(c => Seq(c.id.str, c.name, src(c), c.sortKey)))
         }
       }

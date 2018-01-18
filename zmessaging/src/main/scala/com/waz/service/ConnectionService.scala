@@ -37,9 +37,15 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 
-class ConnectionService(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
-                        messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
-                        sync: SyncServiceHandle) {
+trait ConnectionService {
+  def connectToUser(userId: UserId, message: String, name: String): Future[Option[ConversationData]]
+  def handleUserConnectionEvents(events: Seq[UserConnectionEvent]): Future[Unit]
+  def syncConversationInitiallyAfterCreation(convId: RConvId, selfUserId: UserId, userId: UserId): Future[SyncId]
+}
+
+class ConnectionServiceImpl(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
+                            messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
+                            sync: SyncServiceHandle) extends ConnectionService {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global

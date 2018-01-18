@@ -48,10 +48,18 @@ class InvitationClient(netClient: ZNetClient) {
     }
 
   private def locationFrom(headers: Response.Headers) = headers("location") collect { case RedirectToUser(id) => UserId(id) }
+
+  def postTeamInvitation(invitation: TeamInvitation): ErrorOrResponse[ConfirmedTeamInvitation] =
+    netClient.chainedWithErrorHandling("postTeamInvitation", Request.Post(teamInvitationPath(invitation.teamId), invitation)(json(EncodeTeamInvite))) {
+      case Response(HttpStatus(Created, _), ConfirmedTeamInvitation(inv), _) =>
+        successful(Right(inv))
+    }
 }
 
 object InvitationClient {
   val InvitationPath = "/invitations"
+
+  def teamInvitationPath(teamId: TeamId) = s"teams/$teamId/invitations"
 
   val RedirectToUser = "(?:/self)?/connections/([^/]+)".r
 
@@ -68,6 +76,14 @@ object InvitationClient {
     }
   }
 
+  implicit lazy val EncodeTeamInvite: JsonEncoder[TeamInvitation] = new JsonEncoder[TeamInvitation] {
+    def apply(i: TeamInvitation): JSONObject = JsonEncoder { js =>
+      js.put("email", i.emailAddress)
+      js.put("inviter_name", i.inviterName)
+      js.put("locale", bcp47.languageTagOf(i.locale.getOrElse(currentLocale)))
+    }
+  }
+
   case class ConfirmedInvitation(id: InvitationId, nameOfInvitee: String, method: Either[EmailAddress, PhoneNumber], genesis: Instant)
   object ConfirmedInvitation {
     def unapply(resp: ResponseContent): Option[ConfirmedInvitation] = resp match {
@@ -79,6 +95,17 @@ object InvitationClient {
           else Right(PhoneNumber(js.getString("phone"))),
           Instant.parse(js.getString("created_at"))
         )).toOption
+      case _ => None
+    }
+  }
+
+  case class ConfirmedTeamInvitation(id: InvitationId, emailAddress: EmailAddress, createdAt: Instant, teamId:TeamId)
+  object ConfirmedTeamInvitation {
+    import com.waz.utils.JsonDecoder._
+    def unapply(resp: ResponseContent): Option[ConfirmedTeamInvitation] = resp match {
+      case JsonObjectResponse(js) =>
+        implicit val jObject: JSONObject = js
+        Try(ConfirmedTeamInvitation('id, 'email, 'created_at, 'team)).toOption
       case _ => None
     }
   }
