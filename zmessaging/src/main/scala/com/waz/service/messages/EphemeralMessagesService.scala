@@ -30,12 +30,12 @@ import com.waz.service.assets.AssetService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
+import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Random
 
 // TODO: obfuscate sent messages when they expire
 class EphemeralMessagesService(selfUserId: UserId,
@@ -152,6 +152,6 @@ object EphemeralMessagesService {
 
   val randomChars = {
     val cs = ('a' to 'z') ++ ('A' to 'Z')
-    Iterator continually cs(Random.nextInt(cs.size))
+    Iterator continually cs(SecureRandom.nextInt(cs.size))
   }
 }

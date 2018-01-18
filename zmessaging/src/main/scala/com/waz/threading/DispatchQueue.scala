@@ -22,14 +22,14 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import android.os.{Handler, Looper}
 import com.waz.ZLog._
+import com.waz.utils.crypto.SecureRandom
 
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
-import scala.util.Random
 
 trait DispatchQueue extends ExecutionContext {
 
-  private[threading] val name: String = "queue_" + Random.nextInt().toHexString
+  private[threading] val name: String = "queue_" + SecureRandom.nextInt().toHexString
 
   /**
    * Executes a task on this queue.
@@ -124,7 +124,7 @@ object LimitedDispatchQueue {
   val MaxBatchSize = 100
 }
 
-class SerialDispatchQueue(executor: ExecutionContext = Threading.ThreadPool, override val name: String = "serial_" + Random.nextInt().toHexString) extends LimitedDispatchQueue(1, executor)
+class SerialDispatchQueue(executor: ExecutionContext = Threading.ThreadPool, override val name: String = "serial_" + SecureRandom.nextInt().toHexString) extends LimitedDispatchQueue(1, executor)
 
 object SerialDispatchQueue {
   def apply()(implicit logTag: LogTag): SerialDispatchQueue = new SerialDispatchQueue(name = s"${logTag}_SerialDispatchQueue")
