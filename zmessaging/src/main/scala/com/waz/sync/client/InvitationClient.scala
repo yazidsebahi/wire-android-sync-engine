@@ -105,7 +105,7 @@ object InvitationClient {
     def unapply(resp: ResponseContent): Option[ConfirmedTeamInvitation] = resp match {
       case JsonObjectResponse(js) =>
         implicit val jObject: JSONObject = js
-        Try(ConfirmedTeamInvitation('id, 'email, 'created_at, 'team)).toOption
+        Try(ConfirmedTeamInvitation('id, 'email, Instant.parse(js.getString("created_at")), 'team)).toOption
       case _ => None
     }
   }
