@@ -93,6 +93,12 @@ object SyncRequest {
     override def isDuplicateOf(req: SyncRequest) = req.mergeKey == mergeKey
   }
 
+  case class PostTeamInvitations(invitations: Seq[TeamInvitation]) extends BaseRequest(Cmd.PostTeamInvitations) {
+    override val mergeKey: Any = (cmd, invitations.map(_.emailAddress))
+    override def merge(req: SyncRequest) = mergeHelper[PostInvitation](req)(Merged(_))
+    override def isDuplicateOf(req: SyncRequest) = req.mergeKey == mergeKey
+  }
+
   case class PostSelf(data: UserInfo) extends BaseRequest(Cmd.PostSelf) {
     override def merge(req: SyncRequest) = mergeHelper[PostSelf](req)(Merged(_))
   }

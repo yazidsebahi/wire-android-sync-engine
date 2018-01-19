@@ -29,7 +29,7 @@ import com.waz.threading.Threading
 import scala.concurrent.Future
 import scala.util.control.NoStackTrace
 
-class AddressBookSyncHandler(contacts: ContactsService, client: AddressBookClient, tracking: TrackingService) {
+class AddressBookSyncHandler(contacts: ContactsServiceImpl, client: AddressBookClient, tracking: TrackingService) {
 
   import Threading.Implicits.Background
   def postAddressBook(ab: AddressBook): Future[SyncResult] = {

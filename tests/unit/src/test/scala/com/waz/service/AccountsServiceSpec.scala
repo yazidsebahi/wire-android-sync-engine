@@ -413,7 +413,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
       inside (account) { case a =>
         a.teamId          shouldEqual Left(()) //team should remain undefined - we will fetch this before creating ZMS
-        a.pendingTeamName shouldEqual None
+        a.pendingTeamName shouldEqual Some(teamName) // teamName should still be pending until we finish all team creation steps
         a.name            shouldEqual Some(name)
         a.email           shouldEqual Some(email)
         a.pendingEmail    shouldEqual None

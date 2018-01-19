@@ -119,11 +119,11 @@ class AvsImpl() extends Avs {
           cs.onConfigRequest(inst)
       },
       new CbrStateChangeHandler {
-        override def onBitRateStateChanged(enabled: Boolean, arg: WCall): Unit =
+        override def onBitRateStateChanged(userId: String, enabled: Boolean, arg: WCall): Unit =
           cs.onBitRateStateChanged(enabled)
       },
       new VideoReceiveStateHandler {
-        override def onVideoReceiveStateChanged(state: Int, arg: WCall): Unit =
+        override def onVideoReceiveStateChanged(userId: String, state: Int, arg: WCall): Unit =
           cs.onVideoReceiveStateChanged(VideoReceiveState(state))
       },
       null

@@ -20,13 +20,13 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.Invitation
+import com.waz.model.{Invitation, TeamInvitation}
 import com.waz.service.UserServiceImpl
 import com.waz.service.invitations.InvitationService
 import com.waz.sync.SyncResult
 import com.waz.sync.SyncResult.Failure
 import com.waz.sync.client.{ConnectionsClient, InvitationClient}
-import com.waz.threading.Threading
+import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.Response.Status
 
 import scala.concurrent.Future
@@ -59,4 +59,12 @@ class InvitationSyncHandler(invitationService: InvitationService, userService: U
     }
 
   private def shouldRetry(e: ErrorResponse) = (e.code != Status.Created) && (e.code != Status.SeeOther) && ! e.isFatal
+
+  def postTeamInvitations(invitations: Seq[TeamInvitation]): Future[SyncResult] = {
+    CancellableFuture.sequence(invitations.map { i =>
+      client.postTeamInvitation(i).map { response =>
+        invitationService.onTeamInvitationResponse(i, response)
+      }
+    }).map(_ => SyncResult.Success).future
+  }
 }

@@ -19,7 +19,7 @@ package com.waz.utils.events
 
 import android.content.Context
 import com.waz.RobolectricUtils
-import com.waz.service.ContactsService
+import com.waz.service.ContactsServiceImpl
 import com.waz.utils.returning
 import org.scalatest._
 import org.threeten.bp.Instant
@@ -37,7 +37,7 @@ import org.threeten.bp.Instant
 
   def check(createSubscription: (Signal[Option[Instant]], Var) => Subscription) = {
     val received = Var(None)
-    var signal: Signal[Option[Instant]] = new ContentObserverSignal(ContactsService.Contacts)
+    var signal: Signal[Option[Instant]] = new ContentObserverSignal(ContactsServiceImpl.Contacts)
     var sub = createSubscription(signal, received)
     val before = received.value.flatten
     Thread.sleep(1)
@@ -59,5 +59,5 @@ import org.threeten.bp.Instant
 
   case class Var(var value: Option[Option[Instant]])
 
-  def notifyChanged() = implicitly[Context].getContentResolver.notifyChange(ContactsService.Contacts, null)
+  def notifyChanged() = implicitly[Context].getContentResolver.notifyChange(ContactsServiceImpl.Contacts, null)
 }

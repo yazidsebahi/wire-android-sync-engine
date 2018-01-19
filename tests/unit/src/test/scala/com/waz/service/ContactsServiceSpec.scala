@@ -23,7 +23,7 @@ import android.database.sqlite.SQLiteDatabase
 import com.waz.RobolectricUtils
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model._
-import com.waz.service.ContactsService.{CurrentAddressBookVersion, MayNotYetCheckAgainException, zUserAndTimeOfLastCheck}
+import com.waz.service.ContactsServiceImpl.{CurrentAddressBookVersion, MayNotYetCheckAgainException, zUserAndTimeOfLastCheck}
 import com.waz.testutils.Matchers._
 import com.waz.testutils.{EmptySyncService, MockZMessaging, prepareAddressBookEntries}
 import com.waz.threading.CancellableFuture.delay
