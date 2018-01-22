@@ -38,11 +38,11 @@ import com.waz.model.AssetStatus.Order._
 import com.waz.model.AssetStatus.{DownloadFailed, UploadCancelled, UploadDone, UploadFailed, UploadInProgress}
 import com.waz.model.ErrorData.AssetError
 import com.waz.model._
+import com.waz.permissions.PermissionsService
 import com.waz.service.ErrorsService
 import com.waz.service.assets.GlobalRecordAndPlayService.AssetMediaKey
 import com.waz.service.downloads._
 import com.waz.service.images.ImageAssetGenerator
-import com.waz.service.permissions.PermissionsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._

@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.service.permissions
+package com.waz.permissions
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -30,11 +30,14 @@ class PermissionsService() {
   import PermissionsService._
   private implicit val ec = new SerialDispatchQueue(name = "PermissionsService")
 
-  private val providers      = Signal(Vector.empty[PermissionProvider])
-  private val providerSignal = providers.map(_.lastOption)
+  protected[permissions] val providers      = Signal(Vector.empty[PermissionProvider])
+  protected[permissions] val providerSignal = providers.map(_.lastOption)
 
-  def registerProvider(provider: PermissionProvider) = providers.mutate(_ :+ provider)
-  def unregisterProvider(provider: PermissionProvider) = providers.mutate(_.filter(_ != provider))
+  def registerProvider(provider: PermissionProvider) = providers.mutate(ps => if (ps.contains(provider)) ps else ps :+ provider)
+  def unregisterProvider(provider: PermissionProvider) = {
+    onPermissionsResult(Set.empty)
+    providers.mutate(_.filter(_ != provider))
+  }
 
   private lazy val refresh = EventStream[Unit]()
 
@@ -44,7 +47,7 @@ class PermissionsService() {
     (for {
       keys       <- knownKeys
       Some(prov) <- providerSignal
-      res <- RefreshingSignal(Threading.Ui(prov.hasPermissions(keys.map(Permission(_)))), refresh)
+      res        <- RefreshingSignal(Threading.Ui(prov.hasPermissions(keys.map(Permission(_)))), refresh)
   } yield res).disableAutowiring()
 
   /**
@@ -84,24 +87,26 @@ class PermissionsService() {
       currentRequest = Promise()
       providerSignal.head.flatMap {
         case Some(prov) =>
+          verbose(s"requesting from provider: $prov")
           for {
             ps <- permissions.head
-            _ = verbose(s"ps: $ps")
+            _ = verbose(s"current ps: $ps")
             fromKeys = ps.filter(p => keys.contains(p.key))
             toRequest = fromKeys.filter(!_.granted)
-            _ = verbose(s"fromKeys: $fromKeys, toRequest: $toRequest")
+            _ = verbose(s"to request: $toRequest")
             res <-
-            if (toRequest.isEmpty) {
-              currentRequest.tryComplete(Try(toRequest))
-              currentRequest.future
-            }
-            else Threading.Ui(prov.requestPermissions(toRequest)).future.flatMap(_ => currentRequest.future)
+              if (toRequest.isEmpty) {
+                currentRequest.tryComplete(Try(toRequest))
+                currentRequest.future
+              }
+              else Threading.Ui(prov.requestPermissions(toRequest)).future.flatMap(_ => currentRequest.future)
           } yield {
             (fromKeys -- toRequest) ++ res
           }
         case None =>
           warn("Currently no permissions provider - can't request permissions at this time. Assuming all are denied")
-          Future.successful(keys.map(Permission(_)))
+          currentRequest.tryComplete(Try(keys.map(Permission(_))))
+          currentRequest.future
       }
     }
 
@@ -120,7 +125,7 @@ class PermissionsService() {
   }
 
   //Convenience method that returns (a Future of) true if all permissions were granted, and false if not.
-  def requestAllPermissions(keys: Set[PermissionKey]): Future[Boolean] = requestPermissions(keys).map(_.forall(_.granted))(Threading.Background)
+  def requestAllPermissions(keys: Set[PermissionKey]): Future[Boolean] = requestPermissions(keys).map(ps => ps.forall(_.granted) && ps.nonEmpty)(Threading.Background)
 
   //Non-blocking getter for java
   def checkPermission(key: String): Boolean = permissions.currentValue.map(_.filter(_.key == key)).exists(ps => ps.nonEmpty && ps.forall(_.granted))
