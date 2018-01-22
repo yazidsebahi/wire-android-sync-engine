@@ -45,11 +45,12 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
   val srs = mock[SyncRequestService]
   (srs.scheduler _).expects().anyNumberOfTimes().returning(syncScheduler)
 
-  val convs = mock[ConversationsService]
+  val pipeline = mock[EventPipeline]
+  val errors = mock[ErrorsService]
 
   val service: IntegrationsService = new IntegrationsServiceImpl(sync, srs)
 
-  val handler = new IntegrationsSyncHandlerImpl(UserId(), client, service, convs)
+  val handler = new IntegrationsSyncHandlerImpl(UserId(), client, service, pipeline, errors)
 
   (sync.syncProvider _).expects(*).anyNumberOfTimes().onCall((id: ProviderId) => Future {
     val sid = SyncId()
@@ -131,6 +132,7 @@ object IntegrationsServiceSpec {
     IntegrationId("07653181-7c72-4a3a-8e76-39fcbf27fd17"),
     provider1.id,
     "collectionsbot",
+    "collections bot short description",
     "Helps you fill your library",
     Seq.empty[IntegrationAsset],
     Seq("tutorial"),
@@ -141,6 +143,7 @@ object IntegrationsServiceSpec {
     IntegrationId("748bda63-7783-42d4-80c2-030e3daef5c7"),
     provider2.id,
     "Echo",
+    "echo",
     "Echo",
     Seq.empty[IntegrationAsset],
     Seq("tutorial"),
@@ -151,6 +154,7 @@ object IntegrationsServiceSpec {
     IntegrationId("f21ef724-64cc-45e3-b78d-d1b18a7c02a5"),
     provider3.id,
     "Echo_stage",
+    "echo",
     "blah",
     Seq.empty[IntegrationAsset],
     Seq("tutorial"),

@@ -195,6 +195,7 @@ object IntegrationsClientSpec {
        |{
        |  "id": "$providerId0",
        |  "name": "Wire Swiss GmbH",
+       |  "summary": "summary",
        |  "email": "support@wire.com",
        |  "url": "https://wire.com/",
        |  "description": "The Wire Team"
@@ -207,6 +208,7 @@ object IntegrationsClientSpec {
        |{
        |  "id": "$providerId1",
        |  "name": "Collections Corp",
+       |  "summary": "summary",
        |  "email": "support@coco.com",
        |  "url": "https://coco.com/",
        |  "description": "The Collections Corp providing collectionsbot"
@@ -219,6 +221,7 @@ object IntegrationsClientSpec {
        |{
        |  "id": "$providerId2",
        |  "name": "Echo Company",
+       |  "summary": "summary",
        |  "email": "support@echo.com",
        |  "url": "https://echo.com/",
        |  "description": "Echo Company providing high-quality echo"
@@ -231,6 +234,7 @@ object IntegrationsClientSpec {
        |{
        |  "id": "$providerId3",
        |  "name": "blah blah",
+       |  "summary": "summary",
        |  "email": "support@blah.com",
        |  "url": "https://blah.com/",
        |  "description": "blah blah blah"

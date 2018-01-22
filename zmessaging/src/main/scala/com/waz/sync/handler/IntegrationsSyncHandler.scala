@@ -19,9 +19,9 @@ package com.waz.sync.handler
 
 import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
-import com.waz.model.{ConvId, IntegrationId, ProviderId, UserId}
-import com.waz.service.IntegrationsService
-import com.waz.service.conversation.ConversationsService
+import com.waz.api.impl.ErrorResponse
+import com.waz.model._
+import com.waz.service.{ErrorsService, EventPipeline, IntegrationsService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.IntegrationsClient
 import com.waz.threading.Threading
@@ -40,24 +40,25 @@ trait IntegrationsSyncHandler {
 class IntegrationsSyncHandlerImpl(selfUserId: UserId,
                                   client:     IntegrationsClient,
                                   service:    IntegrationsService,
-                                  convs:      ConversationsService) extends IntegrationsSyncHandler {
+                                  pipeline:   EventPipeline,
+                                  errors: ErrorsService) extends IntegrationsSyncHandler {
   import Threading.Implicits.Background
 
   override def syncProvider(pId: ProviderId) = client.getProvider(pId).future.flatMap {
     case Right(data) =>
-      debug(s"quering for provider with id $pId returned $data")
+      debug(s"querying for provider with id $pId returned $data")
       service.onProviderSynced(pId, data).map(_ => SyncResult.Success)
     case Left(error) =>
-      debug(s"quering for provider with id $pId returned $error")
+      debug(s"querying for provider with id $pId returned $error")
       Future.successful(SyncResult(error))
   }
 
   override def syncIntegration(pId: ProviderId, iId: IntegrationId) = client.getIntegration(pId, iId).future.flatMap {
     case Right(data) =>
-      debug(s"quering for integration with pId $pId and iId $iId returned $data")
+      debug(s"querying for integration with pId $pId and iId $iId returned $data")
       service.onIntegrationSynced(pId, iId, data).map(_ => SyncResult.Success)
     case Left(error) =>
-      debug(s"quering for provider with pId $pId and iId $iId returned $error")
+      debug(s"querying for provider with pId $pId and iId $iId returned $error")
       Future.successful(SyncResult(error))
   }
 
@@ -74,7 +75,13 @@ class IntegrationsSyncHandlerImpl(selfUserId: UserId,
     client.addBot(cId, pId, iId).future.flatMap {
       case Right(newBot) =>
         debug(s"addBot($cId, $pId, $iId)")
-        convs.processConversationEvent(newBot.event, selfUserId).map(_ => SyncResult.Success)
+        pipeline(Seq(newBot.event)).map(_ => SyncResult.Success)
+      case Left(resp@ErrorResponse(502, _, "bad-gateway")) =>
+        debug(s"bot refuses to be added $resp")
+        Future.successful(SyncResult.Failure(Some(resp), shouldRetry = false))
+      case Left(resp@ErrorResponse(409, _, "too-many-bots")) =>
+        debug(s"too many bots in a conversation $resp")
+        Future.successful(SyncResult.Failure(Some(resp), shouldRetry = false))
       case Left(error) =>
         debug(s"addBot returned $error")
         Future.successful(SyncResult(error))
@@ -84,7 +91,7 @@ class IntegrationsSyncHandlerImpl(selfUserId: UserId,
     client.removeBot(cId, userId).future.flatMap {
       case Right(memberLeaveEvent) =>
         debug(s"removeBot($cId, $userId)")
-        convs.processConversationEvent(memberLeaveEvent, selfUserId).map(_ => SyncResult.Success)
+        pipeline(Seq(memberLeaveEvent)).map(_ => SyncResult.Success)
       case Left(error) =>
         debug(s"removeBot returned $error")
         Future.successful(SyncResult(error))

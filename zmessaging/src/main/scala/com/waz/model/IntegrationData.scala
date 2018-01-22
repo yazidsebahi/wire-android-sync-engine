@@ -22,14 +22,14 @@ import org.json.JSONObject
 
 case class IntegrationAsset(assetType: String, id: AssetId)
 
-case class IntegrationData(id: IntegrationId,
-                           provider: ProviderId,
-                           name: String,
-                           summary: String,
-                           description: String,
-                           assets: Seq[IntegrationAsset],
-                           tags: Seq[String],
-                           enabled: Boolean)
+case class IntegrationData(id:          IntegrationId         = IntegrationId(),
+                           provider:    ProviderId            = ProviderId(),
+                           name:        String                = "",
+                           summary:     String                = "",
+                           description: String                = "",
+                           assets:      Seq[IntegrationAsset] = Seq.empty,
+                           tags:        Seq[String]           = Seq.empty,
+                           enabled:     Boolean               = true)
 
 object IntegrationData {
   import JsonDecoder._
