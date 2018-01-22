@@ -20,7 +20,6 @@ package com.waz.sync.client
 import com.waz.ZLog.ImplicitTag._
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.client.IntegrationsClient.NewBotData
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.znet.Response.{HttpStatus, InternalError}
 import com.waz.znet.{JsonObjectResponse, Request, Response, ZNetClient}
@@ -183,6 +182,26 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
       data.event.userIds.size shouldEqual 1
       data.event.userIds.head shouldEqual UserId(botId)
     }*/
+
+    scenario("deserialize user info with service") {
+      import IntegrationsClientSpec._
+
+      val infoJson = UserInfo.Decoder(new JSONObject(userInfoWithService))
+
+      infoJson.service shouldEqual Some(UserInfo.Service(IntegrationId(integrationId1), ProviderId(providerId1)))
+      infoJson.picture.nonEmpty shouldEqual true
+      infoJson.picture.flatMap(_.head.remoteId) shouldEqual Some(RAssetId(assetId))
+    }
+
+    scenario("deserialize user info without service") {
+      import IntegrationsClientSpec._
+
+      val infoJson = UserInfo.Decoder(new JSONObject(userInfoWithoutService))
+
+      infoJson.service shouldEqual None
+      infoJson.picture.nonEmpty shouldEqual true
+      infoJson.picture.flatMap(_.head.remoteId) shouldEqual Some(RAssetId(assetId))
+    }
   }
 
 }
@@ -365,6 +384,7 @@ object IntegrationsClientSpec {
   val botId = "d7473851-c0bf-4963-8df4-a0ed7c53d124"
   val selfId = "62c2157d-2081-46f0-b8aa-088d7a48142d"
   val assetId = "3-1-cb21f0ce-6bd4-400e-9776-26ad5dd7cd62"
+  val assetIdPreview = "3-1-6117cc59-ea0f-456f-95e9-2a1159531789"
 
   def addBotResponse(convId: String, botId: String) =
     s"""
@@ -388,4 +408,52 @@ object IntegrationsClientSpec {
     case addBotRegex(convId, botId) => Option(new JSONObject(addBotResponse(convId, botId)))
     case _ => None
   }
+
+  val userInfoWithService =
+    s"""
+       |{
+       |  "service": {
+       |    "id": "$integrationId1",
+       |    "provider": "$providerId1"
+       |  },
+       |  "accent_id": 0,
+       |  "picture": [],
+       |  "name": "Echo",
+       |  "id": "$botId",
+       |  "assets": [
+       |    {
+       |      "size": "preview",
+       |      "key": "$assetIdPreview",
+       |      "type": "image"
+       |    },
+       |    {
+       |      "size": "complete",
+       |      "key": "$assetId",
+       |      "type": "image"
+       |    }
+       |  ]
+       |}
+     """.stripMargin
+
+  val userInfoWithoutService =
+    s"""
+       |{
+       |  "accent_id": 0,
+       |  "picture": [],
+       |  "name": "Me",
+       |  "id": "$selfId",
+       |  "assets": [
+       |    {
+       |      "size": "preview",
+       |      "key": "$assetIdPreview",
+       |      "type": "image"
+       |    },
+       |    {
+       |      "size": "complete",
+       |      "key": "$assetId",
+       |      "type": "image"
+       |    }
+       |  ]
+       |}
+     """.stripMargin
 }

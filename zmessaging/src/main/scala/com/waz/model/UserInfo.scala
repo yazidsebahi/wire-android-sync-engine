@@ -55,7 +55,11 @@ object UserInfo {
   case class Service(id: IntegrationId, provider: ProviderId)
 
   def decodeService(s: Symbol)(implicit js: JSONObject): Service = Service(decodeId[IntegrationId]('id), decodeId[ProviderId]('provider))
-  def decodeOptService(s: Symbol)(implicit js: JSONObject): Option[Service] = opt(s, decodeService(s)(_))
+
+  def decodeOptService(s: Symbol)(implicit js: JSONObject): Option[Service] = decodeOptObject(s) match {
+    case Some(serviceJs) => Option(decodeService(s)(serviceJs))
+    case _ => None
+  }
 
   implicit object Decoder extends JsonDecoder[UserInfo] {
 
