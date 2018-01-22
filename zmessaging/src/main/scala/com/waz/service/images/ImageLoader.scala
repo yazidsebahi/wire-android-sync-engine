@@ -30,10 +30,10 @@ import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.cache.{CacheEntry, CacheService, LocalData}
 import com.waz.model.AssetData.IsImage
 import com.waz.model.{Mime, _}
+import com.waz.permissions.PermissionsService
 import com.waz.service.assets.AssetService
 import com.waz.service.downloads.{AssetLoader, AssetLoaderService}
 import com.waz.service.images.ImageLoader.Metadata
-import com.waz.service.permissions.PermissionsService
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.ui.MemoryImageCache
 import com.waz.ui.MemoryImageCache.BitmapRequest

@@ -36,8 +36,8 @@ import com.waz.content._
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model._
+import com.waz.permissions.PermissionsService
 import com.waz.service.AccountsService.InForeground
-import com.waz.service.permissions.PermissionsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.Locales.{currentLocaleOrdering, sortWithCurrentLocale}

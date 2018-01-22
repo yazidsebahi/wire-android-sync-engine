@@ -25,11 +25,11 @@ import com.waz.bitmap.video.VideoTranscoder
 import com.waz.cache.CacheService
 import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.content._
+import com.waz.permissions.PermissionsService
 import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService, GlobalCallingService}
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
-import com.waz.service.permissions.PermissionsService
 import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
 import com.waz.service.tracking.{TrackingService, TrackingServiceImpl}
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
