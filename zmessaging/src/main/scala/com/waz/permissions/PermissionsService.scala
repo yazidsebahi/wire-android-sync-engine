@@ -91,9 +91,10 @@ class PermissionsService() {
           for {
             ps <- permissions.head
             _ = verbose(s"current ps: $ps")
-            fromKeys = ps.filter(p => keys.contains(p.key))
-            toRequest = fromKeys.filter(!_.granted)
-            _ = verbose(s"to request: $toRequest")
+            fromKeys       = ps.filter(p => keys.contains(p.key))
+            toRequest      = fromKeys.filter(!_.granted)
+            alreadyGranted = fromKeys -- toRequest
+            _ = verbose(s"to request: $toRequest, already granted: $alreadyGranted")
             res <-
               if (toRequest.isEmpty) {
                 currentRequest.tryComplete(Try(toRequest))
@@ -101,7 +102,7 @@ class PermissionsService() {
               }
               else Threading.Ui(prov.requestPermissions(toRequest)).future.flatMap(_ => currentRequest.future)
           } yield {
-            (fromKeys -- toRequest) ++ res
+            alreadyGranted ++ res
           }
         case None =>
           warn("Currently no permissions provider - can't request permissions at this time. Assuming all are denied")
@@ -125,7 +126,8 @@ class PermissionsService() {
   }
 
   //Convenience method that returns (a Future of) true if all permissions were granted, and false if not.
-  def requestAllPermissions(keys: Set[PermissionKey]): Future[Boolean] = requestPermissions(keys).map(ps => ps.forall(_.granted) && ps.nonEmpty)(Threading.Background)
+  def requestAllPermissions(keys: Set[PermissionKey]): Future[Boolean] =
+    if (keys.isEmpty) Future.successful(true) else requestPermissions(keys).map(ps => ps.forall(_.granted) && ps.nonEmpty)(Threading.Background)
 
   //Non-blocking getter for java
   def checkPermission(key: String): Boolean = permissions.currentValue.map(_.filter(_.key == key)).exists(ps => ps.nonEmpty && ps.forall(_.granted))
