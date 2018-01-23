@@ -116,16 +116,16 @@ class PermissionsServiceSpec extends AndroidFreeSpec {
       Permission("ReadExternal", granted = true)
     )
 
-    Threading.Ui(service.registerProvider(provider))
+    service.registerProvider(provider)
 
     val req = service.requestPermissions(Set("WriteExternal", "ReadExternal"))
 
     await(requestInput.filter(_.map(_.key) == Set("WriteExternal", "ReadExternal")).head) //wait for request to be asked
-    Threading.Ui(service.unregisterProvider(provider)) //user minimises app
+    service.unregisterProvider(provider) //user minimises app
     result(req) shouldEqual Set.empty
 
     val provider2 = newProvider
-    Threading.Ui(service.registerProvider(provider2))
+    service.registerProvider(provider2)
     val req2 = service.requestPermissions(Set("WriteExternal", "ReadExternal"))
 
     userAccepts(expectedPerms)
