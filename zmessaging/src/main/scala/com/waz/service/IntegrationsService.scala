@@ -18,7 +18,9 @@
 package com.waz.service
 
 import com.waz.api.impl.ErrorResponse
+import com.waz.model.AssetMetaData.Image
 import com.waz.model._
+import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService}
 import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.threading.Threading
@@ -43,6 +45,7 @@ trait IntegrationsService {
 
 class IntegrationsServiceImpl(teamId:       Option[TeamId],
                               sync:         SyncServiceHandle,
+                              assets:       AssetService,
                               syncRequests: SyncRequestService,
                               convsUi:      ConversationsUiService,
                               convs:        ConversationsContentUpdater) extends IntegrationsService {
@@ -68,6 +71,12 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
 
   override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) = integrationSearch.get(name) match {
     case Some(signal) =>
+      assets.updateAssets(data.flatMap(_.assets.collect { case a if a.assetType == "complete" => a.id } .map { id =>
+        AssetData(
+          remoteId = Some(id),
+          metaData = Some(AssetMetaData.Image(Dim2(0, 0), Image.Tag.Medium))
+        )
+      }))
       signal ! data
       Future.successful({})
     case None => Future.failed(new Exception(s"received sync data for unknown integrations name: $name"))

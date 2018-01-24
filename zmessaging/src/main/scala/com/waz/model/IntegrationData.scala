@@ -20,7 +20,7 @@ package com.waz.model
 import com.waz.utils.JsonDecoder
 import org.json.JSONObject
 
-case class IntegrationAsset(assetType: String, id: AssetId)
+case class IntegrationAsset(assetType: String, id: RAssetId)
 
 case class IntegrationData(id:          IntegrationId         = IntegrationId(),
                            provider:    ProviderId            = ProviderId(),
@@ -35,7 +35,7 @@ object IntegrationData {
   import JsonDecoder._
 
   implicit lazy val AssetDecoder: JsonDecoder[IntegrationAsset] = new JsonDecoder[IntegrationAsset] {
-    override def apply(implicit js: JSONObject): IntegrationAsset = IntegrationAsset('type, decodeId[AssetId]('key))
+    override def apply(implicit js: JSONObject): IntegrationAsset = IntegrationAsset('type, decodeId[RAssetId]('key))
   }
 
   implicit lazy val Decoder: JsonDecoder[IntegrationData] = new JsonDecoder[IntegrationData] {
