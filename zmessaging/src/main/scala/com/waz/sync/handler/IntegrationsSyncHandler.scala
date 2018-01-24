@@ -66,10 +66,10 @@ class IntegrationsSyncHandlerImpl(selfUserId: UserId,
 
   override def syncIntegrations(name: String) = client.searchIntegrations(name).future.flatMap {
     case Right(data) =>
-      debug(s"quering for integrations with name $name returned $data")
+      debug(s"querying for integrations with name $name returned $data")
       service.onIntegrationsSynced(name, data).map(_ => SyncResult.Success)
     case Left(error) =>
-      debug(s"quering for integrations with name $name returned $error")
+      debug(s"querying for integrations with name $name returned $error")
       Future.successful(SyncResult(error))
   }
 

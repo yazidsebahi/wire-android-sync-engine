@@ -78,6 +78,7 @@ trait ConversationsUiService {
   def getOrCreateOneToOneConversation(toUser: UserId): Future[ConversationData]
   def createOneToOneConversation(toUser: UserId, selfUserId: UserId): Future[ConversationData]
   def createGroupConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId] = None): Future[ConversationData]
+  def createAndPostConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId]): Future[(ConversationData, SyncId)]
   def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]]
   def knock(id: ConvId): Future[Option[MessageData]]
   def setLastRead(convId: ConvId, msg: MessageData): Future[Option[ConversationData]]
@@ -334,17 +335,11 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       }
   }
 
-  override def createGroupConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId] = None): Future[ConversationData] = {
-    debug(s"createGroupConversation, id: $id, members: $members, team: $teamId")
+  override def createGroupConversation(id: ConvId, members: Seq[UserId], teamIdOpt: Option[TeamId] = None): Future[ConversationData] = {
+    debug(s"createGroupConversation, id: $id, members: $members, team: $teamIdOpt")
+    def createAndPost = createAndPostConversation(id, members, teamIdOpt).map(_._1)
 
-    def createAndPost = convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((self +: members).distinct: _*), ConversationType.Group, self, members, teamId = teamId) flatMap { conv =>
-      debug(s"created: $conv")
-      sync.postConversation(id, members, conv.name, teamId)
-      messages.addMemberJoinMessage(conv.id, self, members.toSet, firstMessage = true) map (_ => conv)
-    }
-
-    teamId.fold(createAndPost) { teamId =>
-
+    teamIdOpt.fold(createAndPost) { teamId =>
       members match {
         case Seq(other) =>
           verbose(s"Checking for 1:1 conversation with user: $other")
@@ -367,6 +362,13 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       }
     }
   }
+
+  def createAndPostConversation(id: ConvId, members: Seq[UserId], teamId: Option[TeamId]) =
+    convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((self +: members).distinct: _*), ConversationType.Group, self, members, teamId = teamId).flatMap { conv =>
+      debug(s"created: $conv")
+      messages.addMemberJoinMessage(conv.id, self, members.toSet, firstMessage = true)
+      sync.postConversation(id, members, conv.name, teamId).map(syncId => (conv, syncId))
+    }
 
   override def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
     users.withSelfUserFuture(id => convStorage.search(prefix, id, handleOnly)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))

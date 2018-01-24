@@ -19,6 +19,7 @@ package com.waz.service
 
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService}
 import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.threading.Threading
 import com.waz.utils.events.{Signal, SourceSignal}
@@ -35,12 +36,22 @@ trait IntegrationsService {
   def onProviderSynced(pId: ProviderId, data: ProviderData): Future[Unit]
   def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData): Future[Unit]
 
-  def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[Either[ErrorResponse, Unit]]
-  def removeBot(cId: ConvId, botId: UserId): Future[Either[ErrorResponse, Unit]]
+  def addBotToConversation(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[Either[ErrorResponse, Unit]]
+  def createConversationWithBot(pId: ProviderId, iId: IntegrationId): Future[Either[ErrorResponse, ConvId]]
+  def removeBotFromConversation(cId: ConvId, botId: UserId): Future[Either[ErrorResponse, Unit]]
 }
 
-class IntegrationsServiceImpl(sync: SyncServiceHandle, syncRequestService: SyncRequestService) extends IntegrationsService {
+class IntegrationsServiceImpl(self:         UserId,
+                              teamId:       Option[TeamId],
+                              sync:         SyncServiceHandle,
+                              syncRequests: SyncRequestService,
+                              convsUi:      ConversationsUiService,
+                              convs:        ConversationsContentUpdater) extends IntegrationsService {
   implicit val ctx = Threading.Background
+
+  private var integrationSearch = Map[String, SourceSignal[Seq[IntegrationData]]]()
+  private var providers         = Map[ProviderId, ProviderData]()
+  private var integrations      = Map[IntegrationId, IntegrationData]()
 
   override def searchIntegrations(startWith: String) =
     integrationSearch.getOrElse(startWith, returning(Signal[Seq[IntegrationData]]()) { sig =>
@@ -50,11 +61,11 @@ class IntegrationsServiceImpl(sync: SyncServiceHandle, syncRequestService: SyncR
 
   override def getIntegration(pId: ProviderId, iId: IntegrationId) =
     if (integrations.contains(iId)) Future.successful(integrations(iId))
-    else sync.syncIntegration(pId, iId).flatMap(syncRequestService.scheduler.await).map(_ => integrations(iId))
+    else sync.syncIntegration(pId, iId).flatMap(syncRequests.scheduler.await).map(_ => integrations(iId))
 
   override def getProvider(pId: ProviderId) =
     if (providers.contains(pId)) Future.successful(providers(pId))
-    else sync.syncProvider(pId).flatMap(syncRequestService.scheduler.await).map(_ => providers(pId))
+    else sync.syncProvider(pId).flatMap(syncRequests.scheduler.await).map(_ => providers(pId))
 
   override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) = integrationSearch.get(name) match {
     case Some(signal) =>
@@ -74,25 +85,37 @@ class IntegrationsServiceImpl(sync: SyncServiceHandle, syncRequestService: SyncR
   }
 
   // pId here is redundant - we can take it from our 'integrations' map
-  override def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = (for {
+  override def addBotToConversation(cId: ConvId, pId: ProviderId, iId: IntegrationId) = (for {
     syncId <- sync.postAddBot(cId, pId, iId)
-    result <- syncRequestService.scheduler.await(syncId)
+    result <- syncRequests.scheduler.await(syncId)
   } yield result).map {
     case SyncResult.Success => Right({})
     case SyncResult.Failure(Some(error), _) => Left(error)
     case _ => Left(ErrorResponse.internalError("Unknown error"))
   }
 
-  override def removeBot(cId: ConvId, botId: UserId) = (for {
+  override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) = {
+    for {
+      (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), Seq(self), teamId)
+      convRes        <- syncRequests.scheduler.await(syncId)
+      res <-
+        if (convRes.isSuccess) addBotToConversation(conv.id, pId, iId).map {
+          case Right(_)  => Right(conv.id)
+          case Left(err) => Left(err)
+        }
+        else {
+          val msg = s"Failed to create conversation on backend: $conv"
+          Future.successful(Left(convRes.error.getOrElse(ErrorResponse(499, msg, msg))))
+        }
+    } yield res
+  }
+
+  override def removeBotFromConversation(cId: ConvId, botId: UserId) = (for {
     syncId <- sync.postRemoveBot(cId, botId)
-    result <- syncRequestService.scheduler.await(syncId)
+    result <- syncRequests.scheduler.await(syncId)
   } yield result).map {
     case SyncResult.Success => Right({})
     case SyncResult.Failure(Some(error), _) => Left(error)
     case _ => Left(ErrorResponse.internalError("Unknown error"))
   }
-
-  private var integrationSearch  = Map[String, SourceSignal[Seq[IntegrationData]]]()
-  private var providers = Map[ProviderId, ProviderData]()
-  private var integrations = Map[IntegrationId, IntegrationData]()
 }
