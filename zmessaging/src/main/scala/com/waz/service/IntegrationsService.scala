@@ -41,8 +41,7 @@ trait IntegrationsService {
   def removeBotFromConversation(cId: ConvId, botId: UserId): Future[Either[ErrorResponse, Unit]]
 }
 
-class IntegrationsServiceImpl(self:         UserId,
-                              teamId:       Option[TeamId],
+class IntegrationsServiceImpl(teamId:       Option[TeamId],
                               sync:         SyncServiceHandle,
                               syncRequests: SyncRequestService,
                               convsUi:      ConversationsUiService,
@@ -96,7 +95,7 @@ class IntegrationsServiceImpl(self:         UserId,
 
   override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) = {
     for {
-      (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), Seq(self), teamId)
+      (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), Seq.empty, teamId)
       convRes        <- syncRequests.scheduler.await(syncId)
       res <-
         if (convRes.isSuccess) addBotToConversation(conv.id, pId, iId).map {
