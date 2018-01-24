@@ -21,6 +21,7 @@ import com.waz.ZLog.debug
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService}
 import com.waz.service.{ErrorsService, EventPipeline, IntegrationsService}
 import com.waz.sync.SyncResult
 import com.waz.sync.client.IntegrationsClient
@@ -38,6 +39,7 @@ trait IntegrationsSyncHandler {
 }
 
 class IntegrationsSyncHandlerImpl(selfUserId: UserId,
+                                  convs:      ConversationsContentUpdater,
                                   client:     IntegrationsClient,
                                   service:    IntegrationsService,
                                   pipeline:   EventPipeline,
@@ -72,28 +74,32 @@ class IntegrationsSyncHandlerImpl(selfUserId: UserId,
   }
 
   override def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[SyncResult] =
-    client.addBot(cId, pId, iId).future.flatMap {
-      case Right(newBot) =>
-        debug(s"addBot($cId, $pId, $iId)")
-        pipeline(Seq(newBot.event)).map(_ => SyncResult.Success)
-      case Left(resp@ErrorResponse(502, _, "bad-gateway")) =>
-        debug(s"bot refuses to be added $resp")
-        Future.successful(SyncResult.Failure(Some(resp), shouldRetry = false))
-      case Left(resp@ErrorResponse(409, _, "too-many-bots")) =>
-        debug(s"too many bots in a conversation $resp")
-        Future.successful(SyncResult.Failure(Some(resp), shouldRetry = false))
-      case Left(error) =>
-        debug(s"addBot returned $error")
-        Future.successful(SyncResult(error))
+    convs.convById(cId).collect { case Some(c) => c.remoteId }.flatMap { rId =>
+      client.addBot(rId, pId, iId).future.flatMap {
+        case Right(newBot) =>
+          debug(s"addBot($cId, $pId, $iId)")
+          pipeline(Seq(newBot.event)).map(_ => SyncResult.Success)
+        case Left(resp@ErrorResponse(502, _, "bad-gateway")) =>
+          debug(s"bot refuses to be added $resp")
+          Future.successful(SyncResult.Failure(Some(resp), shouldRetry = false))
+        case Left(resp@ErrorResponse(409, _, "too-many-bots")) =>
+          debug(s"too many bots in a conversation $resp")
+          Future.successful(SyncResult.Failure(Some(resp), shouldRetry = false))
+        case Left(error) =>
+          debug(s"addBot returned $error")
+          Future.successful(SyncResult(error))
+      }
     }
 
   override def removeBot(cId: ConvId, userId: UserId): Future[SyncResult] =
-    client.removeBot(cId, userId).future.flatMap {
-      case Right(memberLeaveEvent) =>
-        debug(s"removeBot($cId, $userId)")
-        pipeline(Seq(memberLeaveEvent)).map(_ => SyncResult.Success)
-      case Left(error) =>
-        debug(s"removeBot returned $error")
-        Future.successful(SyncResult(error))
+    convs.convById(cId).collect { case Some(c) => c.remoteId }.flatMap { rId =>
+      client.removeBot(rId, userId).future.flatMap {
+        case Right(memberLeaveEvent) =>
+          debug(s"removeBot($cId, $userId)")
+          pipeline(Seq(memberLeaveEvent)).map(_ => SyncResult.Success)
+        case Left(error) =>
+          debug(s"removeBot returned $error")
+          Future.successful(SyncResult(error))
+      }
     }
 }

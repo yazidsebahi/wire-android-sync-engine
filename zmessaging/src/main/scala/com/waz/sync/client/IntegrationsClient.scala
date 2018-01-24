@@ -37,8 +37,8 @@ trait IntegrationsClient {
   def getIntegration(providerId: ProviderId, integrationId: IntegrationId): ErrorOrResponse[IntegrationData]
   def getProvider(id: ProviderId): ErrorOrResponse[ProviderData]
 
-  def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): ErrorOrResponse[NewBotData]
-  def removeBot(cId: ConvId, botId: UserId): ErrorOrResponse[MemberLeaveEvent]
+  def addBot(rConvId: RConvId, pId: ProviderId, iId: IntegrationId): ErrorOrResponse[NewBotData]
+  def removeBot(rConvId: RConvId, botId: UserId): ErrorOrResponse[MemberLeaveEvent]
 }
 
 class IntegrationsClientImpl(netClient: ZNetClient) extends IntegrationsClient {
@@ -60,19 +60,19 @@ class IntegrationsClientImpl(netClient: ZNetClient) extends IntegrationsClient {
       case Response(SuccessHttpStatus(), ProviderResponse(data), _) => data
     }
 
-  def addBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = {
-    debug(s"addBot: convId: $cId, providerId: $pId, integrationId: $iId")
-    netClient.withErrorHandling("addBot", Request.Post(s"$ConversationsPath/$cId/bots", Json("provider" -> pId.str, "service" -> iId.str))) {
+  def addBot(rConvId: RConvId, pId: ProviderId, iId: IntegrationId) = {
+    debug(s"addBot: rConvId: $rConvId, providerId: $pId, integrationId: $iId")
+    netClient.withErrorHandling("addBot", Request.Post(s"$ConversationsPath/${rConvId.str}/bots", Json("provider" -> pId.str, "service" -> iId.str))) {
       case Response(SuccessHttpStatus(), AddBotResponse(data), _) => data
     }
   }
 
-  def removeBot(cId: ConvId, botId: UserId) = {
-    debug(s"removeBot: convId: $cId, botId: $botId")
+  def removeBot(rConvId: RConvId, botId: UserId) = {
+    debug(s"removeBot: convId: $rConvId, botId: $botId")
 
     import com.waz.znet.ContentEncoder.RequestContentEncoder
 
-    netClient.withErrorHandling("addBot", Request.Delete(s"$ConversationsPath/$cId/bots/$botId")) {
+    netClient.withErrorHandling("addBot", Request.Delete(s"$ConversationsPath/${rConvId.str}/bots/$botId")) {
       case Response(SuccessHttpStatus(), RemoveBotResponse(data), _) => data
     }
   }
