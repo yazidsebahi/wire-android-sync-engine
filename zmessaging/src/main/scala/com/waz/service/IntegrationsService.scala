@@ -18,9 +18,8 @@
 package com.waz.service
 
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.AssetMetaData.Image
+import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.model._
-import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService}
 import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.threading.Threading
@@ -45,7 +44,6 @@ trait IntegrationsService {
 
 class IntegrationsServiceImpl(teamId:       Option[TeamId],
                               sync:         SyncServiceHandle,
-                              assets:       AssetService,
                               syncRequests: SyncRequestService,
                               convsUi:      ConversationsUiService,
                               convs:        ConversationsContentUpdater) extends IntegrationsService {
@@ -71,12 +69,6 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
 
   override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) = integrationSearch.get(name) match {
     case Some(signal) =>
-      assets.updateAssets(data.flatMap(_.assets.collect { case a if a.assetType == "complete" => a.id } .map { id =>
-        AssetData(
-          remoteId = Some(id),
-          metaData = Some(AssetMetaData.Image(Dim2(0, 0), Image.Tag.Medium))
-        )
-      }))
       signal ! data
       Future.successful({})
     case None => Future.failed(new Exception(s"received sync data for unknown integrations name: $name"))
@@ -99,10 +91,10 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
   } yield result).map {
     case SyncResult.Success => Right({})
     case SyncResult.Failure(Some(error), _) => Left(error)
-    case _ => Left(ErrorResponse.internalError("Unknown error"))
+    case _ => Left(internalError("Unknown error"))
   }
 
-  override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) = {
+  override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) =
     for {
       (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), Seq.empty, teamId)
       convRes        <- syncRequests.scheduler.await(syncId)
@@ -111,12 +103,8 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
           case Right(_)  => Right(conv.id)
           case Left(err) => Left(err)
         }
-        else {
-          val msg = s"Failed to create conversation on backend: $conv"
-          Future.successful(Left(convRes.error.getOrElse(ErrorResponse(499, msg, msg))))
-        }
+        else Future.successful(Left(convRes.error.getOrElse(internalError(s"Failed to create conversation on backend: $conv"))))
     } yield res
-  }
 
   override def removeBotFromConversation(cId: ConvId, botId: UserId) = (for {
     syncId <- sync.postRemoveBot(cId, botId)
@@ -124,6 +112,6 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
   } yield result).map {
     case SyncResult.Success => Right({})
     case SyncResult.Failure(Some(error), _) => Left(error)
-    case _ => Left(ErrorResponse.internalError("Unknown error"))
+    case _ => Left(internalError("Unknown error"))
   }
 }

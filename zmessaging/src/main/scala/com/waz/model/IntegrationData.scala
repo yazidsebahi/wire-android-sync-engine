@@ -17,38 +17,12 @@
  */
 package com.waz.model
 
-import com.waz.utils.JsonDecoder
-import org.json.JSONObject
+case class IntegrationData(id:          IntegrationId   = IntegrationId(),
+                           provider:    ProviderId      = ProviderId(),
+                           name:        String          = "",
+                           summary:     String          = "",
+                           description: String          = "",
+                           asset:       Option[AssetId] = None,
+                           tags:        Seq[String]     = Seq.empty,
+                           enabled:     Boolean         = true)
 
-case class IntegrationAsset(assetType: String, id: RAssetId)
-
-case class IntegrationData(id:          IntegrationId         = IntegrationId(),
-                           provider:    ProviderId            = ProviderId(),
-                           name:        String                = "",
-                           summary:     String                = "",
-                           description: String                = "",
-                           assets:      Seq[IntegrationAsset] = Seq.empty,
-                           tags:        Seq[String]           = Seq.empty,
-                           enabled:     Boolean               = true)
-
-object IntegrationData {
-  import JsonDecoder._
-
-  implicit lazy val AssetDecoder: JsonDecoder[IntegrationAsset] = new JsonDecoder[IntegrationAsset] {
-    override def apply(implicit js: JSONObject): IntegrationAsset = IntegrationAsset('type, decodeId[RAssetId]('key))
-  }
-
-  implicit lazy val Decoder: JsonDecoder[IntegrationData] = new JsonDecoder[IntegrationData] {
-    override def apply(implicit js: JSONObject): IntegrationData =
-      IntegrationData(
-        decodeId[IntegrationId]('id),
-        decodeId[ProviderId]('provider),
-        decodeString('name),
-        decodeString('summary),
-        decodeString('description),
-        decodeSeq[IntegrationAsset]('assets),
-        decodeStringSeq('tags),
-        decodeBool('enabled)
-      )
-  }
-}

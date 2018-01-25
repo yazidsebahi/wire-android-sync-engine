@@ -21,6 +21,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.debug
 import com.waz.api.impl.ErrorResponse
 import com.waz.model._
+import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventPipeline, IntegrationsService}
 import com.waz.sync.SyncResult
@@ -40,6 +41,7 @@ trait IntegrationsSyncHandler {
 
 class IntegrationsSyncHandlerImpl(selfUserId: UserId,
                                   convs:      ConversationsContentUpdater,
+                                  assets:     AssetService,
                                   client:     IntegrationsClient,
                                   service:    IntegrationsService,
                                   pipeline:   EventPipeline) extends IntegrationsSyncHandler {
@@ -55,18 +57,20 @@ class IntegrationsSyncHandlerImpl(selfUserId: UserId,
   }
 
   override def syncIntegration(pId: ProviderId, iId: IntegrationId) = client.getIntegration(pId, iId).future.flatMap {
-    case Right(data) =>
-      debug(s"querying for integration with pId $pId and iId $iId returned $data")
-      service.onIntegrationSynced(pId, iId, data).map(_ => SyncResult.Success)
+    case Right((integ, asset)) =>
+      debug(s"querying for integration with pId $pId and iId $iId returned $integ with asset: $asset")
+      assets.updateAssets(asset.toSeq)
+      service.onIntegrationSynced(pId, iId, integ).map(_ => SyncResult.Success)
     case Left(error) =>
       debug(s"querying for provider with pId $pId and iId $iId returned $error")
       Future.successful(SyncResult(error))
   }
 
   override def syncIntegrations(name: String) = client.searchIntegrations(name).future.flatMap {
-    case Right(data) =>
-      debug(s"querying for integrations with name $name returned $data")
-      service.onIntegrationsSynced(name, data).map(_ => SyncResult.Success)
+    case Right(integs) =>
+      assets.updateAssets(integs.values.flatten.toSeq)
+      debug(s"querying for integrations with name $name returned $integs")
+      service.onIntegrationsSynced(name, integs.keys.toSeq).map(_ => SyncResult.Success)
     case Left(error) =>
       debug(s"querying for integrations with name $name returned $error")
       Future.successful(SyncResult(error))
