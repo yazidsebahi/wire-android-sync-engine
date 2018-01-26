@@ -22,11 +22,10 @@ import java.util.UUID
 
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
+import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
-
-import scala.util.Random
 
 trait Id[A] extends Ordering[A] {
   def random(): A
@@ -290,7 +289,7 @@ case class NotId(str: String) {
 object NotId {
 
   implicit val id: Id[NotId] = new Id[NotId] {
-    override def random(): NotId = NotId(Random.nextLong().toHexString)
+    override def random(): NotId = NotId(SecureRandom.nextLong().toHexString)
     override def decode(str: String): NotId = NotId(str)
   }
 

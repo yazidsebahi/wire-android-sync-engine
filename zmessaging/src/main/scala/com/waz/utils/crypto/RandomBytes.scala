@@ -17,8 +17,6 @@
  */
 package com.waz.utils.crypto
 
-import java.security.SecureRandom
-
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 
@@ -26,9 +24,6 @@ import scala.util.Try
 
 class RandomBytes {
   RandomBytes.ensureLibraryLoaded()
-
-  // used as fallback if sodium fails to generate random data
-  lazy val random = new SecureRandom()
 
   /**
     * Generates random byte array using libsodium
@@ -42,7 +37,7 @@ class RandomBytes {
       case Some(true) => // woop woop, all good
       case _ =>
         warn(s"Libsodium failed to generate $count random bytes. Falling back to SecureRandom")
-        random.nextBytes(buffer)
+        SecureRandom.nextBytes(buffer)
     }
     buffer
   }

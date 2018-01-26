@@ -25,9 +25,8 @@ import com.waz.api
 import com.waz.api.ValidatedUsernames
 import com.waz.model.Handle
 import com.waz.ui.UiModule
+import com.waz.utils.crypto.SecureRandom
 import com.waz.zms.R
-
-import scala.util.Random
 
 object Usernames {
   val MAX_LENGTH = 21
@@ -61,8 +60,8 @@ class Usernames()(implicit ui: UiModule) extends api.Usernames{
     case Some(c) =>
       val names = c.getResources.getStringArray(R.array.random_names)
       val adjectives = c.getResources.getStringArray(R.array.random_adjectives)
-      val namesIndex = Random.nextInt(names.length)
-      val adjectivesIndex = Random.nextInt(adjectives.length)
+      val namesIndex = SecureRandom.nextInt(names.length)
+      val adjectivesIndex = SecureRandom.nextInt(adjectives.length)
       (adjectives(adjectivesIndex) + names(namesIndex)).toLowerCase
   }
 }
