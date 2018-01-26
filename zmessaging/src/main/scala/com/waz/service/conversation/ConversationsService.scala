@@ -51,6 +51,7 @@ trait ConversationsService {
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
+  def isGroupConversation(convId: ConvId): Future[Boolean]
 }
 
 class ConversationsServiceImpl(context:         Context,
@@ -270,6 +271,13 @@ class ConversationsServiceImpl(context:         Context,
     _ <- membersStorage.remove(conv, users: _*)
     _ <- messages.removeLocalMemberJoinMessage(conv, users.toSet)
   } yield ()
+
+  def isGroupConversation(convId: ConvId): Future[Boolean] = {
+    for {
+      Some(conv) <- convsStorage.get(convId)
+      members <- membersStorage.getActiveUsers(convId)
+    } yield conv.convType == ConversationType.Group && !(conv.team.nonEmpty && members.contains(selfUserId) && members.size == 2)
+  }
 }
 
 object ConversationsService {
