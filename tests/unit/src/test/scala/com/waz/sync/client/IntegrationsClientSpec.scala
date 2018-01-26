@@ -80,14 +80,14 @@ class IntegrationsClientSpec extends AndroidFreeSpec {
       val res = result(searchIntegrations("collectionsbot"))
 
       res.size shouldEqual 1
-      res.head.name shouldEqual "collectionsbot"
+      res.keys.head.name shouldEqual "collectionsbot"
     }
 
     scenario("get Echo bots") {
       val res = result(searchIntegrations("Echo"))
 
       res.size shouldEqual 2
-      res.forall(_.name.startsWith("Echo")) shouldEqual true
+      res.keys.forall(_.name.startsWith("Echo")) shouldEqual true
     }
 
     scenario("get Echo bots - letter case important") {

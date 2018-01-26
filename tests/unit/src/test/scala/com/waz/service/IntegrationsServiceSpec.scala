@@ -18,12 +18,13 @@
 package com.waz.service
 
 import com.waz.model._
-import com.waz.service.conversation.ConversationsService
+import com.waz.service.assets.AssetService
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService}
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.sync.client.IntegrationsClient
 import com.waz.sync.handler.IntegrationsSyncHandlerImpl
 import com.waz.sync.queue.SyncScheduler
+import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.wrappers.URI
 
@@ -40,17 +41,19 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
   private var syncMap = Map[SyncId, Promise[SyncResult]]()
 
   val syncScheduler = mock[SyncScheduler]
+  val srs           = mock[SyncRequestService]
+  val convsUi       = mock[ConversationsUiService]
+  val convs         = mock[ConversationsContentUpdater]
+  val pipeline      = mock[EventPipeline]
+  val errors        = mock[ErrorsService]
+  val assets        = mock[AssetService]
+
   (syncScheduler.await(_: SyncId)).expects(*).anyNumberOfTimes().onCall( (sid: SyncId) => { syncMap(sid).future } )
-
-  val srs = mock[SyncRequestService]
   (srs.scheduler _).expects().anyNumberOfTimes().returning(syncScheduler)
+  (assets.updateAssets _).expects(*).anyNumberOfTimes().onCall((as: Seq[AssetData]) => Future.successful(as.toSet))
 
-  val pipeline = mock[EventPipeline]
-  val errors = mock[ErrorsService]
-
-  val service: IntegrationsService = new IntegrationsServiceImpl(sync, srs)
-
-  val handler = new IntegrationsSyncHandlerImpl(UserId(), client, service, pipeline, errors)
+  val service: IntegrationsService = new IntegrationsServiceImpl(Some(TeamId()), sync, srs, convsUi, convs)
+  val handler = new IntegrationsSyncHandlerImpl(UserId(), convs, assets, client, service, pipeline)
 
   (sync.syncProvider _).expects(*).anyNumberOfTimes().onCall((id: ProviderId) => Future {
     val sid = SyncId()
@@ -69,18 +72,19 @@ class IntegrationsServiceSpec extends AndroidFreeSpec {
     case None       => CancellableFuture.failed(new Exception(s"no provider with id $id"))
   })
 
-  (client.searchIntegrations _).expects(*).anyNumberOfTimes().onCall((startWith: String) => CancellableFuture.successful(Right(integrations.values.filter(_.name.startsWith(startWith)).toSeq)))
+  (client.searchIntegrations _).expects(*).anyNumberOfTimes().onCall { (startWith: String) =>
+    val integs = integrations.values.filter(_.name.startsWith(startWith)).map(_ -> Option.empty[AssetData]).toMap
+    CancellableFuture.successful(Right(integs))
+  }
 
   feature("integrations") {
     scenario("get all integrations") {
       val integrations = service.searchIntegrations("")
-
       result(integrations.head).size shouldEqual 3
     }
 
     scenario("get all integrations starting with 'Ech'") {
       val integrations = service.searchIntegrations("Ech")
-
       result(integrations.head).size shouldEqual 2
     }
   }
@@ -134,9 +138,9 @@ object IntegrationsServiceSpec {
     "collectionsbot",
     "collections bot short description",
     "Helps you fill your library",
-    Seq.empty[IntegrationAsset],
+    None,
     Seq("tutorial"),
-    true
+    enabled = true
   )
 
   val integration2 = IntegrationData(
@@ -145,9 +149,9 @@ object IntegrationsServiceSpec {
     "Echo",
     "echo",
     "Echo",
-    Seq.empty[IntegrationAsset],
+    None,
     Seq("tutorial"),
-    true
+    enabled = true
   )
 
   val integration3 = IntegrationData(
@@ -156,9 +160,9 @@ object IntegrationsServiceSpec {
     "Echo_stage",
     "echo",
     "blah",
-    Seq.empty[IntegrationAsset],
+    None,
     Seq("tutorial"),
-    true
+    enabled = true
   )
 
   val integrations = List(integration1, integration2, integration3).map(i => i.id -> i).toMap

@@ -49,9 +49,9 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
                               convs:        ConversationsContentUpdater) extends IntegrationsService {
   implicit val ctx = Threading.Background
 
-  private var integrationSearch = Map[String, SourceSignal[Seq[IntegrationData]]]()
-  private var providers         = Map[ProviderId, ProviderData]()
-  private var integrations      = Map[IntegrationId, IntegrationData]()
+  private var integrationSearch = Map.empty[String, SourceSignal[Seq[IntegrationData]]]
+  private var providers         = Map.empty[ProviderId, ProviderData]
+  private var integrations      = Map.empty[IntegrationId, IntegrationData]
 
   override def searchIntegrations(startWith: String) =
     integrationSearch.getOrElse(startWith, returning(Signal[Seq[IntegrationData]]()) { sig =>
@@ -67,32 +67,28 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
     if (providers.contains(pId)) Future.successful(providers(pId))
     else sync.syncProvider(pId).flatMap(syncRequests.scheduler.await).map(_ => providers(pId))
 
-  override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) = integrationSearch.get(name) match {
-    case Some(signal) =>
-      signal ! data
-      Future.successful({})
-    case None => Future.failed(new Exception(s"received sync data for unknown integrations name: $name"))
-  }
+  override def onIntegrationsSynced(name: String, data: Seq[IntegrationData]) =
+    integrationSearch.get(name) match {
+      case Some(signal) => Future.successful(signal ! data)
+      case None         => Future.failed(new Exception(s"received sync data for unknown integrations name: $name"))
+    }
 
-  override def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData) = {
-    integrations += iId -> data
-    Future.successful({})
-  }
+  override def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData) =
+    Future.successful(integrations += iId -> data)
 
-  override def onProviderSynced(id: ProviderId, data: ProviderData) = {
-    providers += id -> data
-    Future.successful({})
-  }
+  override def onProviderSynced(id: ProviderId, data: ProviderData) =
+    Future.successful(providers += id -> data)
 
   // pId here is redundant - we can take it from our 'integrations' map
-  override def addBotToConversation(cId: ConvId, pId: ProviderId, iId: IntegrationId) = (for {
-    syncId <- sync.postAddBot(cId, pId, iId)
-    result <- syncRequests.scheduler.await(syncId)
-  } yield result).map {
-    case SyncResult.Success => Right({})
-    case SyncResult.Failure(Some(error), _) => Left(error)
-    case _ => Left(internalError("Unknown error"))
-  }
+  override def addBotToConversation(cId: ConvId, pId: ProviderId, iId: IntegrationId) =
+    (for {
+      syncId <- sync.postAddBot(cId, pId, iId)
+      result <- syncRequests.scheduler.await(syncId)
+    } yield result).map {
+      case SyncResult.Success => Right({})
+      case SyncResult.Failure(Some(error), _) => Left(error)
+      case _ => Left(internalError("Unknown error"))
+    }
 
   override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) =
     for {
@@ -106,12 +102,13 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
         else Future.successful(Left(convRes.error.getOrElse(internalError(s"Failed to create conversation on backend: $conv"))))
     } yield res
 
-  override def removeBotFromConversation(cId: ConvId, botId: UserId) = (for {
-    syncId <- sync.postRemoveBot(cId, botId)
-    result <- syncRequests.scheduler.await(syncId)
-  } yield result).map {
-    case SyncResult.Success => Right({})
-    case SyncResult.Failure(Some(error), _) => Left(error)
-    case _ => Left(internalError("Unknown error"))
-  }
+  override def removeBotFromConversation(cId: ConvId, botId: UserId) =
+    (for {
+      syncId <- sync.postRemoveBot(cId, botId)
+      result <- syncRequests.scheduler.await(syncId)
+    } yield result).map {
+      case SyncResult.Success => Right({})
+      case SyncResult.Failure(Some(error), _) => Left(error)
+      case _ => Left(internalError("Unknown error"))
+    }
 }
