@@ -183,6 +183,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val openGraphClient    = wire[OpenGraphClient]
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
   lazy val handlesClient      = wire[HandlesClient]
+  lazy val integrationsClient = wire[IntegrationsClient]
 
   lazy val convsContent: ConversationsContentUpdaterImpl = wire[ConversationsContentUpdaterImpl]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
@@ -207,6 +208,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
   lazy val convsStats                                 = wire[ConversationsListStateServiceImpl]
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
+  lazy val integrations: IntegrationsService          = wire[IntegrationsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
   lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
   lazy val connection: ConnectionServiceImpl              = wire[ConnectionServiceImpl]
@@ -248,6 +250,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val clearedSync                                = wire[ClearedSyncHandler]
   lazy val openGraphSync                              = wire[OpenGraphSyncHandler]
   lazy val handlesSync                                = wire[HandlesSyncHandler]
+  lazy val integrationsSync: IntegrationsSyncHandler  = wire[IntegrationsSyncHandlerImpl]
 
   lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 

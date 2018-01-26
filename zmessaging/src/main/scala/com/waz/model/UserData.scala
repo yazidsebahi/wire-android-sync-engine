@@ -18,7 +18,6 @@
 package com.waz.model
 
 import java.util.Date
-import java.util.regex.Pattern.{CASE_INSENSITIVE, compile}
 
 import com.waz.api.Verification
 import com.waz.api.impl.AccentColor
@@ -51,7 +50,9 @@ case class UserData(
                      verified:              Verification          = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
                      deleted:               Boolean               = false,
                      availability:          Availability          = Availability.None,
-                     handle:                Option[Handle]
+                     handle:                Option[Handle],
+                     providerId:            Option[ProviderId]    = None,
+                     integrationId:         Option[IntegrationId] = None
                    ) {
 
   def isConnected = ConnectionStatus.isConnected(connection)
@@ -60,7 +61,7 @@ case class UserData(
   def isAcceptedOrPending = connection == ConnectionStatus.Accepted || connection == ConnectionStatus.PendingFromOther || connection == ConnectionStatus.PendingFromUser
   def isVerified = verified == Verification.VERIFIED
   def isAutoConnect = isConnected && ! isSelf && connectionMessage.isEmpty
-  lazy val isWireBot = handle.exists(h => UserData.botHandle.matcher(h.string).matches)
+  lazy val isWireBot = integrationId.nonEmpty
 
   def getDisplayName = if (displayName.isEmpty) name else displayName
 
@@ -76,7 +77,9 @@ case class UserData(
     handle = user.handle match {
       case Some(h) if !h.toString.isEmpty => Some(h)
       case _ => handle
-    }
+    },
+    providerId = user.service.map(_.provider),
+    integrationId = user.service.map(_.id)
   )
 
   def updated(user: UserSearchEntry): UserData = copy(
@@ -129,7 +132,6 @@ case class UserData(
 object UserData {
 
   lazy val Empty = UserData(UserId("EMPTY"), "")
-  val botHandle = compile("ottothebot|annathebot", CASE_INSENSITIVE)
 
   type ConnectionStatus = com.waz.api.User.ConnectionStatus
   object ConnectionStatus {
@@ -169,7 +171,7 @@ object UserData {
   def apply(user: UserInfo): UserData =
     UserData(user.id, None, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
       user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted,
-      handle = user.handle)
+      handle = user.handle, providerId = user.service.map(_.provider), integrationId = user.service.map(_.id))
 
   implicit lazy val Decoder: JsonDecoder[UserData] = new JsonDecoder[UserData] {
     import JsonDecoder._
@@ -179,7 +181,8 @@ object UserData {
       connection = ConnectionStatus('connection), connectionLastUpdated = new Date(decodeLong('connectionLastUpdated)), connectionMessage = decodeOptString('connectionMessage),
       conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation),
       syncTimestamp = decodeLong('syncTimestamp), 'displayName, Verification.valueOf('verified), deleted = 'deleted,
-      availability = Availability(decodeInt('activityStatus)), handle = decodeOptHandle('handle))
+      availability = Availability(decodeInt('activityStatus)), handle = decodeOptHandle('handle),
+      providerId = decodeOptId[ProviderId]('providerId), integrationId = decodeOptId[IntegrationId]('integrationId) )
   }
 
   implicit lazy val Encoder: JsonEncoder[UserData] = new JsonEncoder[UserData] {
@@ -203,6 +206,8 @@ object UserData {
       o.put("deleted", v.deleted)
       o.put("availability", v.availability.id)
       v.handle foreach(u => o.put("handle", u.string))
+      v.providerId.foreach { pId => o.put("providerId", pId.str) }
+      v.integrationId.foreach { iId => o.put("integrationId", iId.str) }
     }
   }
 
@@ -227,12 +232,19 @@ object UserData {
     val Deleted = bool('deleted)(_.deleted)
     val AvailabilityStatus = int[Availability]('availability, _.id, Availability.apply)(_.availability)
     val Handle = opt(handle('handle))(_.handle)
+    val ProviderId = opt(id[ProviderId]('provider_id))(_.providerId)
+    val IntegrationId = opt(id[IntegrationId]('integration_id))(_.integrationId)
 
     override val idCol = Id
-    override val table = Table("Users", Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle)
+    override val table = Table(
+      "Users", Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage,
+      Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle, ProviderId, IntegrationId
+    )
 
-    override def apply(implicit cursor: DBCursor): UserData =
-      new UserData(Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage, Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle)
+    override def apply(implicit cursor: DBCursor): UserData = new UserData(
+      Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage,
+      Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle, ProviderId, IntegrationId
+    )
 
     override def onCreate(db: DB): Unit = {
       super.onCreate(db)
@@ -290,7 +302,7 @@ object UserData {
       list(db.rawQuery(select + " " + handleCondition + teamCondition.map(qu => s" $qu").getOrElse(""), null)).toSet
     }
 
-    def findWireBots(implicit db: DB) = iterating(db.query(table.name, null, s"${Email.name} like 'welcome+%@wire.com' or ${Email.name} = 'welcome@wire.com' or ${Email.name} like 'anna+%@wire.com' or ${Email.name} = 'anna@wire.com'", null, null, null, null))
+    def findWireBots(implicit db: DB) = iterating(db.query(table.name, null, s"${IntegrationId.name} is not null", null, null, null, null))
 
     def findForTeams(teams: Set[TeamId])(implicit db: DB) = iterating(findInSet(TeamId, teams.map(Option(_))))
   }

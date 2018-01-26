@@ -15,19 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.api;
+package com.waz.model
 
-public enum ErrorType {
-    CANNOT_CREATE_GROUP_CONVERSATION_WITH_UNCONNECTED_USER,
-    CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION,
-    CANNOT_ADD_USER_TO_FULL_CONVERSATION,
-    CANNOT_CALL_CONVERSATION_WITH_TOO_MANY_MEMBERS,
-    CANNOT_ADD_USER_TO_FULL_CALL,
-    CANNOT_SEND_MESSAGE_TO_UNVERIFIED_CONVERSATION,
-    CANNOT_SEND_ASSET_TOO_LARGE,
-    CANNOT_SEND_ASSET_FILE_NOT_FOUND,
-    CANNOT_SEND_VIDEO,
-    PLAYBACK_FAILURE,
-    RECORDING_FAILURE,
-    BOT_REFUSES_TO_JOIN_CONVERSATION
-}
+case class IntegrationData(id:          IntegrationId   = IntegrationId(),
+                           provider:    ProviderId      = ProviderId(),
+                           name:        String          = "",
+                           summary:     String          = "",
+                           description: String          = "",
+                           asset:       Option[AssetId] = None,
+                           tags:        Seq[String]     = Seq.empty,
+                           enabled:     Boolean         = true)
+

@@ -23,7 +23,7 @@ import com.waz.content.{MembersStorage, MessagesStorage, SearchQueryCacheStorage
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{SearchQuery, _}
-import com.waz.service.conversation.ConversationsUiService
+import com.waz.service.conversation.{ConversationsService, ConversationsUiService}
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -57,17 +57,18 @@ case class SearchResults(topPeople: Option[IndexedSeq[UserData]], localResults: 
                         directoryResults.getOrElse(IndexedSeq.empty).flatMap(_.handle)
 }
 
-class UserSearchService(selfUserId: UserId,
-                        queryCache: SearchQueryCacheStorage,
-                        teamId: Option[TeamId],
-                        userService: UserService,
-                        usersStorage: UsersStorage,
-                        teamsService: TeamsService,
-                        membersStorage: MembersStorage,
-                        timeouts: Timeouts,
-                        sync: SyncServiceHandle,
-                        messages: MessagesStorage,
-                        convsUi: ConversationsUiService
+class UserSearchService(selfUserId:           UserId,
+                        queryCache:           SearchQueryCacheStorage,
+                        teamId:               Option[TeamId],
+                        userService:          UserService,
+                        usersStorage:         UsersStorage,
+                        teamsService:         TeamsService,
+                        membersStorage:       MembersStorage,
+                        timeouts:             Timeouts,
+                        sync:                 SyncServiceHandle,
+                        messages:             MessagesStorage,
+                        convsUi:              ConversationsUiService,
+                        conversationsService: ConversationsService
                        ) {
 
   import Threading.Implicits.Background
@@ -83,24 +84,30 @@ class UserSearchService(selfUserId: UserId,
 
     val topUsersSignal: Signal[IndexedSeq[UserData]] =
       if (searchState.shouldShowTopUsers(teamId.isDefined))
-        topPeople.map(_.filter(u => !excludedUsers.contains(u.id))).map(SeqMap(_)(_.id, identity).values)
+        topPeople.map(_.filter(u => !excludedUsers.contains(u.id) && !u.isWireBot)).map(SeqMap(_)(_.id, identity).values)
       else Signal.const(IndexedSeq.empty[UserData])
 
     val localSearchSignal = for {
       acceptedOrBlocked   <- userService.acceptedOrBlockedUsers
       members             <- searchTeamMembersForState(searchState)
       usersAlreadyInConv  <- searchConvMembersForState(searchState)
-    } yield mergeUsers(acceptedOrBlocked.values, members, excludedUsers ++ usersAlreadyInConv, searchState)
+    } yield mergeUsers(acceptedOrBlocked.values, members, excludedUsers ++ usersAlreadyInConv, searchState).filter(!_.isWireBot)
 
     val conversationsSignal: Signal[IndexedSeq[ConversationData]] =
       if (searchState.shouldShowGroupConversations)
         Signal.future(convsUi.findGroupConversations(SearchKey(searchState.filter), Int.MaxValue, handleOnly = searchState.isHandle))
           .map(_.filter(conv => teamId.forall(conv.team.contains)).distinct.toIndexedSeq)
+          .flatMap { convs =>
+            val gConvs = convs.map(c => Signal.future(conversationsService.isGroupConversation(c.id).map(c -> _).collect{
+              case (conv, true) => conv
+            }))
+            Signal.sequence(gConvs:_*).map(_.toIndexedSeq)
+          }
       else Signal.const(IndexedSeq.empty[ConversationData])
 
     val searchSignal: Signal[IndexedSeq[UserData]] =
       if (searchState.shouldShowDirectorySearch)
-        searchUserData(searchState.query).map(_.filter(u => !excludedUsers.contains(u.id)))
+        searchUserData(searchState.query).map(_.filter(u => !excludedUsers.contains(u.id) && !u.isWireBot))
       else Signal.const(IndexedSeq.empty[UserData])
 
     exactMatchUser ! None // reset the exact match to None on any query change

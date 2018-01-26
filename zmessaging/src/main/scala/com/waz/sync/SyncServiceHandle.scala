@@ -47,6 +47,11 @@ trait SyncServiceHandle {
   def syncConnectedUsers(): Future[SyncId]
   def syncConnections(dependsOn: Option[SyncId] = None): Future[SyncId]
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId]
+  def syncIntegrations(startWith: String): Future[SyncId]
+  def syncIntegration(id: ProviderId, iId: IntegrationId): Future[SyncId]
+  def syncProvider(id: ProviderId): Future[SyncId]
+  def postAddBot(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[SyncId]
+  def postRemoveBot(cId: ConvId, botId: UserId): Future[SyncId]
 
   def postSelfUser(info: UserInfo): Future[SyncId]
   def postSelfPicture(picture: Option[AssetId]): Future[SyncId]
@@ -79,6 +84,7 @@ trait SyncServiceHandle {
   def postClientLabel(id: ClientId, label: String): Future[SyncId]
   def syncClients(user: UserId): Future[SyncId]
   def syncClientsLocation(): Future[SyncId]
+
   def syncPreKeys(user: UserId, clients: Set[ClientId]): Future[SyncId]
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId]
 
@@ -111,6 +117,9 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def syncConnectedUsers() = addRequest(SyncConnectedUsers)
   def syncConnections(dependsOn: Option[SyncId]) = addRequest(SyncConnections, dependsOn = dependsOn.toSeq)
   def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority) = addRequest(SyncRichMedia(id), priority = priority)
+  def syncIntegrations(startWith: String) = addRequest(SyncIntegrations(startWith))
+  def syncIntegration(pId: ProviderId, iId: IntegrationId) = addRequest(SyncIntegration(pId, iId))
+  def syncProvider(pId: ProviderId) = addRequest(SyncProvider(pId))
 
   def postSelfUser(info: UserInfo) = addRequest(PostSelf(info))
   def postSelfPicture(picture: Option[AssetId]) = addRequest(PostSelfPicture(picture))
@@ -135,6 +144,8 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
   def postCleared(id: ConvId, time: Instant) = addRequest(PostCleared(id, time))
   def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = addRequest(PostOpenGraphMeta(conv, msg, time), priority = Priority.Low)
   def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType): Future[SyncId] = addRequest(PostReceipt(conv, message, user, tpe), priority = Priority.Optional)
+  def postAddBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = addRequest(PostAddBot(cId, pId, iId))
+  def postRemoveBot(cId: ConvId, botId: UserId) = addRequest(PostRemoveBot(cId, botId))
 
   def registerPush(token: PushToken) = addRequest(RegisterPushToken(token), priority = Priority.High, forceRetry = true)
   def deletePushToken(token: PushToken) = addRequest(DeletePushToken(token), priority = Priority.Low)
@@ -187,6 +198,9 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case SyncSearchQuery(query)                => zms.usersearchSync.syncSearchQuery(query)
     case ExactMatchHandle(query)               => zms.usersearchSync.exactMatchHandle(query)
     case SyncRichMedia(messageId)              => zms.richmediaSync.syncRichMedia(messageId)
+    case SyncIntegrations(startWith)           => zms.integrationsSync.syncIntegrations(startWith)
+    case SyncIntegration(pId, iId)             => zms.integrationsSync.syncIntegration(pId, iId)
+    case SyncProvider(pId)                     => zms.integrationsSync.syncProvider(pId)
     case DeletePushToken(token)                => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
@@ -205,6 +219,8 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostTeamInvitations(is)               => zms.invitationSync.postTeamInvitations(is)
     case RegisterPushToken(token)              => zms.gcmSync.registerPushToken(token)
     case PostLiking(convId, liking)            => zms.reactionsSync.postReaction(convId, liking)
+    case PostAddBot(cId, pId, iId)             => zms.integrationsSync.addBot(cId, pId, iId)
+    case PostRemoveBot(cId, botId)             => zms.integrationsSync.removeBot(cId, botId)
     case PostDeleted(convId, msgId)            => zms.messagesSync.postDeleted(convId, msgId)
     case PostLastRead(convId, time)            => zms.lastReadSync.postLastRead(convId, time)
     case PostOpenGraphMeta(conv, msg, time)    => zms.openGraphSync.postMessageMeta(conv, msg, time)

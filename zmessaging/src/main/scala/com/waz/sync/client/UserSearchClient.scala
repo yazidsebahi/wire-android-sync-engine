@@ -38,6 +38,7 @@ class UserSearchClient(netClient: ZNetClient) {
 
   def getContacts(query: SearchQuery, limit: Int = DefaultLimit): ErrorOrResponse[Seq[UserSearchEntry]] = {
     debug(s"graphSearch('$query', $limit)")
+
     query match {
       case Recommended(prefix)       => extractUsers(s"Recommended($prefix)", Request.Get(contactsQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
       case RecommendedHandle(prefix) => extractUsers(s"RecommendedHandle($prefix)", Request.Get(contactsQuery(prefix, limit, Relation.Third.id, useDirectory = true)))
@@ -45,6 +46,7 @@ class UserSearchClient(netClient: ZNetClient) {
         warn("A request to /search/top was made - this is now only handled locally")
         CancellableFuture.successful(Right(Seq.empty))
     }
+
   }
 
   def contactsQuery(query: String, limit: Int, level: Int, useDirectory: Boolean): String =
@@ -76,13 +78,13 @@ class UserSearchClient(netClient: ZNetClient) {
         Left(ErrorResponse.InternalError)
     }
 
-    netClient(Request.Get(UserSearchClient.handlesPath + "/" + Handle.stripSymbol(handle.string))) map (handling404s orElse ZNetClient.errorHandling("exactMatchHandle"))
+    netClient(Request.Get(UserSearchClient.HandlesPath + "/" + Handle.stripSymbol(handle.string))) map (handling404s orElse ZNetClient.errorHandling("exactMatchHandle"))
   }
 }
 
 object UserSearchClient {
   val ContactsPath = "/search/contacts"
-  val handlesPath = "/users/handles"
+  val HandlesPath = "/users/handles"
 
   val DefaultLimit = 10
 
