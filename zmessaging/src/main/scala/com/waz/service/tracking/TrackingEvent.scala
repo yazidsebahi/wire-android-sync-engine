@@ -22,7 +22,7 @@ import java.lang.Math.max
 import com.waz.ZLog.LogTag
 import com.waz.api.{EphemeralExpiration, NetworkMode}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConversationData, Mime}
+import com.waz.model.{ConversationData, IntegrationId, Mime}
 import com.waz.service.push.ReceivedPushData
 import com.waz.utils.returning
 import org.json
@@ -49,7 +49,7 @@ case class ContributionEvent(action: ContributionEvent.Action, conversationType:
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("action", action.name)
     o.put("conversation_type", if (conversationType == ConversationType.Group) "group" else "one_to_one")
-    o.put("with_bot", withBot)
+    o.put("with_service", withBot)
     o.put("is_ephemeral", ephExp != EphemeralExpiration.NONE) //TODO is this flag necessary?
     o.put("ephemeral_expiration", ephExp.duration().toSeconds.toString)
   })
@@ -71,8 +71,8 @@ object ContributionEvent {
     lazy val Location = Action("location")
   }
 
-  def apply(action: Action, conv: ConversationData, withOtto: Boolean): ContributionEvent =
-    ContributionEvent(action, conv.convType, conv.ephemeral, withOtto)
+  def apply(action: Action, conv: ConversationData, withBot: Boolean): ContributionEvent =
+    ContributionEvent(action, conv.convType, conv.ephemeral, withBot)
 
   def fromMime(mime: Mime) = {
     import Action._
@@ -156,4 +156,27 @@ object LoggedOutEvent {
 case class AVSMetricsEvent(jsonStr: String) extends TrackingEvent {
   override val name = "calling.avs_metrics_ended_call"
   override val props = Try(new json.JSONObject(jsonStr)).toOption
+}
+
+case class IntegrationAdded(integrationId: IntegrationId, convSize: Int, botsNumber: Int, method: IntegrationAdded.Method) extends TrackingEvent {
+  override val name: String = "integration.added_service"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("service_id", integrationId.str)
+    o.put("conversation_size", convSize)
+    o.put("services_size", botsNumber)
+    o.put("method", method.str)
+  })
+}
+
+object IntegrationAdded {
+  case class Method(str: String)
+  object ConversationDetails extends Method("conversation_details")
+  object StartUi extends Method("start_ui")
+}
+
+case class IntegrationRemoved(integrationId: IntegrationId) extends TrackingEvent {
+  override val name: String = "integration.removed_service"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("service_id", integrationId.str)
+  })
 }
