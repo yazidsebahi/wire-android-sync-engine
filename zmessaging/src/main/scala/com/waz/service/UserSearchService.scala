@@ -57,17 +57,17 @@ case class SearchResults(topPeople: Option[IndexedSeq[UserData]], localResults: 
                         directoryResults.getOrElse(IndexedSeq.empty).flatMap(_.handle)
 }
 
-class UserSearchService(selfUserId: UserId,
-                        queryCache: SearchQueryCacheStorage,
-                        teamId: Option[TeamId],
-                        userService: UserService,
-                        usersStorage: UsersStorage,
-                        teamsService: TeamsService,
-                        membersStorage: MembersStorage,
-                        timeouts: Timeouts,
-                        sync: SyncServiceHandle,
-                        messages: MessagesStorage,
-                        convsUi: ConversationsUiService,
+class UserSearchService(selfUserId:           UserId,
+                        queryCache:           SearchQueryCacheStorage,
+                        teamId:               Option[TeamId],
+                        userService:          UserService,
+                        usersStorage:         UsersStorage,
+                        teamsService:         TeamsService,
+                        membersStorage:       MembersStorage,
+                        timeouts:             Timeouts,
+                        sync:                 SyncServiceHandle,
+                        messages:             MessagesStorage,
+                        convsUi:              ConversationsUiService,
                         conversationsService: ConversationsService
                        ) {
 

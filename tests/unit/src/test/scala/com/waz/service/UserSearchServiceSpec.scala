@@ -21,7 +21,7 @@ import com.waz.api.User.ConnectionStatus
 import com.waz.content._
 import com.waz.model.SearchQuery.Recommended
 import com.waz.model._
-import com.waz.service.conversation.ConversationsUiService
+import com.waz.service.conversation.{ConversationsService, ConversationsUiService}
 import com.waz.service.teams.TeamsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
@@ -48,6 +48,7 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
   val sync              = mock[SyncServiceHandle]
   val messagesStorage   = mock[MessagesStorage]
   val convsUi           = mock[ConversationsUiService]
+  val convs             = mock[ConversationsService]
   val timeouts          = new Timeouts
 
   lazy val users = Map(
@@ -206,6 +207,6 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
     }
   }
 
-  def getService = new UserSearchService(selfId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsUi)
+  def getService = new UserSearchService(selfId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsUi, convs)
 
 }
