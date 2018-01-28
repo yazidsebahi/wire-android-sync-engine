@@ -29,6 +29,7 @@ import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.{RichFiniteDuration, RichInstant}
 import org.threeten.bp.{Duration, Instant}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.collection.Map
 import scala.concurrent.duration._

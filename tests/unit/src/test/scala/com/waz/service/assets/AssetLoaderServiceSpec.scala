@@ -30,6 +30,7 @@ import com.waz.service.downloads.AssetLoader.DownloadFailedException
 import com.waz.service.downloads.AssetLoaderService.{MaxConcurrentLoadRequests, MaxRetriesErrorMsg}
 import com.waz.service.downloads.{AssetLoader, AssetLoaderService}
 import com.waz.specs.AndroidFreeSpec
+import com.waz.ZLog.ImplicitTag._
 import com.waz.testutils.TestBackoff
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}

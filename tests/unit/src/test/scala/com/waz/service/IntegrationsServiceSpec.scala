@@ -26,6 +26,7 @@ import com.waz.sync.handler.IntegrationsSyncHandlerImpl
 import com.waz.sync.queue.SyncScheduler
 import com.waz.sync.{SyncRequestService, SyncResult, SyncServiceHandle}
 import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.ZLog.ImplicitTag._
 import com.waz.utils.wrappers.URI
 
 import scala.concurrent.{Future, Promise}

@@ -21,6 +21,7 @@ import android.net.Uri
 import com.koushikdutta.async.http.WebSocket
 import com.waz.api.NetworkMode
 import com.waz.api.impl.ErrorResponse
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId

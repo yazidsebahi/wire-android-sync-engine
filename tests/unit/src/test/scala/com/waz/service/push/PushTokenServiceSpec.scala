@@ -32,6 +32,7 @@ import com.waz.threading.Threading
 import com.waz.utils.events.Signal
 import com.waz.utils.returning
 import com.waz.utils.wrappers.GoogleApi
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Future
 

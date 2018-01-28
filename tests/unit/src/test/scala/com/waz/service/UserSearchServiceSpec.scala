@@ -28,6 +28,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.utils.Managed
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.wrappers.DB
+import com.waz.ZLog.ImplicitTag._
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut

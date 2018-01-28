@@ -25,6 +25,7 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.EventStream
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Future
 

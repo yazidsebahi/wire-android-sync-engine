@@ -31,6 +31,7 @@ import com.waz.sync.queue.{ConvLock, SyncContentUpdaterImpl}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Context, DB}
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Future
 

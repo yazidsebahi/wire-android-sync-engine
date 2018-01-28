@@ -36,6 +36,7 @@ import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, Serialized}
+import com.waz.ZLog.ImplicitTag._
 import org.json.JSONObject
 import org.threeten.bp.Instant
 

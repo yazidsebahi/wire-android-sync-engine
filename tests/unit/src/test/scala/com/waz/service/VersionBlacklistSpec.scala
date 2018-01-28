@@ -25,6 +25,7 @@ import com.waz.testutils.Matchers._
 import com.waz.testutils.{DefaultPatienceConfig, MockGlobalModule}
 import com.waz.threading.CancellableFuture
 import org.scalatest.concurrent.ScalaFutures
+import com.waz.ZLog.ImplicitTag._
 import org.scalatest._
 
 import scala.concurrent.Await

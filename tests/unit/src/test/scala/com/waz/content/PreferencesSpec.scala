@@ -21,6 +21,7 @@ import com.waz.content.Preferences.PrefKey
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
 import com.waz.threading.Threading
+import com.waz.ZLog.ImplicitTag._
 
 class PreferencesSpec extends AndroidFreeSpec {
 
