@@ -111,8 +111,9 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
 
   final def currentValue(implicit logTag: LogTag): Option[A] = {
     if (!wired) {
-      warn(s"Accessing value of unwired signal: $this, autowiring will be disabled, returning value: $value")(logTag)
+      val prev = value
       disableAutowiring()
+      warn(s"Accessing value of unwired signal: $this, autowiring has been disabled, value was: $prev, is now: $value")(logTag)
     }
     value
   }
@@ -133,7 +134,7 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
     override protected def onUnwire(): Unit = self.unsubscribe(this)
   }
 
-  def head: Future[A] = value match {
+  def head(implicit logTag: LogTag): Future[A] = currentValue match {
     case Some(v) => CancellableFuture successful v
     case None =>
       val p = Promise[A]()

@@ -29,6 +29,7 @@ import com.waz.sync.queue.ConvLock
 import com.waz.threading.Threading
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._

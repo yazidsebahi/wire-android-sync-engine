@@ -522,7 +522,7 @@ class DeviceActor(val deviceName: String,
     case AwaitSyncCompleted =>
       api.zmessaging flatMap {
         case None =>  successful(Failed("no zmessaging"))
-        case Some(zms) => zms.syncContent.syncJobs.filter(_.isEmpty).head map { _ => Successful }
+        case Some(zms) => zms.syncContent.syncJobs.filter(_.isEmpty).head("actors").map { _ => Successful }
       }
 
     case ResetQueueStats =>

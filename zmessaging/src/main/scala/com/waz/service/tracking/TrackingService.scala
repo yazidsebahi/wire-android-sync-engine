@@ -18,6 +18,7 @@
 package com.waz.service.tracking
 
 import com.waz.ZLog.LogTag
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.EphemeralExpiration
 import com.waz.content.MembersStorage
 import com.waz.model.ConversationData.ConversationType
@@ -74,7 +75,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
 
   override def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit = {
     val cause = rootCause(e)
-    track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e)), accountId)
+    track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e))(tag), accountId)
   }
 
   override def crash(e: Throwable): Unit = {
@@ -132,7 +133,7 @@ object TrackingService {
   }
 
   def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit =
-    ZMessaging.globalModule.map(_.trackingService.exception(e, description, accountId))
+    ZMessaging.globalModule.map(_.trackingService.exception(e, description, accountId)(tag))
 
   def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit =
     ZMessaging.globalModule.map(_.trackingService.track(event, accountId))
