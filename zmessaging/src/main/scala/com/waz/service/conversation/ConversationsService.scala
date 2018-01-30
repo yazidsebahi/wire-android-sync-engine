@@ -52,6 +52,7 @@ trait ConversationsService {
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
+  def isWithBot(convId: ConvId): Future[Boolean]
 }
 
 class ConversationsServiceImpl(context:         Context,
@@ -272,11 +273,18 @@ class ConversationsServiceImpl(context:         Context,
     _ <- messages.removeLocalMemberJoinMessage(conv, users.toSet)
   } yield ()
 
-  def isGroupConversation(convId: ConvId): Future[Boolean] = {
-    for {
-      Some(conv) <- convsStorage.get(convId)
-      members <- membersStorage.getActiveUsers(convId)
-    } yield conv.convType == ConversationType.Group && !(conv.team.nonEmpty && members.contains(selfUserId) && members.size == 2)
+  def isGroupConversation(convId: ConvId) = for {
+    Some(conv) <- convsStorage.get(convId)
+    members <- membersStorage.getActiveUsers(convId)
+  } yield conv.convType == ConversationType.Group && !(conv.team.nonEmpty && members.contains(selfUserId) && members.size == 2)
+
+  def isWithBot(convId: ConvId) = for {
+    Some(conv) <- convsStorage.get(convId)
+    membersIds <- membersStorage.getActiveUsers(convId)
+    users <- usersStorage.getAll(membersIds)
+  } yield users.exists {
+    case None => false
+    case Some(u) => u.isWireBot
   }
 }
 
