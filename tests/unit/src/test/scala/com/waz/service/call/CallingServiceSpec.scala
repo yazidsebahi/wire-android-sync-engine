@@ -26,7 +26,7 @@ import com.waz.model.{UserId, _}
 import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
 import com.waz.service.call.Avs.WCall
 import com.waz.service.call.CallInfo.CallState._
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{MediaManagerService, NetworkModeService}
@@ -54,6 +54,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   val media          = mock[MediaManagerService]
   val network        = mock[NetworkModeService]
   val convs          = mock[ConversationsContentUpdater]
+  val convsService   = mock[ConversationsService]
   val callLogService = mock[CallLogService]
   val messages       = mock[MessagesService]
 
@@ -551,7 +552,10 @@ class CallingServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
 
     (avs.registerAccount _).expects(*).once().returning(Future.successful(wCall))
-    val service = new CallingService(self, clientId, account1Id, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null, prefs, tracking)
+    val service = new CallingService(
+      self, clientId, account1Id, context, avs, convs, convsService, members, null,
+      flows, messages, media, null, callLogService, network, null, null, prefs, tracking
+    )
     result(service.wCall)
     service
   }

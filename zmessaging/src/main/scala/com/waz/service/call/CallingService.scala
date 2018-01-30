@@ -24,7 +24,6 @@ import com.waz.ZLog._
 import com.waz.api.VideoSendState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.{MembersStorage, UserPreferences}
-import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service.ZMessaging.clock
@@ -32,7 +31,7 @@ import com.waz.service._
 import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Interrupted, StillOngoing}
 import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState, WCall}
 import com.waz.service.call.CallInfo.CallState._
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
 import com.waz.service.tracking.{AVSMetricsEvent, TrackingService}
@@ -47,7 +46,6 @@ import com.waz.znet._
 import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.Future
-import scala.util.Try
 import scala.util.control.NonFatal
 
 class GlobalCallingService() {
@@ -77,6 +75,7 @@ class CallingService(val selfUserId:      UserId,
                      context:             Context,
                      avs:                 Avs,
                      convs:               ConversationsContentUpdater,
+                     convsService:        ConversationsService,
                      members:             MembersStorage,
                      otrSyncHandler:      OtrSyncHandler,
                      flowManagerService:  FlowManagerService,
@@ -111,12 +110,14 @@ class CallingService(val selfUserId:      UserId,
     }
   }
 
-  Option(ZMessaging.currentAccounts).foreach( _.loggedInAccounts.map(_.map(_.id)).map(_.contains(account)) {
-    case false =>
-      verbose(s"Account $account logged out, unregistering from AVS")
-      wCall.map(avs.unregisterAccount)
-    case true =>
-  } (EventContext.Global))
+  Option(ZMessaging.currentAccounts).foreach(
+    _.loggedInAccounts.map(_.map(_.id)).map(_.contains(account)) {
+      case false =>
+        verbose(s"Account $account logged out, unregistering from AVS")
+        wCall.map(avs.unregisterAccount)
+      case true =>
+    }(EventContext.Global)
+  )
 
   callProfile.onChanged { p =>
     verbose(s"Call profile changed. active call: ${p.activeCall}, non active calls: ${p.nonActiveCalls}")
@@ -144,7 +145,7 @@ class CallingService(val selfUserId:      UserId,
       Set(userId),
       isVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-      videoSendState = if(videoCall) PREVIEW else DONT_SEND)
+      videoSendState = if (videoCall) PREVIEW else DONT_SEND)
 
     callProfile.mutate { p =>
       val newActive = p.activeId match {
@@ -163,7 +164,7 @@ class CallingService(val selfUserId:      UserId,
     updateActiveCall {
       case call if call.convId == conv.id => call.copy(state = SelfJoining)
       case call => warn("Other side answered non-active call, ignoring"); call
-    } ("onOtherSideAnsweredCall")
+    }("onOtherSideAnsweredCall")
   }
 
   def onMissedCall(convId: RConvId, time: Instant, userId: UserId, videoCall: Boolean) = {
@@ -179,7 +180,7 @@ class CallingService(val selfUserId:      UserId,
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
       val others = c.others + userId - selfUserId
       c.copy(state = SelfConnected, estabTime = Some(clock.instant), others = others, maxParticipants = others.size + 1)
-    } ("onEstablishedCall")
+    }("onEstablishedCall")
   }
 
   def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { (_, conv) =>
@@ -190,7 +191,7 @@ class CallingService(val selfUserId:      UserId,
         case Some(call) if call.convId == conv.id =>
           if (reason != AnsweredElsewhere) call.state match {
             case SelfCalling =>
-            //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
+              //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
               verbose("Call timed out out the other didn't answer - add a \"you called\" message")
               messagesService.addMissedCallMessage(conv.id, selfUserId, clock.instant)
             case OtherCalling | SelfJoining if reason == StillOngoing => // do nothing - call is still ongoing in the background
@@ -243,7 +244,7 @@ class CallingService(val selfUserId:      UserId,
     verbose(s"onBitRateStateChanged enabled=$enabled")
     updateActiveCall { c =>
       c.copy(isCbrEnabled = enabled)
-    } ("onBitRateStateChanged")
+    }("onBitRateStateChanged")
   }
 
   def onVideoReceiveStateChanged(videoReceiveState: VideoReceiveState) = Serialized.apply(self) {
@@ -282,11 +283,11 @@ class CallingService(val selfUserId:      UserId,
 
     for {
       profile <- callProfile.head
-      isGroup <- isGroup(conv)
-      others  <-
-        if (isGroup) Future.successful(Set(selfUserId))
-        else if (conv.team.isEmpty) Future.successful(Set(UserId(conv.id.str)))
-        else members.getByConvs(Set(conv.id)).map(_.map(_.userId).filter(_ != selfUserId).toSet)
+      isGroup <- convsService.isGroupConversation(convId)
+      others <-
+      if (isGroup) Future.successful(Set(selfUserId))
+      else if (conv.team.isEmpty) Future.successful(Set(UserId(conv.id.str)))
+      else members.getByConvs(Set(conv.id)).map(_.map(_.userId).filter(_ != selfUserId).toSet)
       vbr <- userPrefs.preference(UserPreferences.VBREnabled).apply()
     } yield {
       profile.activeCall match {
@@ -339,7 +340,7 @@ class CallingService(val selfUserId:      UserId,
       //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
       if (call.state == OtherCalling) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
       call.copy(hangupRequested = true)
-    } ("endCall")
+    }("endCall")
   }
 
   def continueDegradedCall(): Unit = currentCall.head.map {
@@ -377,7 +378,7 @@ class CallingService(val selfUserId:      UserId,
         updateActiveCall { c =>
           avs.endCall(w, conv.remoteId)
           c.copy(closedReason = Interrupted)
-        } ("onInterrupted")
+        }("onInterrupted")
       }
     }
   }
@@ -387,7 +388,7 @@ class CallingService(val selfUserId:      UserId,
     updateActiveCall { c =>
       f.setMute(muted)
       c.copy(muted = muted)
-    } ("setCallMuted")
+    }("setCallMuted")
   }
 
   def setVideoSendActive(convId: ConvId, send: Boolean): Unit = {
@@ -470,14 +471,6 @@ class CallingService(val selfUserId:      UserId,
       })
     }
   }
-
-  /**
-    * Team conversations with only 1 other user should be considered 1:1 conversations for the sake of calling.
-    */
-  private def isGroup(conv: ConversationData) =
-    if (conv.team.isDefined) members.getByConvs(Set(conv.id)).map(_.map(_.userId)).map(_.size > 2)
-    else Future.successful(conv.convType == ConversationType.Group)
-
 }
 
 object CallingService {
