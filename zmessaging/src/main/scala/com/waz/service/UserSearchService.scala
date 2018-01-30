@@ -98,10 +98,8 @@ class UserSearchService(selfUserId:           UserId,
         Signal.future(convsUi.findGroupConversations(SearchKey(searchState.filter), Int.MaxValue, handleOnly = searchState.isHandle))
           .map(_.filter(conv => teamId.forall(conv.team.contains)).distinct.toIndexedSeq)
           .flatMap { convs =>
-            val gConvs = convs.map(c => Signal.future(conversationsService.isGroupConversation(c.id).map(c -> _).collect{
-              case (conv, true) => conv
-            }))
-            Signal.sequence(gConvs:_*).map(_.toIndexedSeq)
+            val gConvs = convs.map(c => conversationsService.isGroupConversation(c.id).map(g => if (g) Some(c) else None))
+            Signal.future(Future.sequence(gConvs).map(_.flatten))
           }
       else Signal.const(IndexedSeq.empty[ConversationData])
 
