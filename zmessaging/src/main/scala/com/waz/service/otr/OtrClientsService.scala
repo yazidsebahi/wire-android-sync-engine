@@ -44,8 +44,7 @@ class OtrClientsService(accountId: AccountId,
                         userPrefs: UserPreferences,
                         storage:   OtrClientsStorage,
                         sync:      SyncServiceHandle,
-                        accounts:  AccountsService,
-                        updater:   VerificationStateUpdater) {
+                        accounts:  AccountsService) {
 
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global

@@ -44,7 +44,6 @@ class MessageEventProcessor(selfUserId:          UserId,
                             assets:              AssetService,
                             msgsService:         MessagesService,
                             convs:               ConversationsContentUpdater,
-                            verificationUpdater: VerificationStateUpdater,
                             otr:                 OtrService) {
 
   import MessageEventProcessor._
@@ -59,9 +58,6 @@ class MessageEventProcessor(selfUserId:          UserId,
     }
   }
 
-  verificationUpdater.updateProcessor = { update =>
-    addMessagesAfterVerificationUpdate(update.convUpdates, update.convUsers, update.changes) map { _ => Unit }
-  }
 
   private[service] def processEvents(conv: ConversationData, events: Seq[MessageEvent]): Future[Set[MessageData]] = {
     val toProcess = events.filter {
@@ -268,7 +264,7 @@ class MessageEventProcessor(selfUserId:          UserId,
   private def updateLastReadFromOwnMessages(convId: ConvId, msgs: Seq[MessageData]) =
     msgs.reverseIterator.find(_.userId == selfUserId).fold2(Future.successful(None), msg => convs.updateConversationLastRead(convId, msg.time))
 
-  private def addMessagesAfterVerificationUpdate(updates: Seq[(ConversationData, ConversationData)], convUsers: Map[ConvId, Seq[UserData]], changes: Map[UserId, VerificationChange]) =
+  def addMessagesAfterVerificationUpdate(updates: Seq[(ConversationData, ConversationData)], convUsers: Map[ConvId, Seq[UserData]], changes: Map[UserId, VerificationChange]) =
     Future.traverse(updates) {
       case (prev, up) if up.verified == Verification.VERIFIED => msgsService.addOtrVerifiedMessage(up.id)
       case (prev, up) if prev.verified == Verification.VERIFIED =>

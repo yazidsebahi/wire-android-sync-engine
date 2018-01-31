@@ -35,7 +35,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 trait SyncServiceHandle {
-  def syncUsersIfNotEmpty(ids: Seq[UserId]): Future[Unit] = if (ids.nonEmpty) syncUsers(ids: _*).map(_ => ())(Threading.Background) else Future.successful(())
+  def syncUsersIfNotEmpty(ids: Seq[UserId]): Future[Option[SyncId]] = if (ids.nonEmpty) syncUsers(ids: _*).map(Some(_))(Threading.Background) else Future.successful(None)
 
   def syncSearchQuery(query: SearchQuery): Future[SyncId]
   def exactMatchHandle(handle: Handle): Future[SyncId]
