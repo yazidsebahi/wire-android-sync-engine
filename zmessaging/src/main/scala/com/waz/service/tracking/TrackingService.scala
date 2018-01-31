@@ -111,7 +111,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         userIds <- z.membersStorage.activeMembers(convId).head
         users   <- z.users.getUsers(userIds.toSeq)
         (bots, people) = users.partition(_.isWireBot)
-      } yield track(IntegrationAdded(integrationId, people.size, bots.size, method))
+      } yield track(IntegrationAdded(integrationId, people.size, bots.filterNot(_.integrationId.contains(integrationId)).size + 1, method))
     case None =>
   }
 
