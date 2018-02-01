@@ -30,7 +30,7 @@ import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
 import com.waz.service.tracking.TrackingService
-import com.waz.sync.SyncServiceHandle
+import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -69,7 +69,8 @@ class ConversationsServiceImpl(context:         Context,
                                msgContent:      MessagesContentUpdater,
                                userPrefs:       UserPreferences,
                                eventScheduler:  => EventScheduler,
-                               tracking:        TrackingService) extends ConversationsService {
+                               tracking:        TrackingService,
+                               syncReqService:  SyncRequestService) extends ConversationsService {
 
   private implicit val ev = EventContext.Global
   import Threading.Implicits.Background
@@ -130,7 +131,8 @@ class ConversationsServiceImpl(context:         Context,
       def ensureConvActive() = content.setConvActive(conv.id, active = true).map(_.map(_._2).filter(joined))
 
       for {
-        _ <- users.syncNotExistingOrExpired(userIds)
+        syncId <- users.syncNotExistingOrExpired(userIds)
+        _ <- syncId.fold(Future.successful(()))(sId => syncReqService.scheduler.await(sId).map(_ => ()))
         _ <- membersStorage.add(conv.id, userIds: _*)
         _ <- if (userIds.contains(selfUserId)) ensureConvActive() else successful(None)
       } yield ()

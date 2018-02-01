@@ -50,7 +50,7 @@ trait UserService {
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
   def getUsers(ids: Seq[UserId]): Future[Seq[UserData]]
   def getUser(id: UserId): Future[Option[UserData]]
-  def syncIfNeeded(users: UserData*): Future[Unit]
+  def syncIfNeeded(users: UserData*): Future[Option[SyncId]]
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
   def acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
   def updateAvailability(availability: Availability): Future[Option[UserData]]
@@ -227,15 +227,15 @@ class UserServiceImpl(override val selfUserId: UserId,
   /**
    * Schedules user data sync if user with given id doesn't exist or has old timestamp.
    */
-  def syncNotExistingOrExpired(users: Seq[UserId]): Future[Unit] = usersStorage.listAll(users) flatMap { found =>
+  def syncNotExistingOrExpired(users: Seq[UserId]): Future[Option[SyncId]] = usersStorage.listAll(users) flatMap { found =>
     val toSync = (users.toSet -- found.map(_.id)).toSeq
-    if (toSync.nonEmpty) sync.syncUsers(toSync: _*) flatMap (_ => syncIfNeeded(found: _*)) else syncIfNeeded(found: _*)
+    if (toSync.nonEmpty) sync.syncUsers(toSync: _*) flatMap (sId => syncIfNeeded(found: _*).map(_.orElse(Some(sId)))) else syncIfNeeded(found: _*)
   }
 
   /**
     * Schedules user data sync if stored user timestamp is older than last slow sync timestamp.
    */
-  override def syncIfNeeded(users: UserData*): Future[Unit] =
+  override def syncIfNeeded(users: UserData*): Future[Option[SyncId]] =
     lastSlowSyncTimestamp() flatMap {
       //TODO: Remove empty picture check when not needed anymore
       case Some(time) => sync.syncUsersIfNotEmpty(users.filter(user => user.syncTimestamp < time || user.picture.isEmpty).map(_.id))

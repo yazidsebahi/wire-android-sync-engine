@@ -114,7 +114,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val syncContent          = userModule.syncContent
   lazy val syncRequests         = userModule.syncRequests
   lazy val otrClientsSync       = userModule.clientsSync
-  lazy val verificationUpdater  = userModule.verificationUpdater
 
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)
@@ -210,8 +209,9 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
   lazy val integrations: IntegrationsService          = wire[IntegrationsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
+  lazy val verificationUpdater                        = wire[VerificationStateUpdater]
   lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
-  lazy val connection: ConnectionServiceImpl              = wire[ConnectionServiceImpl]
+  lazy val connection: ConnectionServiceImpl          = wire[ConnectionServiceImpl]
   lazy val calling: CallingService                    = wire[CallingService]
   lazy val contacts: ContactsServiceImpl              = wire[ContactsServiceImpl]
   lazy val typing: TypingService                      = wire[TypingService]
@@ -304,6 +304,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
     recordAndPlay
 
     messagesIndexStorage
+
+    verificationUpdater
 
     reporting.addStateReporter { pw =>
       Future {
