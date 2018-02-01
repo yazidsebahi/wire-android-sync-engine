@@ -295,7 +295,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
       if (retry == 0) baseName else s"${retry}_$baseName"
 
     def getTargetFile(dir: File): Option[File] = {
-      val baseName = asset.name.getOrElse("wire_downloaded_file." + asset.mime.extension).replace("/", "") // XXX: should get default file name form resources
+      val baseName = asset.name.getOrElse("downloaded_file." + asset.mime.extension).replace("/", "") // XXX: should get default file name form resources
       // prepend a number to the name to get unique file name,
       // will try sequential numbers from 0 - 10 first, and then fallback to random ones
       // will give up after 100 tries
@@ -336,10 +336,8 @@ class AssetServiceImpl(storage:         AssetsStorage,
 
 object AssetService {
 
-  val SaveImageDirName = "Wire"
-
   lazy val SaveImageDir = {
-    val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator + SaveImageDirName
+    val path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + File.separator
     val dir = new File(path)
     dir.mkdirs()
     dir
@@ -349,7 +347,7 @@ object AssetService {
 
   def sanitizeFileName(name: String) = name.replace(' ', '_').replaceAll("[^\\w]", "")
 
-  def saveImageFile(mime: Mime) = new File(SaveImageDir,  s"wire_${System.currentTimeMillis}.${mime.extension}")
+  def saveImageFile(mime: Mime) = new File(SaveImageDir,  s"${System.currentTimeMillis}.${mime.extension}")
 
   sealed trait BitmapResult
   object BitmapResult {
