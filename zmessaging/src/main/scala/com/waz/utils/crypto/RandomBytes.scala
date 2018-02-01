@@ -17,13 +17,13 @@
  */
 package com.waz.utils.crypto
 
-import com.waz.ZLog._
+import com.waz.ZLog.{warn, _}
 import com.waz.ZLog.ImplicitTag._
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 class RandomBytes {
-  RandomBytes.ensureLibraryLoaded()
+  RandomBytes.loadLibrary
 
   /**
     * Generates random byte array using libsodium
@@ -33,8 +33,8 @@ class RandomBytes {
   def apply(count: Int) : Array[Byte] = {
     val buffer = Array.ofDim[Byte](count)
 
-    Try(randomBytes(buffer, count)).toOption match {
-      case Some(true) => // woop woop, all good
+    RandomBytes.loadLibrary match {
+      case Success(_) => randomBytes(buffer, count)
       case _ =>
         warn(s"Libsodium failed to generate $count random bytes. Falling back to SecureRandom")
         SecureRandom.nextBytes(buffer)
@@ -43,16 +43,14 @@ class RandomBytes {
   }
 
   @native
-  protected def randomBytes(buffer: Array[Byte], count: Int) : Boolean
+  protected def randomBytes(buffer: Array[Byte], count: Int) : Unit
 }
 
 object RandomBytes {
 
-  private val loadLibrary = Try {
+  private lazy val loadLibrary = Try {
     System.loadLibrary("sodium")
     System.loadLibrary("randombytes")
   }
-
-  private def ensureLibraryLoaded() = loadLibrary
 
 }
