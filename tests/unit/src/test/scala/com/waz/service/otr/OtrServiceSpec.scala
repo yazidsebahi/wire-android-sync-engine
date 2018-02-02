@@ -112,7 +112,7 @@ import scala.util.Random
     var syncCheckRequests = Seq.empty[FiniteDuration]
 
     lazy val zms = new MockZMessaging() {
-      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(AccountId(), selfUserId, Signal.const(Some(clientId)), otrClient, userPrefs, otrClientsStorage, sync, null, verificationUpdater) {
+      override lazy val otrClientsService: OtrClientsService = new OtrClientsService(AccountId(), selfUserId, Signal.const(Some(clientId)), otrClient, userPrefs, otrClientsStorage, sync, null) {
         override def requestSyncIfNeeded(retryInterval: Timeout): Future[Unit] =
           Future successful { syncCheckRequests = syncCheckRequests :+ retryInterval }
       }
