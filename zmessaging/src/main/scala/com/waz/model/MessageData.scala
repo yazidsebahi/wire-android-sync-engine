@@ -180,7 +180,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
     import scala.collection.JavaConverters._
 
     def mentionsMap(js: JSONObject): Map[UserId, String] =
-      js.keys().asInstanceOf[java.util.Iterator[String]].asScala.map(key => UserId(key) -> js.getString(key)).toMap
+      js.keys().asScala.map(key => UserId(key) -> js.getString(key)).toMap
 
     override def apply(implicit js: JSONObject): MessageContent = {
       val tpe = ContentTypeCodec.decode('type)

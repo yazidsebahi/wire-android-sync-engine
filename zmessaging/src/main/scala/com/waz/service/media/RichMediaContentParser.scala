@@ -24,7 +24,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Message.Part
 import com.waz.model.MessageContent
-import com.waz.sync.client.{SoundCloudClient, SpotifyClient, YouTubeClient}
+import com.waz.sync.client.{SoundCloudClient, YouTubeClient}
 import com.waz.utils.LoggedTry
 import com.waz.utils.wrappers.URI
 
@@ -38,8 +38,7 @@ object RichMediaContentParser {
   def findMatches(content: String, weblinkEnabled: Boolean = false) = {
 
     val knownDomains = (YouTubeClient.domainNames.map(_ -> YOUTUBE) ++
-      SoundCloudClient.domainNames.map(_ -> SOUNDCLOUD) ++
-      SpotifyClient.domainNames.map(_ -> SPOTIFY)
+      SoundCloudClient.domainNames.map(_ -> SOUNDCLOUD)
       ).toMap
 
     def validate(content: String, uri: URI, tpe: Part.Type): Boolean = tpe match {
