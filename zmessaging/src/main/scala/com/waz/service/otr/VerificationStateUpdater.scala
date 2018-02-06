@@ -53,6 +53,10 @@ class VerificationStateUpdater(selfUserId:        UserId,
     msgEventProcessor.addMessagesAfterVerificationUpdate(update.convUpdates, update.convUsers, update.changes) map { _ => Unit }
   }
 
+  clientsStorage.getClients(selfUserId).map{ clients =>
+    onClientsChanged(Map(selfUserId -> (UserClients(selfUserId, clients.map(c => c.id -> c).toMap), ClientAdded)))
+  }
+
   clientsStorage.onAdded { ucs =>
     verbose(s"clientsStorage.onAdded: $ucs")
     onClientsChanged(ucs.map { uc => uc.user -> (uc, ClientAdded)} (breakOut))
