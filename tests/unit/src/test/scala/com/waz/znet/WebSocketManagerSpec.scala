@@ -25,6 +25,7 @@ import android.net.Uri
 import com.waz.RobolectricUtils
 import com.waz.model.AccountId
 import com.waz.testutils.Slow
+import com.waz.threading.CancellableFuture
 import com.waz.utils.{ExponentialBackoff, returning}
 import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.Response.Status
@@ -56,6 +57,7 @@ import scala.util.Try
   var authResult: Either[Status, Token] = Right(Token("test_token", "Bearer"))
   val auth = new AccessTokenProvider {
     override def currentToken() = Future.successful(authResult)
+    override def checkLoggedIn(token: Option[Token]): CancellableFuture[Either[Status, Token]] = CancellableFuture.successful(authResult)
   }
 
   val port = 9982
