@@ -21,10 +21,6 @@ import com.waz.api.ConversationsList.VerificationStateCallback
 
 object ConversationsList {
 
-  trait ConversationCallback {
-    def onConversationsFound(conversations: java.lang.Iterable[IConversation]): Unit
-  }
-
   trait SearchableConversationsList extends CoreList[IConversation] {
     def getConversationIndex(id: String): Int
   }
@@ -43,8 +39,6 @@ object ConversationsList {
 trait ConversationsList extends CoreList[IConversation] with EventualReadiness {
   @Deprecated // remove when not used anymore
   def getConversation(id: String): IConversation
-
-  def createGroupConversation(users: Seq[User], callback: ConversationsList.ConversationCallback): Unit
 
   def getSyncIndicator: SyncIndicator
   def getState: ConversationsList.ConversationsListState

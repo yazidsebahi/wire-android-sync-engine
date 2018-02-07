@@ -27,11 +27,11 @@ import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-case class ConversationData(id:                   ConvId,
-                            remoteId:             RConvId,
-                            name:                 Option[String],
-                            creator:              UserId,
-                            convType:             ConversationType,
+case class ConversationData(id:                   ConvId              = ConvId(),
+                            remoteId:             RConvId             = RConvId(),
+                            name:                 Option[String]      = None,
+                            creator:              UserId              = UserId(),
+                            convType:             ConversationType    = ConversationType.Group,
                             team:                 Option[TeamId]      = None,
                             isManaged:            Option[Boolean]     = None,
                             lastEventTime:        Instant             = Instant.now(),

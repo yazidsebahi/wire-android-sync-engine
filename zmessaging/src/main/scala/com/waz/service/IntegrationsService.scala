@@ -92,7 +92,7 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
 
   override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) =
     for {
-      (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), Seq.empty, teamId)
+      (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), None, Seq.empty, teamId)
       convRes        <- syncRequests.scheduler.await(syncId)
       res <-
         if (convRes.isSuccess) addBotToConversation(conv.id, pId, iId).map {

@@ -30,12 +30,11 @@ import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
 import com.waz.service.tracking.TrackingService
-import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.sync.client.ConversationsClient.ConversationResponse
+import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.EventContext
-import org.threeten.bp.Instant
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
@@ -68,6 +67,7 @@ class ConversationsServiceImpl(context:         Context,
                                messages:        MessagesServiceImpl,
                                msgContent:      MessagesContentUpdater,
                                userPrefs:       UserPreferences,
+                               requests:        SyncRequestService,
                                eventScheduler:  => EventScheduler,
                                tracking:        TrackingService,
                                syncReqService:  SyncRequestService) extends ConversationsService {
@@ -102,7 +102,10 @@ class ConversationsServiceImpl(context:         Context,
   def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0) = ev match {
     case CreateConversationEvent(rConvId, time, from, data) =>
       updateConversations(selfUserId, Seq(data)) flatMap { case (_, created) => Future.traverse(created) (created =>
-        messages.addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
+        for {
+          _ <- created.name.fold(Future.successful({}))(n => messages.addRenameConversationMessage(created.id, from, n, needsSyncing = false).map(_ => {}))
+          _ <- messages.addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
+        } yield {}
       )}
 
     case ConversationEvent(rConvId, _, _) =>
@@ -115,7 +118,13 @@ class ConversationsServiceImpl(context:         Context,
           ev match {
             case MemberJoinEvent(_, time, from, members, _) if from != selfUserId =>
               // this happens when we are added to group conversation
-              createGroupConversationOnMemberJoin(rConvId, time.instant, from, members)
+              for {
+                conv <- convsStorage.insert(ConversationData(ConvId(), rConvId, None, from, ConversationType.Group, lastEventTime = time.instant))
+                ms   <- membersStorage.add(conv.id, from +: members: _*)
+                _    <- messages.addMemberJoinMessage(conv.id, from, members.toSet)
+                _    <- sync.syncConversations(Set(conv.id))
+              } yield {}
+
             case _ =>
               warn(s"No conversation data found for event: $ev on try: $retryCount")
               content.processConvWithRemoteId(rConvId, retryAsync = true) { processUpdateEvent(_, ev) }
@@ -156,17 +165,6 @@ class ConversationsServiceImpl(context:         Context,
       }
 
     case _ => successful(())
-  }
-
-  private def createGroupConversationOnMemberJoin(remoteId: RConvId, time: Instant, from: UserId, members: Seq[UserId]) = {
-    convsStorage.insert(ConversationData(ConvId(), remoteId, None, from, ConversationType.Group, lastEventTime = time)) flatMap { conv =>
-      membersStorage.add(conv.id, from +: members: _*) flatMap { ms =>
-        messages.addMemberJoinMessage(conv.id, from, members.toSet) map { _ =>
-          sync.syncConversations(Set(conv.id))
-          conv
-        }
-      }
-    }
   }
 
   def getSelfConversation = {

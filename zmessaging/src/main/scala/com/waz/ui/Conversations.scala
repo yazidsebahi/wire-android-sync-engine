@@ -58,10 +58,6 @@ class Conversations(implicit ui: UiModule, ec: EventContext) {
   def setMuted(id: ConvId, muted: Boolean): Unit = zms(_.convsUi.setConversationMuted(id, muted))
   def clear(id: ConvId): Unit = Serialized("Conversations", id) { zms(_.convsUi.clearConversation(id)) }
 
-  def createGroupConversation(users: Seq[User], localId: ConvId = ConvId()) =
-    zms.flatMapFuture(_.convsUi.createGroupConversation(localId, users.map(u => UserId(u.getId))))
-
-
   def onVerificationStateChange(callback: VerificationStateCallback) = {
 
     def changeStream(zMessaging: ZMessaging) =
