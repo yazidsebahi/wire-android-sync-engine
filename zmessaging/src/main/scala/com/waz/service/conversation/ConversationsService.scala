@@ -273,10 +273,14 @@ class ConversationsServiceImpl(context:         Context,
     _ <- messages.removeLocalMemberJoinMessage(conv, users.toSet)
   } yield ()
 
-  def isGroupConversation(convId: ConvId) = for {
-    Some(conv) <- convsStorage.get(convId)
-    members <- membersStorage.getActiveUsers(convId)
-  } yield conv.convType == ConversationType.Group && !(conv.team.nonEmpty && members.contains(selfUserId) && members.size == 2)
+  def isGroupConversation(convId: ConvId) =
+    for {
+      Some(conv) <- convsStorage.get(convId)
+      res <-
+        if (conv.convType != ConversationType.Group) Future.successful(false)
+        else if (conv.name.isDefined || conv.team.isEmpty) Future.successful(true)
+        else membersStorage.getActiveUsers(convId).map(ms => !(ms.contains(selfUserId) && ms.size == 2))
+    } yield res
 
   def isWithBot(convId: ConvId) = for {
     Some(conv) <- convsStorage.get(convId)
