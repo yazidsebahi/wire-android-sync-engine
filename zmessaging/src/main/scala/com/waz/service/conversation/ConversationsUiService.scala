@@ -371,7 +371,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       debug(s"created: $conv")
       for {
         _      <- name.fold(Future.successful({}))(n => messages.addRenameConversationMessage(conv.id, self, n, needsSyncing = false).map(_ => {}))
-        _      <- messages.addMemberJoinMessage(conv.id, self, members.toSet, firstMessage = true)
+        _      <- if (members.nonEmpty) messages.addMemberJoinMessage(conv.id, self, members.toSet, firstMessage = true) else Future.successful({})
         syncId <- sync.postConversation(id, members, conv.name, teamId)
       } yield (conv, syncId)
     }
