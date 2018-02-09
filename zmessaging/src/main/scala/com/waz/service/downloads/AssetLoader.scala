@@ -173,6 +173,11 @@ class AssetLoaderImpl(context:         Context,
     videoTranscoder(uri, entry.cacheFile, callback).flatMap { _ =>
       verbose(s"loaded video from $cacheKey, resulting file size: ${entry.length}")
       CancellableFuture.lift(cache.move(cacheKey, entry, Mime.Video.MP4, if (mime == Mime.Video.MP4) name else name.map(_ + ".mp4"), cacheLocation = Some(cache.cacheDir)))
+        .map { entry =>
+          //TODO AN-5742 Use CacheService to store temp vids instead of handling them manually
+          entry.file.foreach { file => if(file.getName.startsWith("VID_")) file.delete() }
+          entry
+        }
     }.recoverWith {
       case ex: CancelException => CancellableFuture.failed(ex)
       case ex: Exception =>
