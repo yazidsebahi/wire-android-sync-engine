@@ -42,10 +42,17 @@ object ConversationsSyncHandler {
   val PostMembersLimit = 64
 }
 
-class ConversationsSyncHandler(assetSync: AssetSyncHandler,
-                               userService: UserServiceImpl, messagesStorage: MessagesStorageImpl, messagesService: MessagesServiceImpl,
-                               convService: ConversationsService, convs: ConversationsContentUpdaterImpl, convEvents: ConversationOrderEventsService,
-                               errorsService: ErrorsService, assetService: AssetService, conversationsClient: ConversationsClient, genericMessages: GenericMessageService) {
+class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
+                               userService:         UserServiceImpl,
+                               messagesStorage:     MessagesStorageImpl,
+                               messagesService:     MessagesServiceImpl,
+                               convService:         ConversationsService,
+                               convs:               ConversationsContentUpdaterImpl,
+                               convEvents:          ConversationOrderEventsService,
+                               errorsService:       ErrorsService,
+                               assetService:        AssetService,
+                               conversationsClient: ConversationsClient,
+                               genericMessages:     GenericMessageService) {
 
   import Threading.Implicits.Background
   import com.waz.sync.handler.ConversationsSyncHandler._

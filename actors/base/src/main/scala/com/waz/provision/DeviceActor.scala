@@ -223,7 +223,8 @@ class DeviceActor(val deviceName: String,
       }
 
     case CreateGroupConversation(users@_*) =>
-      zmessaging.convsUi.createGroupConversation(ConvId(), users) map { _ => Successful }
+//      zmessaging.convsUi.createGroupConversation(ConvId(), users) map { _ => Successful }
+      Future.successful(Failed)
 
     case ClearConversation(remoteId) =>
       whenConversationExists(remoteId) { conv =>

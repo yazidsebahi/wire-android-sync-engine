@@ -20,7 +20,7 @@ package com.waz.service.teams
 import com.waz.content.{ConversationStorage, MembersStorage}
 import com.waz.model.ConversationData.ConversationType.Group
 import com.waz.model.{ConversationMemberData, _}
-import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsUiService, ConversationsUiServiceImpl}
+import com.waz.service.conversation._
 import com.waz.service.messages.MessagesService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
@@ -39,54 +39,41 @@ class TeamConversationSpec extends AndroidFreeSpec {
 
   feature("Creating team conversations") {
 
-    scenario("Create 1:1 conversation within a team with no existing conversations between the two members should create new conversation") {
-      val newConv = ConvId()
-      val otherUser = UserId()
-      val team = TeamId()
 
-      println(s"$self, other: $otherUser")
+    scenario("Creating a group conversation with a defined name and only one other member should NOT return the existing conversation with that member, but return a new group instead") {
+      val oneToOneConv = ConvId("oneToOne")
+      val newConv = ConvId("new")
 
-      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq.empty[ConversationMemberData]))
-      (members.getByConvs _).expects(Set.empty[ConvId]).returning(Future.successful(IndexedSeq.empty[ConversationMemberData]))
+      val otherUser = UserId("otherUser")
 
-      (convsStorage.getAll _).expects(Seq.empty[ConvId]).once().returning(Future.successful(Seq.empty[Option[ConversationData]]))
+      val team = TeamId("team")
+      val name = Some("Conv")
 
-      (convsContent.createConversationWithMembers _).expects(newConv, *, Group, self, Seq(otherUser), false, Some(team)).once().returning(Future.successful(ConversationData.Empty))
+      (members.getByUsers _).expects(*).never()
+      (members.getByConvs _).expects(*).never()
+      (convsStorage.getAll _).expects(*).never()
+
+      //should always create a new group
+      (convsContent.createConversationWithMembers _).expects(newConv, *, Group, self, Seq(otherUser), name, false, Some(team)).once().returning {
+        Future.successful(ConversationData(
+          id            = newConv,
+          name          = name,
+          creator       = self,
+          team          = Some(team)
+        ))
+      }
       (sync.postConversation _).expects(newConv, Seq(otherUser), *, Some(team)).once().returning(Future.successful(SyncId()))
-      (messages.addMemberJoinMessage _).expects(*, *, *, *).once().returning(Future.successful(None))
 
-      result(initService.createGroupConversation(newConv, Seq(otherUser), Some(team)))
+      (messages.addRenameConversationMessage _).expects(newConv, self, name.get, false).once().returning(Future.successful(None))
+      (messages.addMemberJoinMessage _).expects(newConv, self, Set(otherUser), true).once().returning(Future.successful(None))
+
+      result(initService.createGroupConversation(newConv, name, Seq(otherUser), Some(team)))
     }
 
-    scenario("Create 1:1 conversation within a team with existing group conversation between the two members should create new conversation") {
-      val newConv = ConvId()
+    scenario("Create 1:1 conversation within a team with existing 1:1 conversation between the two members should return existing conversation, if no name is specified") {
       val otherUser = UserId()
       val team = TeamId()
 
-      val groupConvId = ConvId()
-
-      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(otherUser, groupConvId)
-      )))
-
-      (members.getByConvs _).expects(Set(groupConvId)).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(self,      groupConvId),
-        ConversationMemberData(otherUser, groupConvId),
-        ConversationMemberData(UserId(), groupConvId) //some other user, else not a group conv in team context
-      )))
-
-      (convsStorage.getAll _).expects(Seq.empty[ConvId]).once().returning(Future.successful(Seq.empty[Option[ConversationData]]))
-
-      (convsContent.createConversationWithMembers _).expects(newConv, *, Group, self, Seq(otherUser), false, Some(team)).once().returning(Future.successful(ConversationData.Empty))
-      (sync.postConversation _).expects(newConv, Seq(otherUser), *, Some(team)).once().returning(Future.successful(SyncId()))
-      (messages.addMemberJoinMessage _).expects(*, *, *, *).once().returning(Future.successful(None))
-
-      result(initService.createGroupConversation(newConv, Seq(otherUser), Some(team)))
-    }
-
-    scenario("Create 1:1 conversation within a team with existing 1:1 conversation between the two members should return existing conversation") {
-      val otherUser = UserId()
-      val team = TeamId()
 
       val existingConv = ConversationData(ConvId(), RConvId(), Some(""), self, Group, Some(team))
 
@@ -101,7 +88,7 @@ class TeamConversationSpec extends AndroidFreeSpec {
 
       (convsStorage.getAll _).expects(Seq(existingConv.id)).once().returning(Future.successful(Seq(Some(existingConv))))
 
-      result(initService.createGroupConversation(ConvId(), Seq(otherUser), Some(team))) shouldEqual existingConv
+      result(initService.createGroupConversation(ConvId(), None, Seq(otherUser), Some(team))) shouldEqual existingConv
     }
   }
 

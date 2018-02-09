@@ -18,23 +18,19 @@
 package com.waz.api.impl
 
 import android.net.Uri
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.ConversationsList.{ConversationCallback, VerificationStateCallback}
+import com.waz.api.ConversationsList.VerificationStateCallback
+import com.waz.api.IConversation
 import com.waz.api.impl.ConversationsListState.Data
 import com.waz.api.impl.conversation.BaseConversationsList
-import com.waz.api.IConversation
 import com.waz.content.Uris
 import com.waz.content.Uris.SyncIndicatorUri
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.sync.SyncCommand
 import com.waz.model.{ConvId, ConversationData}
-import com.waz.threading.Threading
 import com.waz.ui._
-import com.waz.utils.RichFuture
-
-import scala.collection.JavaConverters._
 
 class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList with BaseConversationsList {
   import ConversationsList._
@@ -50,11 +46,6 @@ class ConversationsList(implicit val ui: UiModule) extends api.ConversationsList
     else ui.cached(EstablishedArchivedUri, new SearchableConversationsList(conversations, EstablishedArchivedListFilter))
 
   override protected val conversations: Conversations = ui.convs
-
-  override def createGroupConversation(users: Seq[api.User], callback: ConversationCallback): Unit =
-    conversations.createGroupConversation(users) .map { conv =>
-      callback.onConversationsFound(Seq(conversations.getConversation(conv).asInstanceOf[IConversation]).asJava)
-    } (Threading.Ui) .recoverWithLog()
 
   override def getConversation(id: String): IConversation = conversations.convById(ConvId(id))
 

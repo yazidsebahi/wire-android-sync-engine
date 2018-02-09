@@ -55,7 +55,7 @@ trait MessagesService {
   def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false): Future[MessageData]
   def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
   def addMemberLeaveMessage(convId: ConvId, selfUserId: UserId, user: UserId): Future[Any]
-  def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String): Future[Option[MessageData]]
+  def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String, needsSyncing: Boolean = true): Future[Option[MessageData]]
 
   def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
   def addOtrVerifiedMessage(convId: ConvId): Future[Option[MessageData]]
@@ -178,10 +178,11 @@ class MessagesServiceImpl(selfUserId: UserId,
     updater.addLocalMessage(MessageData(mid, convId, tpe, selfUserId, protos = Seq(GenericMessage(mid.uid, Asset(asset)))))
   }
 
-  override def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String) = {
+  override def addRenameConversationMessage(convId: ConvId, from: UserId, name: String, needsSyncing: Boolean = true) = {
     def update(msg: MessageData) = msg.copy(name = Some(name))
-    def create = MessageData(MessageId(), convId, Message.Type.RENAME, selfUserId, name = Some(name))
-    updater.updateOrCreateLocalMessage(convId, Message.Type.RENAME, update, create)
+    def create = MessageData(MessageId(), convId, Message.Type.RENAME, from, name = Some(name))
+    if (needsSyncing) updater.updateOrCreateLocalMessage(convId, Message.Type.RENAME, update, create)
+    else updater.addLocalMessage(create, state = Message.Status.DELIVERED).map(Some(_))
   }
 
   override def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false) = {

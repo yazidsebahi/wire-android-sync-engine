@@ -345,9 +345,9 @@ object UserPreferences {
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
+  lazy val ShowShareContacts        = PrefKey[Boolean]       ("show_share_contacts", customDefault = true) //whether to ask for permission or not
   lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
   lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
-
   lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_always", customDefault = true)
 
   lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")

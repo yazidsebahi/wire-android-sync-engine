@@ -47,16 +47,16 @@ trait ConversationsContentUpdater {
   def setConvActive(id: ConvId, active: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
-  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false, teamId: Option[TeamId] = None): Future[ConversationData]
+  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], name: Option[String] = None, hidden: Boolean = false, teamId: Option[TeamId] = None): Future[ConversationData]
   def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
 }
 
-class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl,
-                                      users: UserServiceImpl,
-                                      membersStorage: MembersStorageImpl,
+class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
+                                      users:           UserServiceImpl,
+                                      membersStorage:  MembersStorageImpl,
                                       messagesStorage: => MessagesStorageImpl,
-                                      tracking: TrackingService) extends ConversationsContentUpdater {
+                                      tracking:        TrackingService) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationContentUpdater")
@@ -137,14 +137,14 @@ class ConversationsContentUpdaterImpl(val storage: ConversationStorageImpl,
 
   override def setConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
 
-  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], hidden: Boolean = false, teamId: Option[TeamId] = None) =
+  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], name: Option[String] = None, hidden: Boolean = false, teamId: Option[TeamId] = None) =
     for {
       user <- users.getUsers(members)
       conv <- storage.insert(
         ConversationData(
           convId,
           remoteId,
-          name          = None,
+          name          = name,
           creator       = selfUserId,
           convType      = convType,
           generatedName = NameUpdater.generatedName(convType)(user),
