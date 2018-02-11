@@ -31,7 +31,7 @@ import com.waz.service.call._
 import com.waz.service.conversation._
 import com.waz.service.downloads.{AssetLoader, AssetLoaderImpl}
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader, ImageLoaderImpl}
-import com.waz.service.invitations.InvitationService
+import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
@@ -212,7 +212,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val calling: CallingService                    = wire[CallingService]
   lazy val contacts: ContactsServiceImpl              = wire[ContactsServiceImpl]
   lazy val typing: TypingService                      = wire[TypingService]
-  lazy val invitations                                = wire[InvitationService]
+  lazy val invitations                                = wire[InvitationServiceImpl]
   lazy val richmedia                                  = wire[RichMediaService]
   lazy val giphy                                      = wire[GiphyService]
   lazy val youtubeMedia                               = wire[YouTubeMediaService]
