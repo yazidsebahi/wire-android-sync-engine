@@ -22,15 +22,14 @@ import com.waz.api.User.ConnectionStatus
 import com.waz.content._
 import com.waz.model.SearchQuery.Recommended
 import com.waz.model._
-import com.waz.service.ContactsServiceImpl.UnifiedContacts
 import com.waz.service.conversation.{ConversationsService, ConversationsUiService}
 import com.waz.service.invitations.InvitationService
 import com.waz.service.teams.TeamsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
-import com.waz.utils.{BiRelation, Managed}
-import com.waz.utils.events.{EventContext, Signal, SourceSignal}
+import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.wrappers.DB
+import com.waz.utils.{BiRelation, Managed}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut

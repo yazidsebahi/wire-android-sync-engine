@@ -91,7 +91,7 @@ class UserSearchService(selfUserId:           UserId,
   private val exactMatchUser = new SourceSignal[Option[UserData]]()
   private val signalMap = mutable.HashMap[SearchQuery, Signal[IndexedSeq[UserData]]]()
 
-  def searchLocal(filter: Filter = "", toConv: Option[ConvId] = None): Signal[IndexedSeq[UserData]] = {
+  def searchLocal(filter: Filter = "", toConv: Option[ConvId] = None, showBlockedUsers: Boolean = false): Signal[IndexedSeq[UserData]] = {
     val isHandle = Handle.isHandle(filter)
     val symbolStripped = if (isHandle) Handle.stripSymbol(filter) else filter
     for {
@@ -101,15 +101,17 @@ class UserSearchService(selfUserId:           UserId,
       }
       exc <- toConv.fold(Signal.const(Set.empty[UserId]))(membersStorage.activeMembers).map(_ + selfUserId)
     } yield {
+      val users =
+        if (filter.nonEmpty) connected.filter(
+          connectedUsersPredicate(
+            searchTerm         = filter,
+            filteredIds        = exc.map(_.str),
+            alsoSearchByEmail  = true,
+            showBlockedUsers   = showBlockedUsers,
+            searchByHandleOnly = isHandle))
+        else connected
 
-      val users = if (filter.isEmpty) connected.filter(connectedUsersPredicate(
-        filter,
-        exc.map(_.str),
-        alsoSearchByEmail = true,
-        showBlockedUsers = true,
-        searchByHandleOnly = isHandle)) else connected
-
-      val includedIds = (users.map(_.id).toSet ++ members.map(_.id)).filterNot(id => id == selfUserId || exc.contains(id))
+      val includedIds = (users.map(_.id).toSet ++ members.map(_.id)).diff(exc)
       sortUsers((connected ++ members).filter(u => includedIds.contains(u.id)).toIndexedSeq.filter(!_.isWireBot), filter, isHandle, symbolStripped)
     }
   }
@@ -207,7 +209,7 @@ class UserSearchService(selfUserId:           UserId,
 
     for {
       top   <- topUsers
-      local <- searchLocal(filter, toConv)
+      local <- searchLocal(filter, toConv, showBlockedUsers = true)
       convs <- conversations
       dir   <- directorySearch
       ab    <- abContacts
@@ -326,5 +328,5 @@ object UserSearchService {
   type Filter = String
 
   val MinCommonConnections = 4
-  val MaxTopPeople = 6
+  val MaxTopPeople = 10
 }
