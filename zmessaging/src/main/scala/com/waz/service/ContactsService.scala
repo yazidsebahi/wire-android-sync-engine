@@ -38,6 +38,7 @@ import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao,
 import com.waz.model._
 import com.waz.permissions.PermissionsService
 import com.waz.service.AccountsService.InForeground
+import com.waz.service.ContactsServiceImpl.UnifiedContacts
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils.Locales.{currentLocaleOrdering, sortWithCurrentLocale}
@@ -56,6 +57,7 @@ import scala.util.control.NoStackTrace
 trait ContactsService {
   def contactsOnWire: Signal[BiRelation[UserId, ContactId]]
   def addContactsOnWire(rels: Traversable[(UserId, ContactId)]): Future[Unit]
+  def unifiedContacts: Signal[UnifiedContacts]
 }
 
 class ContactsServiceImpl(context:        Context,
@@ -164,7 +166,7 @@ class ContactsServiceImpl(context:        Context,
     phoneNumbersCache.clear()
   }
 
-  def unifiedContacts(): Signal[UnifiedContacts] =
+  lazy val unifiedContacts =
     Signal(contactsSignal.map(_.filter(_._2.hasProperName)), acceptedOrPendingUsers, contactsOnWireSignal, contactsUpdater) flatMap { case (contacts, acceptedOrPending, (onWire, onWireUsers), _) =>
       Signal.future(Future {
         val start = nanoNow
@@ -447,6 +449,8 @@ object ContactsServiceImpl {
   val InitialContactsBatchSize = 101
 
   case class UnifiedContacts(contacts: GenMap[ContactId, Contact], users: Map[UserId, UserData], sorted: Vector[Either[UserId, ContactId]], groupedByInitial: SeqMap[String, IndexedSeq[Int]], topContactsOnWire: TopContactsOnWire)
+
+  lazy val EmptyContacts = UnifiedContacts(GenMap.empty, Map.empty, Vector.empty, SeqMap.empty, TopContactsOnWire(Vector.empty, 0))
 
   case class TopContactsOnWire(contacts: Vector[ContactId], totalCount: Int)
 

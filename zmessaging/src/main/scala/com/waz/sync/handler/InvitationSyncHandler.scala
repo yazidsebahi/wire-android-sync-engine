@@ -22,7 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
 import com.waz.model.{Invitation, TeamInvitation}
 import com.waz.service.UserServiceImpl
-import com.waz.service.invitations.InvitationService
+import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.sync.SyncResult
 import com.waz.sync.SyncResult.Failure
 import com.waz.sync.client.{ConnectionsClient, InvitationClient}
@@ -31,7 +31,7 @@ import com.waz.znet.Response.Status
 
 import scala.concurrent.Future
 
-class InvitationSyncHandler(invitationService: InvitationService, userService: UserServiceImpl, userSync: UsersSyncHandler, client: InvitationClient, connections: ConnectionsClient) {
+class InvitationSyncHandler(invitationService: InvitationServiceImpl, userService: UserServiceImpl, userSync: UsersSyncHandler, client: InvitationClient, connections: ConnectionsClient) {
   import Threading.Implicits.Background
 
   def postInvitation(i: Invitation): Future[SyncResult] =
