@@ -24,6 +24,7 @@ import com.waz.api.{EphemeralExpiration, NetworkMode}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConversationData, IntegrationId, Mime}
 import com.waz.service.push.ReceivedPushData
+import com.waz.service.tracking.IntegrationAdded.Method
 import com.waz.utils.returning
 import org.json
 import org.json.JSONObject
@@ -159,7 +160,7 @@ case class AVSMetricsEvent(jsonStr: String) extends TrackingEvent {
 }
 
 case class IntegrationAdded(integrationId: IntegrationId, convSize: Int, botsNumber: Int, method: IntegrationAdded.Method) extends TrackingEvent {
-  override val name: String = "integration.added_service"
+  override val name = "integration.added_service"
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("service_id", integrationId.str)
     o.put("conversation_size", convSize)
@@ -175,8 +176,35 @@ object IntegrationAdded {
 }
 
 case class IntegrationRemoved(integrationId: IntegrationId) extends TrackingEvent {
-  override val name: String = "integration.removed_service"
+  override val name = "integration.removed_service"
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("service_id", integrationId.str)
+  })
+}
+
+case class CreateGroupConversation(method: GroupConversationEvent.Method) extends TrackingEvent {
+  override val name = "conversation.opened_group_creation"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("method", method.str)
+  })
+}
+
+object GroupConversationEvent {
+  case class Method(str: String)
+  object ConversationDetails extends Method("conversation_details")
+  object StartUi extends Method("start_ui")
+}
+
+case class OpenSelectParticipants(method: GroupConversationEvent.Method) extends TrackingEvent {
+  override val name = "conversation.opened_select_participants"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("method", method.str)
+  })
+}
+case class GroupConversationSuccessful(withParticipants: Boolean, method: GroupConversationEvent.Method) extends TrackingEvent {
+  override val name = "conversation.group_creation_succeeded"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("method", method.str)
+    o.put("with_participants", withParticipants)
   })
 }
