@@ -187,7 +187,7 @@ object ZMessagingDB {
       db.execSQL("""CREATE TABLE PushNotificationEvents(pushId TEXT, event_index INTEGER,
                                                         decrypted INTEGER, event TEXT,
                                                         plain BLOB, transient BOOLEAN,
-                    PRIMARY KEY (pushId, event_index)""")
+                    PRIMARY KEY (pushId, event_index))""")
     }
   )
 }
