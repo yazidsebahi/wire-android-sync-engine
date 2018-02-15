@@ -38,11 +38,12 @@ import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
 import org.json.{JSONArray, JSONObject}
+import org.scalatest.Ignore
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class PushServiceSpec extends AndroidFreeSpec { test =>
+@Ignore class PushServiceSpec extends AndroidFreeSpec { test =>
 
   val wsConnected = Signal(false)
 
