@@ -101,15 +101,13 @@ class UserSearchService(selfUserId:           UserId,
       }
       exc <- toConv.fold(Signal.const(Set.empty[UserId]))(membersStorage.activeMembers).map(_ + selfUserId)
     } yield {
-      val users =
-        if (filter.nonEmpty) connected.filter(
+      val users = connected.filter(
           connectedUsersPredicate(
             searchTerm         = filter,
             filteredIds        = exc.map(_.str),
             alsoSearchByEmail  = true,
             showBlockedUsers   = showBlockedUsers,
             searchByHandleOnly = isHandle))
-        else connected
 
       val includedIds = (users.map(_.id).toSet ++ members.map(_.id)).diff(exc)
       sortUsers((connected ++ members).filter(u => includedIds.contains(u.id)).toIndexedSeq.filter(!_.isWireBot), filter, isHandle, symbolStripped)
