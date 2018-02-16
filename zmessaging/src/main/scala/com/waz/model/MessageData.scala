@@ -42,10 +42,10 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.breakOut
 
-case class MessageData(id:            MessageId,
-                       convId:        ConvId,
-                       msgType:       Message.Type,
-                       userId:        UserId,
+case class MessageData(id:            MessageId           = MessageId(),
+                       convId:        ConvId              = ConvId(),
+                       msgType:       Message.Type        = Message.Type.TEXT,
+                       userId:        UserId              = UserId(),
                        content:       Seq[MessageContent] = Seq.empty,
                        protos:        Seq[GenericMessage] = Seq.empty,
                        firstMessage:  Boolean             = false,

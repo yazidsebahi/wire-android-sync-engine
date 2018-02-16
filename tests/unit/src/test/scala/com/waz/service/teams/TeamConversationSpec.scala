@@ -64,8 +64,7 @@ class TeamConversationSpec extends AndroidFreeSpec {
       }
       (sync.postConversation _).expects(newConv, Seq(otherUser), *, Some(team)).once().returning(Future.successful(SyncId()))
 
-      (messages.addRenameConversationMessage _).expects(newConv, self, name.get, false).once().returning(Future.successful(None))
-      (messages.addMemberJoinMessage _).expects(newConv, self, Set(otherUser), true).once().returning(Future.successful(None))
+      (messages.addConversationStartMessage _).expects(newConv, self, Set(otherUser), name).once().returning(Future.successful(MessageData())) //return not used
 
       result(initService.createGroupConversation(newConv, name, Seq(otherUser), Some(team)))
     }
