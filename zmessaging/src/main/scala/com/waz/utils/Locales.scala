@@ -31,7 +31,7 @@ import com.waz.service.ZMessaging
 import com.waz.utils
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object Locales {
   def currentLocale =

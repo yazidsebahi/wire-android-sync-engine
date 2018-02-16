@@ -50,6 +50,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
       case _: GenericAssetEvent       => true
       case _: ConnectRequestEvent     => true
       case _: OtrMessageEvent         => true
+      case _: OtrAssetEvent           => true
       case MemberJoinEvent(_, _, _, added, _) if added.contains(selfUserId)   => true
       case MemberLeaveEvent(_, _, _, leaving) if leaving.contains(selfUserId) => true
       case GenericMessageEvent(_, _, _, GenericMessage(_, content)) =>

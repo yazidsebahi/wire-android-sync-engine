@@ -25,20 +25,19 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.otr.OtrService
 import com.waz.service.{EventPipeline, NetworkModeService, UiLifeCycle}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
-import com.waz.sync.client.{PushNotificationEncoded, PushNotificationsClient}
+import com.waz.sync.client.{PushNotification, PushNotificationsClient}
 import com.waz.testutils.{TestBackoff, TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
-import org.json.{JSONArray, JSONObject}
 import org.scalatest.Ignore
+import org.json.JSONObject
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -47,20 +46,18 @@ import scala.concurrent.duration._
 
   val wsConnected = Signal(false)
 
-  val clientId            = ClientId()
-  val context             = mock[Context]
-  val pipeline            = mock[EventPipeline]
-  val otrService          = mock[OtrService]
-  val websocket           = mock[WebSocketClientService]
-  val receivedPushes      = mock[ReceivedPushStorage]
-  val notificationStorage = mock[PushNotificationEventsStorage]
-  val znet                = mock[ZNetClient]
-  val sync                = mock[SyncServiceHandle]
-  val prefs               = new TestGlobalPreferences
-  val userPrefs           = new TestUserPreferences
-  val network             = mock[NetworkModeService]
-  val lifeCycle           = mock[UiLifeCycle]
-  val client              = mock[PushNotificationsClient]
+  val clientId        = ClientId()
+  val context         = mock[Context]
+  val pipeline        = mock[EventPipeline]
+  val websocket       = mock[WebSocketClientService]
+  val receivedPushes  = mock[ReceivedPushStorage]
+  val znet            = mock[ZNetClient]
+  val sync            = mock[SyncServiceHandle]
+  val prefs           = new TestGlobalPreferences
+  val userPrefs       = new TestUserPreferences
+  val network         = mock[NetworkModeService]
+  val lifeCycle       = mock[UiLifeCycle]
+  val client          = mock[PushNotificationsClient]
 
   implicit val ctx = Threading.Background
 
@@ -91,8 +88,6 @@ import scala.concurrent.duration._
   (receivedPushes.removeAll _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
 
   (tracking.track _).expects(*, *).anyNumberOfTimes()
-
-  def EmptyPushNotificationEncoded = PushNotificationEncoded(Uid(), new JSONArray)
 
   val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
@@ -138,8 +133,8 @@ import scala.concurrent.duration._
     }
 
     scenario("fetch notifications and update last id") {
-      val notification1 = EmptyPushNotificationEncoded
-      val notification2 = EmptyPushNotificationEncoded
+      val notification1 = PushNotification(Uid(), Nil)
+      val notification2 = PushNotification(Uid(), Nil)
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1, notification2), hasMore = false, None) ))
       )
@@ -161,7 +156,7 @@ import scala.concurrent.duration._
       )
 
       (client.loadNotifications _).expects(*, *).once().returning(
-          CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(EmptyPushNotificationEncoded, EmptyPushNotificationEncoded), hasMore = false, None) ))
+          CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(PushNotification(Uid(), Nil), PushNotification(Uid(), Nil)), hasMore = false, None) ))
       )
 
       val service = getService
@@ -175,8 +170,8 @@ import scala.concurrent.duration._
 
   feature("network changes") {
     scenario("schedule a delayed retry after a failed load") {
-      val notification1 = EmptyPushNotificationEncoded
-      val notification2 = EmptyPushNotificationEncoded
+      val notification1 = PushNotification(Uid(), Nil)
+      val notification2 = PushNotification(Uid(), Nil)
 
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Left(ErrorResponse.InternalError))
@@ -195,8 +190,8 @@ import scala.concurrent.duration._
     }
 
     scenario("sync history on network change after a failed load") {
-      val notification1 = EmptyPushNotificationEncoded
-      val notification2 = EmptyPushNotificationEncoded
+      val notification1 = PushNotification(Uid(), Nil)
+      val notification2 = PushNotification(Uid(), Nil)
 
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Left(ErrorResponse.InternalError))
@@ -218,7 +213,7 @@ import scala.concurrent.duration._
 
     scenario("don't sync history on network change without a failed load") {
 
-      val notification1 = EmptyPushNotificationEncoded
+      val notification1 = PushNotification(Uid(), Nil)
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right( LoadNotificationsResponse(Vector(notification1), hasMore = false, None) ))
       )
@@ -242,9 +237,9 @@ import scala.concurrent.duration._
 
     scenario("receive notifications first with a fetch, then with a push") {
 
-      val pushNot = PushNotificationEncoded(Uid("push-not-id"), new JSONArray)
+      val pushNot = PushNotification(Uid("push-not-id"), Nil)
       val wsJson = new JSONObject(notJson)
-      val wsNot = PushNotificationEncoded.NotificationDecoder(wsJson)
+      val wsNot = PushNotification.NotificationDecoder(wsJson)
 
       (client.loadNotifications _).expects(*, *).once().returning(
         CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(pushNot), hasMore = false, None)))
@@ -269,10 +264,9 @@ import scala.concurrent.duration._
         * getting duplicate errors from Cryptobox or discarding the event further down the line.
         */
 
-      val json:JSONObject = OtrClientRemoveEvent.Encoder(OtrClientRemoveEvent(ClientId()))
-      val pushNot = PushNotificationEncoded(Uid("push-not-id"), new JSONArray().put(json))
+      val pushNot = PushNotification(Uid("push-not-id"), Seq(OtrClientRemoveEvent(ClientId())))
       val wsJson = new JSONObject(notJson)
-      val wsNot = PushNotificationEncoded.NotificationDecoder(wsJson)
+      val wsNot = PushNotification.NotificationDecoder(wsJson)
 
       (client.loadNotifications _).expects(*, *).once().onCall { _ =>
         ws.onMessage.publish(JsonObjectResponse(wsJson), Threading.Background)
@@ -293,7 +287,7 @@ import scala.concurrent.duration._
   feature("Fetch retries") {
 
     scenario("Retry should occur after delay expires") {
-      val notification1 = EmptyPushNotificationEncoded
+      val notification1 = PushNotification(Uid(), Nil)
       (client.loadNotifications _).expects(Some(lastId), *).once().returning(
         CancellableFuture.successful(Left(ErrorResponse.InternalError))
       )
@@ -312,7 +306,7 @@ import scala.concurrent.duration._
     }
 
     scenario("Opening websocket while waiting for a fetch retry should immediately drop the delay and re-try") {
-      val notification1 = PushNotificationEncoded(Uid("not1"), new JSONArray)
+      val notification1 = PushNotification(Uid("not1"), Nil)
       wsClient ! Some(ws)
       PushService.syncHistoryBackoff = TestBackoff(testDelay = 1.day) //plenty of time in which the websocket can become active
 
@@ -336,8 +330,7 @@ import scala.concurrent.duration._
     }
   }
 
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, notificationStorage,
-    client, clientId, account1Id, pipeline, otrService, websocket, network, lifeCycle, tracking, sync)
+  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, client, clientId, account1Id, pipeline, websocket, network, lifeCycle, tracking, sync)
 
   val lastId = Uid("last-id")
   val notJson = s"""
@@ -354,5 +347,5 @@ import scala.concurrent.duration._
       | }
     """.stripMargin
   val notObject = new JSONObject(notJson)
-  val pushNotification = PushNotificationEncoded.NotificationDecoder(notObject)
+  val pushNotification = PushNotification.NotificationDecoder(notObject)
 }

@@ -30,9 +30,8 @@ import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.client.OtrClient
 import com.waz.utils.JsonDecoder._
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
-import com.waz.znet.ContentEncoder
 import com.waz.znet.ContentEncoder.JsonContentEncoder
-import org.json.{JSONException, JSONObject}
+import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.util.Try
@@ -53,7 +52,7 @@ sealed trait Event {
     this
   }
 
-  def hasLocalTime: Boolean = localTime != UnknownDateTime
+  def hasLocalTime = localTime != UnknownDateTime
 
   def maybeLocalTime: Option[Instant] = if (localTime == UnknownDateTime) None else Some(localTime.instant)
 }
@@ -111,7 +110,6 @@ sealed trait OtrError
 case object Duplicate extends OtrError
 case class DecryptionError(msg: String, from: UserId, sender: ClientId) extends OtrError
 case class IdentityChangedError(from: UserId, sender: ClientId) extends OtrError
-case class UnknownOtrErrorEvent(json: JSONObject) extends OtrError
 
 case class OtrErrorEvent(convId: RConvId, time: Date, from: UserId, error: OtrError) extends MessageEvent
 
@@ -131,6 +129,8 @@ sealed trait OtrEvent extends ConversationEvent {
   val ciphertext: Array[Byte]
 }
 case class OtrMessageEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, ciphertext: Array[Byte], externalData: Option[Array[Byte]] = None) extends OtrEvent
+
+case class OtrAssetEvent(convId: RConvId, time: Date, from: UserId, sender: ClientId, recipient: ClientId, dataId: RAssetId, ciphertext: Array[Byte], imageData: Option[Array[Byte]]) extends OtrEvent
 
 case class ConversationState(archived: Option[Boolean] = None, archiveTime: Option[Instant] = None, muted: Option[Boolean] = None, muteTime: Option[Instant] = None)
 
@@ -169,13 +169,12 @@ object ConversationState {
     }
   }
 
-  implicit val StateContentEncoder: ContentEncoder[ConversationState] =
-    JsonContentEncoder map { (state: ConversationState) => JsonEncoder { encode(state, _) } }
+  implicit val StateContentEncoder = JsonContentEncoder map { (state: ConversationState) => JsonEncoder { encode(state, _) } }
 }
 
 object Event {
 
-  val UnknownDateTime: Date = MessageData.UnknownInstant.javaDate
+  val UnknownDateTime = MessageData.UnknownInstant.javaDate
 
   implicit object EventDecoder extends JsonDecoder[Event] {
 
@@ -219,23 +218,16 @@ object UserConnectionEvent {
 
 object ConversationEvent {
 
-  import OtrErrorEvent._
-
-  def unapply(e: ConversationEvent): Option[(RConvId, Date, UserId)] =
-    Some((e.convId, e.time, e.from))
+  def unapply(e: ConversationEvent): Option[(RConvId, Date, UserId)] = Some((e.convId, e.time, e.from))
 
   implicit lazy val ConversationEventDecoder: JsonDecoder[ConversationEvent] = new JsonDecoder[ConversationEvent] {
-    private def decodeBytes(str: String) = Base64.decode(str, Base64.NO_WRAP)
+    def decodeBytes(str: String) = Base64.decode(str, Base64.NO_WRAP)
 
     def otrMessageEvent(convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
-      OtrMessageEvent(convId, time, from, ClientId('sender), ClientId('recipient), decodeBytes('text), decodeOptString('data).map(decodeBytes))
+      OtrMessageEvent(convId, time, from, ClientId('sender), ClientId('recipient), decodeBytes('text), decodeOptString('data) map decodeBytes)
 
-    def genericAssetEvent(convId: RConvId, time: Date, from: UserId, content: GenericMessage,
-                          dataId: RAssetId)(implicit js: JSONObject) =
-      GenericAssetEvent(convId, time, from, content, dataId, decodeOptString('data).map(decodeBytes))
-
-    def otrErrorEvent(convId: RConvId, time: Date, from: UserId)(implicit js: JSONObject) =
-      OtrErrorEvent(convId, time, from, decodeOtrError('error))
+    def otrAssetEvent(convId: RConvId, time: Date, from: UserId)(implicit data: JSONObject) =
+      OtrAssetEvent(convId, time, from, ClientId('sender), ClientId('recipient), RAssetId('id), decodeBytes('key), decodeOptString('data).map(decodeBytes))
 
     override def apply(implicit js: JSONObject): ConversationEvent = LoggedTry {
 
@@ -244,20 +236,14 @@ object ConversationEvent {
       decodeString('type) match {
         case "conversation.create" => CreateConversationEvent('conversation, 'time, 'from, JsonDecoder[ConversationResponse]('data))
         case "conversation.rename" => RenameConversationEvent('conversation, 'time, 'from, decodeString('name)(data.get))
-        case "conversation.member-join" =>
-          MemberJoinEvent('conversation, 'time, 'from, decodeUserIdSeq('user_ids)(data.get), decodeString('id).startsWith("1."))
+        case "conversation.member-join" => MemberJoinEvent('conversation, 'time, 'from, decodeUserIdSeq('user_ids)(data.get), decodeString('id).startsWith("1."))
         case "conversation.member-leave" => MemberLeaveEvent('conversation, 'time, 'from, decodeUserIdSeq('user_ids)(data.get))
         case "conversation.member-update" => MemberUpdateEvent('conversation, 'time, 'from, ConversationState.Decoder(data.get))
-        case "conversation.connect-request" =>
-          ConnectRequestEvent('conversation, 'time, 'from, decodeString('message)(data.get),
-            decodeUserId('recipient)(data.get), decodeString('name)(data.get), decodeOptString('email)(data.get))
-        case "conversation.typing" =>
-          TypingEvent('conversation, 'time, 'from, isTyping = data.fold(false)(data => decodeString('status)(data) == "started"))
+        case "conversation.connect-request" => ConnectRequestEvent('conversation, 'time, 'from, decodeString('message)(data.get), decodeUserId('recipient)(data.get), decodeString('name)(data.get), decodeOptString('email)(data.get))
+        case "conversation.typing" => TypingEvent('conversation, 'time, 'from, isTyping = data.fold(false)(data => decodeString('status)(data) == "started"))
         case "conversation.otr-message-add" => otrMessageEvent('conversation, 'time, 'from)(data.get)
-        case "conversation.generic-message" => GenericMessageEvent('convId, 'time, 'from, 'content)
-        case "conversation.generic-asset" => genericAssetEvent('convId, 'time, 'from, 'content, 'dataId)
-        case "conversation.otr-error" => otrErrorEvent('convId, 'time, 'from)
-        case "conversation.call-message" => CallMessageEvent('convId, 'time, 'from, 'sender, 'content)
+          //TODO remove after v2 transition period is over - no more clients should be sending v2
+        case "conversation.otr-asset-add" => otrAssetEvent('conversation, 'time, 'from)(data.get)
         case _ =>
           error(s"unhandled event: $js")
           UnknownConvEvent(js)
@@ -269,90 +255,6 @@ object ConversationEvent {
   }
 }
 
-object OtrErrorEvent {
-
-  def decodeOtrError(s: Symbol)(implicit js: JSONObject): OtrError =
-    OtrErrorDecoder(js.getJSONObject(s.name))
-
-  implicit lazy val OtrErrorDecoder: JsonDecoder[OtrError] = new JsonDecoder[OtrError] {
-    override def apply(implicit js: JSONObject): OtrError = LoggedTry {
-      decodeString('type) match {
-        case "otr-error.decryption-error" => DecryptionError('msg, 'from, 'sender)
-        case "otr-error.identity-changed-error" => IdentityChangedError('from, 'sender)
-        case "otr-error.duplicate" => Duplicate
-        case _ =>
-          error(s"unhandled event: $js")
-          UnknownOtrErrorEvent(js)
-      }
-    }.getOrElse {
-      error(s"unhandled event: $js")
-      UnknownOtrErrorEvent(js)
-    }
-  }
-}
-
-object MessageEvent {
-  import com.waz.utils._
-
-  implicit lazy val MessageEventEncoder: JsonEncoder[MessageEvent] = new JsonEncoder[MessageEvent] {
-
-    private def setFields(json: JSONObject, convId: RConvId, time: Date, from: UserId, eventType: String) =
-      json
-        .put("convId", convId.str)
-        .put("time", JsonEncoder.encodeDate(time))
-        .put("from", from.str)
-        .put("type", eventType)
-        .setType(eventType)
-
-    override def apply(event: MessageEvent): JSONObject = JsonEncoder { json =>
-      event match {
-        case GenericMessageEvent(convId, time, from, content) =>
-          setFields(json, convId, time, from, "conversation.generic-message")
-            .put("content", Base64.encodeToString(GenericMessage.toByteArray(content), Base64.NO_WRAP))
-        case GenericAssetEvent(convId, time, from, content, dataId, data) =>
-          setFields(json, convId, time, from, "conversation.generic-asset")
-            .put("dataId", dataId.str)
-            .put("data", data match {
-              case None => null
-              case Some(d) => Base64.encodeToString(d, Base64.NO_WRAP)
-            })
-            .put("content", Base64.encodeToString(GenericMessage.toByteArray(content), Base64.NO_WRAP))
-        case OtrErrorEvent(convId, time, from, error) =>
-          setFields(json, convId, time, from, "conversation.otr-error")
-            .put("error", OtrError.OtrErrorEncoder(error))
-        case CallMessageEvent(convId, time, from, sender, content) =>
-          setFields(json, convId, time, from, "conversation.call-message")
-            .put("sender", sender.str)
-            .put("content", content)
-        case e => throw new JSONException(s"Encoder for event $e not implemented")
-      }
-    }
-  }
-}
-
-object OtrError {
-  import com.waz.utils._
-
-  implicit lazy val OtrErrorEncoder: JsonEncoder[OtrError] = new JsonEncoder[OtrError] {
-    override def apply(error: OtrError): JSONObject = JsonEncoder { json =>
-      error match {
-        case DecryptionError(msg, from, sender) =>
-          json
-            .put("msg", msg)
-            .put("from", from.str)
-            .put("sender", sender.str)
-            .setType("otr-error.decryption-error")
-        case IdentityChangedError(from, sender) =>
-          json
-            .put("from", from.str)
-            .put("sender", sender.str)
-            .setType("otr-error.identity-changed-error")
-        case Duplicate => json.setType("otr-error.duplicate")
-        case e => throw new JSONException(s"Encoder for event $e not implemented")
-      }
-    }
-  }
-}
 
 sealed trait TeamEvent extends Event {
   val teamId: TeamId
@@ -386,7 +288,8 @@ object TeamEvent {
 
   implicit lazy val TeamEventDecoder: JsonDecoder[TeamEvent] = new JsonDecoder[TeamEvent] {
 
-    override def apply(implicit js: JSONObject): TeamEvent =
+    override def apply(implicit js: JSONObject) = {
+
       decodeString('type) match {
         case "team.create"              => Create('team)
         case "team.delete"              => Delete('team)
@@ -399,17 +302,8 @@ object TeamEvent {
         case _ =>
           error(s"Unhandled event: $js")
           UnknownTeamEvent(js)
+      }
+
     }
   }
-}
-
-object OtrClientRemoveEvent {
-  import com.waz.utils._
-  implicit lazy val Encoder: JsonEncoder[OtrClientRemoveEvent] =
-    new JsonEncoder[OtrClientRemoveEvent] {
-      override def apply(error: OtrClientRemoveEvent): JSONObject = JsonEncoder { json =>
-        json.setType("user.client-remove")
-        json.put("client", new JSONObject().put("id", error.client.toString))
-      }
-    }
 }

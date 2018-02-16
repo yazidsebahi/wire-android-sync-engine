@@ -25,7 +25,7 @@ import com.waz.api.impl._
 import com.waz.content.UserPreferences.ShouldSyncInitial
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{UserData, _}
-import com.waz.service.AccountsService.LoggedOut
+import com.waz.service.AccountsService.{InForeground, LoggedOut}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.service.tracking.{LoggedOutEvent, TrackingService}

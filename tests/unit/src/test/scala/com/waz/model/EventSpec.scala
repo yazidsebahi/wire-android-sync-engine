@@ -17,19 +17,15 @@
  */
 package com.waz.model
 
-import java.util.Date
-
 import com.waz.model.Event.EventDecoder
-import com.waz.model.nano.Messages
 import com.waz.model.otr.ClientId
 import com.waz.utils.JsonDecoder
 import org.json.JSONObject
 import org.scalatest._
 import org.scalatest.prop.{GeneratorDrivenPropertyChecks, PropertyChecks}
 
-class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with PropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
+@Ignore class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with PropertyChecks with GeneratorDrivenPropertyChecks with RobolectricTests {
   import EventSpec._
-  import MessageEvent._
 
   feature("Event parsing") {
     scenario("parse UserConnectionEvent") {
@@ -60,63 +56,28 @@ class EventSpec extends FeatureSpec with Matchers with BeforeAndAfter with Given
       }
     }
 
-    scenario("encode/decode GenericMessageEvent") {
-      val msg = GenericMessageEvent(RConvId(), new Date(), UserId(), new Messages.GenericMessage)
-      EventDecoder(MessageEventEncoder(msg)) match {
-        case ev: GenericMessageEvent =>
-          ev.convId shouldEqual msg.convId
-          ev.content.equals(msg.content)
-          ev.from shouldEqual msg.from
-          ev.time shouldEqual msg.time
+    scenario("parse otr asset event") {
+      EventDecoder(new JSONObject(OtrAssetEvent)) match {
+        case ev: OtrAssetEvent =>
+          ev.dataId shouldEqual RAssetId("fb325cac-d2d8-4afe-b236-35ac438a9e83")
+          ev.convId shouldEqual RConvId("74f85659-4677-4b17-91dd-d49cd703b234")
+          ev.sender shouldEqual ClientId("b79a049114ff051e")
+          ev.recipient shouldEqual ClientId("650d1a5efc422126")
+          ev.from shouldEqual UserId("bf59ae41-3dca-4099-b871-ce5940939166")
+          ev.imageData should be('empty)
         case e => fail(s"unexpected event: $e")
       }
     }
 
-    scenario("encode/decode CallMessageEvent") {
-      val msg = CallMessageEvent(RConvId(), new Date(), UserId(), ClientId(), "")
-      EventDecoder(MessageEventEncoder(msg)) match {
-        case ev: CallMessageEvent =>
-          ev.convId shouldEqual msg.convId
-          ev.time shouldEqual msg.time
-          ev.from shouldEqual msg.from
-          ev.sender shouldEqual msg.sender
-          ev.content shouldEqual msg.content
-        case e => fail(s"unexpected event: $e")
-      }
-    }
-
-    scenario("encode/decode OtrErrorEvent(duplicate)") {
-      val msg = OtrErrorEvent(RConvId(), new Date(), UserId(), Duplicate)
-      EventDecoder(MessageEventEncoder(msg)) match {
-        case ev: OtrErrorEvent =>
-          ev.convId shouldEqual msg.convId
-          ev.time shouldEqual msg.time
-          ev.from shouldEqual msg.from
-          ev.error shouldEqual msg.error
-        case e => fail(s"unexpected event: $e")
-      }
-    }
-
-    scenario("encode/decode OtrErrorEvent(DecryptionError)") {
-      val msg = OtrErrorEvent(RConvId(), new Date(), UserId(), DecryptionError("error", UserId(), ClientId()))
-      EventDecoder(MessageEventEncoder(msg)) match {
-        case ev: OtrErrorEvent =>
-          ev.convId shouldEqual msg.convId
-          ev.time shouldEqual msg.time
-          ev.from shouldEqual msg.from
-          ev.error shouldEqual msg.error
-        case e => fail(s"unexpected event: $e")
-      }
-    }
-
-    scenario("encode/decode OtrErrorEvent(IdentityChanged)") {
-      val msg = OtrErrorEvent(RConvId(), new Date(), UserId(), IdentityChangedError(UserId(), ClientId()))
-      EventDecoder(MessageEventEncoder(msg)) match {
-        case ev: OtrErrorEvent =>
-          ev.convId shouldEqual msg.convId
-          ev.time shouldEqual msg.time
-          ev.from shouldEqual msg.from
-          ev.error shouldEqual msg.error
+    scenario("parse otr asset event with data") {
+      EventDecoder(new JSONObject(OtrAssetEvent1)) match {
+        case ev: OtrAssetEvent =>
+          ev.dataId shouldEqual RAssetId("2e8c9b0e-9a98-41aa-bf0e-f1395a3b5b39")
+          ev.convId shouldEqual RConvId("e74e62ea-1bcd-4582-ab12-bf7a0ff43931")
+          ev.sender shouldEqual ClientId("80b8a91aeb4b4dd")
+          ev.recipient shouldEqual ClientId("ff23d4857147e00c")
+          ev.from shouldEqual UserId("dbf13c1b-b7f5-49fd-988b-9eed329d43a8")
+          ev.imageData should be('defined)
         case e => fail(s"unexpected event: $e")
       }
     }

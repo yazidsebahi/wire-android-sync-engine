@@ -19,6 +19,7 @@ package com.waz.utils.wrappers
 
 import android.content.{Context => AContext}
 import scala.language.implicitConversions
+import AndroidIntentUtil._
 
 //TODO break up the context into smaller wrappers and also wrap other objects used here.
 trait Context {
