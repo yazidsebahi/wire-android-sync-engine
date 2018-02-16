@@ -102,10 +102,7 @@ class ConversationsServiceImpl(context:         Context,
   def processConversationEvent(ev: ConversationStateEvent, selfUserId: UserId, retryCount: Int = 0) = ev match {
     case CreateConversationEvent(rConvId, time, from, data) =>
       updateConversations(selfUserId, Seq(data)) flatMap { case (_, created) => Future.traverse(created) (created =>
-        for {
-          _ <- created.name.fold(Future.successful({}))(n => messages.addRenameConversationMessage(created.id, from, n, needsSyncing = false).map(_ => {}))
-          _ <- messages.addMemberJoinMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), firstMessage = true)
-        } yield {}
+        messages.addConversationStartMessage(created.id, from, (data.members.map(_.userId).toSet + selfUserId).filter(_ != from), created.name)
       )}
 
     case ConversationEvent(rConvId, _, _) =>
