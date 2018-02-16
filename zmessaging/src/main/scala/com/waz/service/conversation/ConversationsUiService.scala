@@ -370,8 +370,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((self +: members).distinct: _*), ConversationType.Group, self, members, name = name, teamId = teamId).flatMap { conv =>
       debug(s"created: $conv")
       for {
-        _      <- name.fold(Future.successful({}))(n => messages.addRenameConversationMessage(conv.id, self, n, needsSyncing = false).map(_ => {}))
-        _      <- if (members.nonEmpty) messages.addMemberJoinMessage(conv.id, self, members.toSet, firstMessage = true) else Future.successful({})
+        _      <- messages.addConversationStartMessage(conv.id, self, members.toSet, name)
         syncId <- sync.postConversation(id, members, conv.name, teamId)
       } yield (conv, syncId)
     }
