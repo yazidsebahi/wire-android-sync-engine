@@ -33,7 +33,6 @@ import com.waz.cache.{CacheEntry, CacheService, Expiration}
 import com.waz.model._
 import com.waz.service.AccountsService.InForeground
 import com.waz.service.assets.AudioLevels.peakLoudness
-import com.waz.service.media.SpotifyMediaService.Authentication
 import com.waz.service.{AccountsService, ErrorsService}
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -445,7 +444,6 @@ object GlobalRecordAndPlayService {
   sealed trait Content
   case class UnauthenticatedContent(uri: URI) extends Content
   case class PCMContent(file: File) extends Content
-  case class SpotifyContent(uri: URI, auth: () => Future[Authentication]) extends Content
 
   case class MediaPointer(content: Content, playhead: bp.Duration)
 

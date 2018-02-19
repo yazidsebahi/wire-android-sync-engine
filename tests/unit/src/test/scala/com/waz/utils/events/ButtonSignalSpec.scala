@@ -18,6 +18,7 @@
 package com.waz.utils.events
 
 import com.waz.specs.AndroidFreeSpec
+import com.waz.ZLog.ImplicitTag._
 
 class ButtonSignalSpec extends AndroidFreeSpec {
 

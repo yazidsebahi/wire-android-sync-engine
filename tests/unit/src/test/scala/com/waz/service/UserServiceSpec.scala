@@ -60,7 +60,7 @@ class UserServiceSpec extends AndroidFreeSpec {
   (usersStorage.optSignal _).expects(*).onCall((id: UserId) => Signal.const(users.find(_.id == id)))
   (accountsService.loggedInAccounts _).expects().returning(Signal.empty)
   (pushService.onHistoryLost _).expects().returning(new SourceSignal(Some(Instant.now())) with BgEventSource)
-  (sync.syncUsersIfNotEmpty _).expects(*).anyNumberOfTimes().returning(Future.successful({}))
+  (sync.syncUsersIfNotEmpty _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(SyncId())))
   (assetService.updateAssets _).expects(*).anyNumberOfTimes().returning(Future.successful(Set.empty))
   (usersStorage.updateOrCreateAll _).expects(*).anyNumberOfTimes().returning(Future.successful(Set.empty))
 

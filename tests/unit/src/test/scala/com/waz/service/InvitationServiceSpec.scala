@@ -23,7 +23,7 @@ import com.waz.content.Database
 import com.waz.model._
 import com.waz.service.AccountsService.InForeground
 import com.waz.service.conversation.ConversationsService
-import com.waz.service.invitations.InvitationService
+import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.InvitationClient
@@ -76,7 +76,7 @@ class InvitationServiceSpec extends AndroidFreeSpec{
   private val timeouts      = new Timeouts()
   private val client        = new InvitationClient(znet)
 
-  def getInvitationService: InvitationService = {
+  def getInvitationService: InvitationServiceImpl = {
     (accounts.accountState _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
       accountStates.map(_.getOrElse(id, InForeground))
     }
@@ -85,7 +85,7 @@ class InvitationServiceSpec extends AndroidFreeSpec{
 
     (contacts.contactsOnWire _).expects().anyNumberOfTimes().returning(Signal.const(BiRelation.empty))
 
-    new InvitationService(database, userService, connections, contacts, conversations, sync, timeouts, client, Some(teamId))
+    new InvitationServiceImpl(database, userService, connections, contacts, conversations, sync, timeouts, client, Some(teamId))
   }
 
 }

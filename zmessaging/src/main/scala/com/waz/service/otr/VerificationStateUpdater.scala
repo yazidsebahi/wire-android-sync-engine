@@ -23,6 +23,7 @@ import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.model.otr.UserClients
+import com.waz.service.messages.MessageEventProcessor
 import com.waz.utils.Serialized
 
 import scala.collection.breakOut
@@ -35,11 +36,12 @@ import scala.concurrent.Future
   * If conv gets unverified because new client was added, then it's state is changed to UNVERIFIED,
   * if device was manually unverified, then conv state goes to UNKNOWN
   */
-class VerificationStateUpdater(selfUserId:     UserId,
-                               usersStorage:   UsersStorage,
-                               clientsStorage: OtrClientsStorage,
-                               convs:          ConversationStorage,
-                               membersStorage: MembersStorage) {
+class VerificationStateUpdater(selfUserId:        UserId,
+                               usersStorage:      UsersStorage,
+                               clientsStorage:    OtrClientsStorage,
+                               convs:             ConversationStorage,
+                               membersStorage:    MembersStorage,
+                               msgEventProcessor: MessageEventProcessor) {
   import Verification._
   import VerificationStateUpdater._
   import com.waz.threading.Threading.Implicits.Background
@@ -47,7 +49,13 @@ class VerificationStateUpdater(selfUserId:     UserId,
 
   private val SerializationKey = serializationKey(selfUserId)
 
-  var updateProcessor: VerificationStateUpdate => Future[Unit] = { _ => Future.successful(()) } // FIXME: ideally this would just be an event stream, but we want to wait until everything is processed
+  private val updateProcessor: VerificationStateUpdate => Future[Unit] = { update =>
+    msgEventProcessor.addMessagesAfterVerificationUpdate(update.convUpdates, update.convUsers, update.changes) map { _ => Unit }
+  }
+
+  clientsStorage.getClients(selfUserId).map{ clients =>
+    onClientsChanged(Map(selfUserId -> (UserClients(selfUserId, clients.map(c => c.id -> c).toMap), ClientAdded)))
+  }
 
   clientsStorage.onAdded { ucs =>
     verbose(s"clientsStorage.onAdded: $ucs")
@@ -93,6 +101,7 @@ class VerificationStateUpdater(selfUserId:     UserId,
       updates     <- updateUsers()
       userChanges = collectUserChanges(updates)
       convs       <- Future.traverse(userChanges.keys) { membersStorage.getActiveConvs }
+      _ = verbose(s"onClientsChanged: $convs \n $changes")
       _           <- updateConversations(convs.flatten.toSeq.distinct, userChanges)
     } yield ()
   }
@@ -102,19 +111,19 @@ class VerificationStateUpdater(selfUserId:     UserId,
     def convUsers = Future.traverse(ids) { convId =>
       for {
         userIds <- membersStorage.getActiveUsers(convId)
-        users   <- usersStorage.listAll(userIds)
+        users   <- usersStorage.getAll(userIds)
       } yield convId -> users
     }
 
-    def update(conv: ConversationData, us: Seq[UserData]) = {
+    def update(conv: ConversationData, us: Seq[Option[UserData]]) = {
       // XXX: this condition is a bit complicated to avoid situations where conversation gets verified just because it temporarily contains just self user
       // this could happen if conv was just created and new members are being added (race condition), or in pending conv requests.
       // FIXME: this is not really correct, if all other users leave group conversation then it should actually get VERIFIED
-      val isVerified = us.nonEmpty && us.forall(_.verified == VERIFIED) &&
+      val isVerified = us.nonEmpty && us.flatten.forall(_.verified == VERIFIED) && !us.exists(_.isEmpty) &&
         (conv.convType == ConversationType.Group || conv.convType == ConversationType.OneToOne) &&
         (us.size > 1 || conv.verified != UNKNOWN)
 
-      def deviceAdded = us.exists(u => changes.get(u.id).contains(ClientAdded))
+      def deviceAdded = us.flatten.exists(u => changes.get(u.id).contains(ClientAdded)) || !us.exists(_.isEmpty)
 
       val state = (isVerified, conv.verified) match {
         case (false, VERIFIED) if deviceAdded => UNVERIFIED
@@ -132,7 +141,9 @@ class VerificationStateUpdater(selfUserId:     UserId,
       users     <- convUsers
       usersMap  =  users.filter(_._2.nonEmpty).toMap
       updates   <- convs.updateAll2(usersMap.keys.toSeq, { conv => update(conv, usersMap(conv.id)) })
-      _         <- updateProcessor(VerificationStateUpdate(updates, usersMap, changes))
+      _ = verbose(s"updateConversations: ${users.flatMap(_._2).map(_.map(_.getDisplayName))}")
+      flattened = usersMap.map { case (conv, userList) => conv -> userList.flatten }
+      _         <- updateProcessor(VerificationStateUpdate(updates, flattened, changes))
     } yield ()
   }
 }

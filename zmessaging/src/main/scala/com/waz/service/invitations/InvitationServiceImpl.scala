@@ -40,9 +40,19 @@ import scala.collection.immutable.ListMap
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 
-class InvitationService(storage: Database, users: UserService, connections: ConnectionService, contacts: ContactsService,
-                        conversations: ConversationsService, sync: SyncServiceHandle, timeouts: Timeouts, client: InvitationClient,
-                        teamId: Option[TeamId]) {
+trait InvitationService {
+  def invitedContacts: Signal[Set[ContactId]]
+}
+
+class InvitationServiceImpl(storage:       Database,
+                            users:         UserService,
+                            connections:   ConnectionService,
+                            contacts:      ContactsService,
+                            conversations: ConversationsService,
+                            sync:          SyncServiceHandle,
+                            timeouts:      Timeouts,
+                            client:        InvitationClient,
+                            teamId:        Option[TeamId]) extends InvitationService {
 
   import EventContext.Implicits.global
   import timeouts.contacts._

@@ -68,7 +68,7 @@ class MessagesContentUpdater(messagesStorage: MessagesStorage,
 
     for {
       time <- nextLocalTime(msg.convId)
-      exp   <- expiration
+      exp  <- expiration
       m = returning(msg.copy(state = state, time = time, localTime = now(clock), ephemeral = exp)) { m =>
         verbose(s"addLocalMessage: $m")
       }

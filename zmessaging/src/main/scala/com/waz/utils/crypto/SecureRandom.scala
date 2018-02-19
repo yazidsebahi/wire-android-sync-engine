@@ -15,29 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.content
+package com.waz.utils.crypto
 
-import com.waz.content.Preferences.PrefKey
-import com.waz.specs.AndroidFreeSpec
-import com.waz.testutils.TestUserPreferences
-import com.waz.threading.Threading
-import com.waz.ZLog.ImplicitTag._
+import java.security.SecureRandom
 
-class PreferencesSpec extends AndroidFreeSpec {
+object SecureRandom {
+  lazy val random = new SecureRandom()
 
-  implicit val ec = Threading.Background
+  def nextInt(): Int = random.nextInt
+  def nextInt(bounds: Int): Int = random.nextInt(bounds)
+  def nextInt(min: Int, max: Int): Int = random.nextInt((max - min) + 1) + min
 
-  val prefs = new TestUserPreferences
-  val prefKey = PrefKey[Boolean]("test")
-
-  scenario("Preference caching and updating") {
-
-    val pref1 = prefs.preference(prefKey)
-    val pref2 = prefs.preference(prefKey)
-    pref2 := true
-
-    result(pref1.signal.filter(_ == true).head)
-
-  }
-
+  def nextLong(): Long = random.nextLong()
+  def nextDouble(): Double = random.nextDouble()
+  def nextFloat(): Double = random.nextFloat()
+  def nextBytes(bytes: Array[Byte]): Unit = random.nextBytes(bytes)
 }

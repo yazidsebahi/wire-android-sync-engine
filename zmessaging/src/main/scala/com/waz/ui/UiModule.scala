@@ -21,7 +21,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.{Handler, Looper}
 import com.waz.Control.getOrUpdate
-import com.waz.ZLog._
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api._
 import com.waz.api.impl.Invitations
 import com.waz.model.{AssetId, ConvId, UserId}
@@ -104,7 +104,6 @@ trait UiEventContext {
 
 class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZMessagingResolverComponent {
   import com.softwaremill.macwire._
-  private implicit val logTag = logTagFor[UiModule]
 
   private implicit val ui: UiModule = this
 

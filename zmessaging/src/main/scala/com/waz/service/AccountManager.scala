@@ -70,8 +70,6 @@ class UserModule(val userId: UserId, val account: AccountManager, tracking: Trac
   def accountService = account.accounts
 
   lazy val otrClient = new OtrClient(account.netClient)
-
-  lazy val verificationUpdater                          = wire[VerificationStateUpdater]
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
   lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl]
   lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdaterImpl]

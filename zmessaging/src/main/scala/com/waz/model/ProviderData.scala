@@ -15,29 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.content
+package com.waz.model
 
-import com.waz.content.Preferences.PrefKey
-import com.waz.specs.AndroidFreeSpec
-import com.waz.testutils.TestUserPreferences
-import com.waz.threading.Threading
-import com.waz.ZLog.ImplicitTag._
+import com.waz.utils.JsonDecoder
+import com.waz.utils.wrappers.URI
+import org.json.JSONObject
 
-class PreferencesSpec extends AndroidFreeSpec {
+case class ProviderData(id: ProviderId, name: String, email: EmailAddress, url: URI, description: String)
 
-  implicit val ec = Threading.Background
+object ProviderData {
+  import JsonDecoder._
 
-  val prefs = new TestUserPreferences
-  val prefKey = PrefKey[Boolean]("test")
-
-  scenario("Preference caching and updating") {
-
-    val pref1 = prefs.preference(prefKey)
-    val pref2 = prefs.preference(prefKey)
-    pref2 := true
-
-    result(pref1.signal.filter(_ == true).head)
-
+  implicit lazy val Decoder: JsonDecoder[ProviderData] = new JsonDecoder[ProviderData] {
+    override def apply(implicit js: JSONObject): ProviderData =
+      ProviderData(decodeId[ProviderId]('id), 'name, EmailAddress('email), URI.parse('uri), 'description)
   }
-
 }

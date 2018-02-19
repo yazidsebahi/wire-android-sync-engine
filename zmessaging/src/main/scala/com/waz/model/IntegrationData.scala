@@ -15,29 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package com.waz.content
+package com.waz.model
 
-import com.waz.content.Preferences.PrefKey
-import com.waz.specs.AndroidFreeSpec
-import com.waz.testutils.TestUserPreferences
-import com.waz.threading.Threading
-import com.waz.ZLog.ImplicitTag._
+case class IntegrationData(id:          IntegrationId   = IntegrationId(),
+                           provider:    ProviderId      = ProviderId(),
+                           name:        String          = "",
+                           summary:     String          = "",
+                           description: String          = "",
+                           asset:       Option[AssetId] = None,
+                           tags:        Seq[String]     = Seq.empty,
+                           enabled:     Boolean         = true)
 
-class PreferencesSpec extends AndroidFreeSpec {
-
-  implicit val ec = Threading.Background
-
-  val prefs = new TestUserPreferences
-  val prefKey = PrefKey[Boolean]("test")
-
-  scenario("Preference caching and updating") {
-
-    val pref1 = prefs.preference(prefKey)
-    val pref2 = prefs.preference(prefKey)
-    pref2 := true
-
-    result(pref1.signal.filter(_ == true).head)
-
-  }
-
-}

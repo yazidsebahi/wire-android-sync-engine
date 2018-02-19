@@ -73,7 +73,7 @@ import org.threeten.bp.Instant
       implicit val db: DB = loadDb("/db/zmessaging_60.db")
 
       val numberOfUsersBeforeMigration = countUsers
-      dbHelper.onUpgrade(db, 60, ZMessagingDB.DbVersion)
+      dbHelper.onUpgrade(db, 60, 90)
       countUsers shouldEqual numberOfUsersBeforeMigration
       UserDataDao.list should have size numberOfUsersBeforeMigration
       UserDataDao.list foreach { user =>

@@ -24,7 +24,6 @@ import android.os.Bundle
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.OtrClientType
-import com.waz.sync.client._
 import com.waz.utils.{LoggedTry, returning}
 
 import scala.util.Try
@@ -41,8 +40,6 @@ class MetaDataService(context: Context) {
   } .getOrElse(new Bundle)
 
   lazy val appVersion = Try(context.getPackageManager.getPackageInfo(context.getPackageName, 0).versionCode).getOrElse(0)
-
-  lazy val spotifyClientId = Option(metaData.getString("spotify.api.id")).fold(MetaDataService.DefaultSpotifyClientId)(SpotifyClientId)
 
   lazy val internalBuild = metaData.getBoolean("INTERNAL", false)
 
@@ -62,8 +59,4 @@ class MetaDataService(context: Context) {
     Try(Option(BluetoothAdapter.getDefaultAdapter.getName).getOrElse("")).getOrElse("")
 
   val cryptoBoxDirName = "otr"
-}
-
-object MetaDataService {
-  val DefaultSpotifyClientId = SpotifyClientId("f85bc93df1ff4c3781a7bcbf524c1f5b")
 }

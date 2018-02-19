@@ -22,11 +22,10 @@ import java.util.UUID
 
 import com.waz.api.NotificationsHandler.NotificationType
 import com.waz.api.NotificationsHandler.NotificationType._
+import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
-
-import scala.util.Random
 
 trait Id[A] extends Ordering[A] {
   def random(): A
@@ -290,7 +289,7 @@ case class NotId(str: String) {
 object NotId {
 
   implicit val id: Id[NotId] = new Id[NotId] {
-    override def random(): NotId = NotId(Random.nextLong().toHexString)
+    override def random(): NotId = NotId(SecureRandom.nextLong().toHexString)
     override def decode(str: String): NotId = NotId(str)
   }
 
@@ -298,4 +297,30 @@ object NotId {
   def apply(tpe: NotificationType, userId: UserId): NotId = NotId(s"$tpe-${userId.str}")
   def apply(id: (MessageId, UserId)): NotId = NotId(s"$LIKE-${id._1.str}-${id._2.str}")
   def apply(msgId: MessageId): NotId = NotId(msgId.str)
+}
+
+case class ProviderId(str: String) {
+  override def toString: String = str
+}
+
+object ProviderId extends (String => ProviderId) {
+  def apply(): ProviderId = Id.random()
+
+  implicit object Id extends Id[ProviderId] {
+    override def random(): ProviderId = ProviderId(Uid().toString)
+    override def decode(str: String): ProviderId = ProviderId(str)
+  }
+}
+
+case class IntegrationId(str: String) {
+  override def toString: String = str
+}
+
+object IntegrationId extends (String => IntegrationId) {
+  def apply(): IntegrationId = Id.random()
+
+  implicit object Id extends Id[IntegrationId] {
+    override def random(): IntegrationId = IntegrationId(Uid().toString)
+    override def decode(str: String): IntegrationId = IntegrationId(str)
+  }
 }

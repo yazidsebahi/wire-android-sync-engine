@@ -44,6 +44,9 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncConnectedUsers() = sid
   override def syncConnections(dependsOn: Option[SyncId] = None) = sid
   override def syncRichMedia(id: MessageId, priority: Int = Priority.MinPriority): Future[SyncId] = sid
+  override def syncIntegrations(startWith: String) = sid
+  override def syncIntegration(id: ProviderId, iId: IntegrationId) = sid
+  override def syncProvider(id: ProviderId) = sid
 
   override def postConnection(user: UserId, name: String, message: String) = sid
   override def postConnectionStatus(userId: UserId, status: ConnectionStatus) = sid
@@ -67,6 +70,8 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postTypingState(id: ConvId, t: Boolean) = sid
   override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
   override def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType) = sid
+  override def postAddBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) = sid
+  override def postRemoveBot(cId: ConvId, botId: UserId) = sid
 
   override def registerPush(token: PushToken) = sid
   override def deletePushToken(token: PushToken) = sid

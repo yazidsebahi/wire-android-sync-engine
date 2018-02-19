@@ -218,6 +218,26 @@ object SyncRequest {
     }
   }
 
+  case class SyncIntegrations(startWith: String) extends BaseRequest(Cmd.SyncIntegrations) {
+    override val mergeKey = (cmd, startWith)
+  }
+
+  case class SyncIntegration(pId: ProviderId, iId: IntegrationId) extends BaseRequest(Cmd.SyncIntegration) {
+    override val mergeKey = (cmd, iId)
+  }
+
+  case class SyncProvider(pId: ProviderId) extends BaseRequest(Cmd.SyncProvider) {
+    override val mergeKey = (cmd, pId)
+  }
+
+  case class PostAddBot(cId: ConvId, pId: ProviderId, iId: IntegrationId) extends BaseRequest(Cmd.PostAddBot) {
+    override val mergeKey = (cmd, cId, iId)
+  }
+
+  case class PostRemoveBot(cId: ConvId, botId: UserId) extends BaseRequest(Cmd.PostRemoveBot) {
+    override val mergeKey = (cmd, cId, botId)
+  }
+
   case class PostLiking(convId: ConvId, liking: Liking) extends RequestForConversation(Cmd.PostLiking) {
     override val mergeKey = (cmd, convId, liking.id)
   }
@@ -324,6 +344,9 @@ object SyncRequest {
           case Cmd.SyncUser              => SyncUser(users)
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
+          case Cmd.SyncIntegrations      => SyncIntegrations(decodeString('startWith))
+          case Cmd.SyncIntegration       => SyncIntegration(decodeId[ProviderId]('providerId), decodeId[IntegrationId]('integrationId))
+          case Cmd.SyncProvider          => SyncProvider(decodeId[ProviderId]('providerId))
           case Cmd.ExactMatchHandle      => ExactMatchHandle(Handle(decodeString('handle)))
           case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team)
           case Cmd.PostConvName          => PostConvName(convId, 'name)
@@ -360,6 +383,8 @@ object SyncRequest {
           case Cmd.SyncPreKeys           => SyncPreKeys(userId, decodeClientIdSeq('clients).toSet)
           case Cmd.PostClientLabel       => PostClientLabel(decodeId[ClientId]('client), 'label)
           case Cmd.PostLiking            => PostLiking(convId, JsonDecoder[Liking]('liking))
+          case Cmd.PostAddBot            => PostAddBot(decodeId[ConvId]('convId), decodeId[ProviderId]('providerId), decodeId[IntegrationId]('integrationId))
+          case Cmd.PostRemoveBot         => PostRemoveBot(decodeId[ConvId]('convId), decodeId[UserId]('botId))
           case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
           case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
           case Cmd.PostReceipt           => PostReceipt(convId, messageId, userId, ReceiptType.fromName('type))
@@ -390,9 +415,21 @@ object SyncRequest {
       }
 
       req match {
-        case SyncUser(users)                  => o.put("users", arrString(users.toSeq map ( _.str)))
+        case SyncUser(users)                  => o.put("users", arrString(users.toSeq map (_.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
+        case SyncIntegrations(startWith)      => o.put("startWith", startWith)
+        case SyncIntegration(pId, iId)        =>
+          o.put("providerId", pId.str)
+          o.put("integrationId", iId.str)
+        case SyncProvider(providerId)         => o.put("providerId", providerId.str)
+        case PostAddBot(cId, pId, iId)        =>
+          o.put("convId", cId.str)
+          o.put("providerId", pId.str)
+          o.put("integrationId", iId.str)
+        case PostRemoveBot(cId, botId)        =>
+          o.put("convId", cId.str)
+          o.put("botId", botId.str)
         case ExactMatchHandle(handle)         => o.put("handle", handle.string)
         case SyncTeamMember(userId)           => o.put("user", userId.str)
         case DeletePushToken(token)           => putId("token", token)

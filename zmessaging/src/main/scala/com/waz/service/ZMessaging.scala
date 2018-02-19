@@ -31,7 +31,7 @@ import com.waz.service.call._
 import com.waz.service.conversation._
 import com.waz.service.downloads.{AssetLoader, AssetLoaderImpl}
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader, ImageLoaderImpl}
-import com.waz.service.invitations.InvitationService
+import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
@@ -114,7 +114,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val syncContent          = userModule.syncContent
   lazy val syncRequests         = userModule.syncRequests
   lazy val otrClientsSync       = userModule.clientsSync
-  lazy val verificationUpdater  = userModule.verificationUpdater
 
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)
@@ -162,11 +161,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
   lazy val receivedPushStorage: ReceivedPushStorage = wire[ReceivedPushStorageImpl]
 
-  lazy val spotifyClientId  = metadata.spotifyClientId
-
   lazy val youtubeClient      = wire[YouTubeClient]
   lazy val soundCloudClient   = wire[SoundCloudClient]
-  lazy val spotifyClient      = wire[SpotifyClient]
   lazy val assetClient        = wire[AssetClient]
   lazy val usersClient        = wire[UsersClient]
   lazy val convClient         = wire[ConversationsClient]
@@ -183,6 +179,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val openGraphClient    = wire[OpenGraphClient]
   lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
   lazy val handlesClient      = wire[HandlesClient]
+  lazy val integrationsClient = wire[IntegrationsClient]
 
   lazy val convsContent: ConversationsContentUpdaterImpl = wire[ConversationsContentUpdaterImpl]
   lazy val messagesContent: MessagesContentUpdater = wire[MessagesContentUpdater]
@@ -207,18 +204,19 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
   lazy val convsStats                                 = wire[ConversationsListStateServiceImpl]
   lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
+  lazy val integrations: IntegrationsService          = wire[IntegrationsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
+  lazy val verificationUpdater                        = wire[VerificationStateUpdater]
   lazy val msgEvents: MessageEventProcessor           = wire[MessageEventProcessor]
-  lazy val connection: ConnectionServiceImpl              = wire[ConnectionServiceImpl]
+  lazy val connection: ConnectionServiceImpl          = wire[ConnectionServiceImpl]
   lazy val calling: CallingService                    = wire[CallingService]
   lazy val contacts: ContactsServiceImpl              = wire[ContactsServiceImpl]
   lazy val typing: TypingService                      = wire[TypingService]
-  lazy val invitations                                = wire[InvitationService]
+  lazy val invitations                                = wire[InvitationServiceImpl]
   lazy val richmedia                                  = wire[RichMediaService]
   lazy val giphy                                      = wire[GiphyService]
   lazy val youtubeMedia                               = wire[YouTubeMediaService]
   lazy val soundCloudMedia                            = wire[SoundCloudMediaService]
-  lazy val spotifyMedia                               = wire[SpotifyMediaService]
   lazy val otrService: OtrServiceImpl                 = wire[OtrServiceImpl]
   lazy val genericMsgs: GenericMessageService         = wire[GenericMessageService]
   lazy val reactions: ReactionsService                = wire[ReactionsService]
@@ -248,6 +246,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val clearedSync                                = wire[ClearedSyncHandler]
   lazy val openGraphSync                              = wire[OpenGraphSyncHandler]
   lazy val handlesSync                                = wire[HandlesSyncHandler]
+  lazy val integrationsSync: IntegrationsSyncHandler  = wire[IntegrationsSyncHandlerImpl]
 
   lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(otrService.eventTransformer), eventScheduler.enqueue)
 
@@ -301,6 +300,8 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
     recordAndPlay
 
     messagesIndexStorage
+
+    verificationUpdater
 
     reporting.addStateReporter { pw =>
       Future {

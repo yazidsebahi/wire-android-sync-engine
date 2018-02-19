@@ -36,6 +36,7 @@ trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberD
   def getByUsers(users: Set[UserId]): Future[IndexedSeq[ConversationMemberData]]
   def getActiveUsers(conv: ConvId): Future[Seq[UserId]]
   def getActiveConvs(user: UserId): Future[Seq[ConvId]]
+  def activeMembers(conv: ConvId): Signal[Set[UserId]]
 }
 
 class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {

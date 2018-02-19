@@ -37,6 +37,7 @@ import scala.concurrent.Future
 
 trait AccessTokenProvider {
   def currentToken(): Future[Either[Status, Token]]
+  def checkLoggedIn(token: Option[Token]): CancellableFuture[Either[Status, Token]]
 }
 
 /**
@@ -90,7 +91,7 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
   /**
    * Returns current token if not expired or performs login request
    */
-  def currentToken(): Future[Either[Status, Token]] = {
+  override def currentToken() = {
     loginFuture = loginFuture.recover {
       case ex =>
         warn(s"login failed", ex)
@@ -100,29 +101,33 @@ class AuthenticationManager(id: AccountId, accStorage: AccountsStorage, client: 
         case Some(token) if !isExpired(token) =>
           verbose(s"Non expired token: $token")
           CancellableFuture.successful(Right(token))
-        case token =>
-          CancellableFuture.lift(cookie).flatMap { cookie =>
-            debug(s"Non existent or expired token: $token, will attempt to refresh with cookie: $cookie")
-            cookie match {
-              case Some(c) =>
-                dispatchRequest(client.access(c, token)) {
-                  case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
-                    verbose(s"access request failed (label: $label, message: $message), will try login request. token: $token, cookie: $cookie, access resp: $resp")
-
-                    tracking.exception(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), token expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
-                    for {
-                      _ <- CancellableFuture.lift(wipeCredentials())
-                      res <- dispatchLoginRequest()
-                    } yield res
-                }
-              case None =>
-                dispatchLoginRequest()
-            }
-          }
+        case token => checkLoggedIn(token)
       }
     }
     loginFuture.future
   }
+
+  /**
+    * Forces an access request to check if the current cookie is valid. Can be used to see if a password reset was successful
+    */
+  override def checkLoggedIn(token: Option[Token]) =
+    CancellableFuture.lift(cookie).flatMap { cookie =>
+      debug(s"Non existent or potentially expired token: $token, will attempt to refresh with cookie: $cookie")
+      cookie match {
+        case Some(c) =>
+          dispatchRequest(client.access(c, token)) {
+            case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
+              verbose(s"access request failed (label: $label, message: $message), will try login request. currToken: $token, cookie: $cookie, access resp: $resp")
+
+              tracking.exception(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), currToken expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
+              for {
+                _ <- CancellableFuture.lift(wipeCredentials())
+                res <- dispatchLoginRequest()
+              } yield res
+          }
+        case None => dispatchLoginRequest()
+      }
+    }
 
   private def dispatchLoginRequest(): CancellableFuture[Either[Status, Token]] =
     CancellableFuture.lift(account).flatMap { acc =>

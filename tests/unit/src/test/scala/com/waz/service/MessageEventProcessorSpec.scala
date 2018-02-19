@@ -27,7 +27,7 @@ import com.waz.model.otr.UserClients
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.{MessageEventProcessor, MessagesContentUpdater, MessagesService}
-import com.waz.service.otr.{OtrService, VerificationStateUpdater}
+import com.waz.service.otr.OtrService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.utils._
 import com.waz.utils.events.EventStream
@@ -323,8 +323,7 @@ class MessageEventProcessorSpec extends AndroidFreeSpec with Inside {
     //often repeated mocks
     (deletions.getAll _).expects(*).anyNumberOfTimes().returning(Future.successful(Seq.empty))
 
-    val verificationUpdater = new VerificationStateUpdater(selfUserId, usersStorage, otrClientsStorage, convsStorage, membersStorage)
-    new MessageEventProcessor(selfUserId, storage, content, assets, msgsService, convs, verificationUpdater, otr)
+    new MessageEventProcessor(selfUserId, storage, content, assets, msgsService, convs, otr)
   }
 
 }

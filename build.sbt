@@ -7,8 +7,8 @@ import sbt._
 import sbtassembly.MappingSet
 import SharedSettings._
 
-val MajorVersion = "118"
-val MinorVersion = "3" // hotfix release
+val MajorVersion = "119"
+val MinorVersion = "0" // hotfix release
 
 version in ThisBuild := {
   val jobName = sys.env.get("JOB_NAME")
@@ -118,7 +118,6 @@ lazy val zmessaging = project
       Deps.genericMessage,
       Deps.backendApi,
       "com.wire" % "icu4j-shrunk" % "57.1",
-      Deps.spotifyPlayer,
       "org.threeten" % "threetenbp" % "1.3.+" % Provided,
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
       "net.java.dev.jna" % "jna" % "4.4.0" % Provided,

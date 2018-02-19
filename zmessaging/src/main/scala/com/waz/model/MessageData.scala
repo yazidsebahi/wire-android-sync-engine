@@ -42,10 +42,10 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.collection.breakOut
 
-case class MessageData(id:            MessageId,
-                       convId:        ConvId,
-                       msgType:       Message.Type,
-                       userId:        UserId,
+case class MessageData(id:            MessageId           = MessageId(),
+                       convId:        ConvId              = ConvId(),
+                       msgType:       Message.Type        = Message.Type.TEXT,
+                       userId:        UserId              = UserId(),
                        content:       Seq[MessageContent] = Seq.empty,
                        protos:        Seq[GenericMessage] = Seq.empty,
                        firstMessage:  Boolean             = false,
@@ -180,7 +180,7 @@ object MessageContent extends ((Message.Part.Type, String, Option[MediaAssetData
     import scala.collection.JavaConverters._
 
     def mentionsMap(js: JSONObject): Map[UserId, String] =
-      js.keys().asInstanceOf[java.util.Iterator[String]].asScala.map(key => UserId(key) -> js.getString(key)).toMap
+      js.keys().asScala.map(key => UserId(key) -> js.getString(key)).toMap
 
     override def apply(implicit js: JSONObject): MessageContent = {
       val tpe = ContentTypeCodec.decode('type)

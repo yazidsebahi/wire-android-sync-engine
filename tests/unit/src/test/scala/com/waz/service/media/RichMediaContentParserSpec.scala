@@ -59,11 +59,6 @@ class RichMediaContentParserSpec extends AndroidFreeSpec with TableDrivenPropert
       links foreach { link => findMatches(link) should be(empty) }
     }
 
-    scenario("match spotify link") {
-      val link = "http://open.spotify.com/artist/5lsC3H1vh9YSRQckyGv0Up"
-      findMatches(link).toList shouldEqual List((0, link.length, SPOTIFY))
-    }
-
     scenario("match soundcloud link") {
       val link = "https://soundcloud.com/majorlazer/major-lazer-dj-snake-lean-on-feat-mo"
       findMatches(link).toList shouldEqual List((0, link.length, SOUNDCLOUD))

@@ -223,7 +223,8 @@ class DeviceActor(val deviceName: String,
       }
 
     case CreateGroupConversation(users@_*) =>
-      zmessaging.convsUi.createGroupConversation(ConvId(), users) map { _ => Successful }
+//      zmessaging.convsUi.createGroupConversation(ConvId(), users) map { _ => Successful }
+      Future.successful(Failed)
 
     case ClearConversation(remoteId) =>
       whenConversationExists(remoteId) { conv =>
@@ -522,7 +523,7 @@ class DeviceActor(val deviceName: String,
     case AwaitSyncCompleted =>
       api.zmessaging flatMap {
         case None =>  successful(Failed("no zmessaging"))
-        case Some(zms) => zms.syncContent.syncJobs.filter(_.isEmpty).head map { _ => Successful }
+        case Some(zms) => zms.syncContent.syncJobs.filter(_.isEmpty).head("actors").map { _ => Successful }
       }
 
     case ResetQueueStats =>

@@ -21,6 +21,7 @@ import android.net.Uri
 import com.koushikdutta.async.http.WebSocket
 import com.waz.api.NetworkMode
 import com.waz.api.impl.ErrorResponse
+import com.waz.ZLog.ImplicitTag._
 import com.waz.content.UserPreferences.LastStableNotification
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -35,12 +36,13 @@ import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet._
+import org.scalatest.Ignore
 import org.json.JSONObject
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class PushServiceSpec extends AndroidFreeSpec { test =>
+@Ignore class PushServiceSpec extends AndroidFreeSpec { test =>
 
   val wsConnected = Signal(false)
 

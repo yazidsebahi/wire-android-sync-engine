@@ -26,7 +26,7 @@ import com.waz.model.{UserId, _}
 import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
 import com.waz.service.call.Avs.WCall
 import com.waz.service.call.CallInfo.CallState._
-import com.waz.service.conversation.ConversationsContentUpdater
+import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{MediaManagerService, NetworkModeService}
@@ -36,6 +36,8 @@ import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, Serialized}
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.LogTag
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
@@ -53,6 +55,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   val media          = mock[MediaManagerService]
   val network        = mock[NetworkModeService]
   val convs          = mock[ConversationsContentUpdater]
+  val convsService   = mock[ConversationsService]
   val callLogService = mock[CallLogService]
   val messages       = mock[MessagesService]
 
@@ -72,6 +75,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state == SelfJoining))
@@ -93,6 +97,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(cur => cur.convId == groupConv.id && cur.state == SelfJoining))
@@ -115,6 +120,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state == SelfCalling && cur.caller == self && cur.others == Set(otherUser)))
@@ -140,6 +146,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       val service = initCallingService()
 
@@ -171,7 +178,8 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(_1t1Conv.remoteId).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convs.convById _).expects(_1t1Conv.id).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
-      (members.getByConvs _).expects(Set(_1t1Conv.id)).twice().returning(Future.successful(IndexedSeq(otherUser, self).map(u => ConversationMemberData(u, _1t1Conv.id))))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
+      (members.getByConvs _).expects(Set(_1t1Conv.id)).once().returning(Future.successful(IndexedSeq(otherUser, self).map(u => ConversationMemberData(u, _1t1Conv.id))))
       (avs.startCall _).expects(*, _1t1Conv.remoteId, false, false, *).once().returning(Future.successful(0))
 
       val service = initCallingService()
@@ -195,7 +203,8 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(_1t1Conv.remoteId).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convs.convById _).expects(_1t1Conv.id).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
-      (members.getByConvs _).expects(Set(_1t1Conv.id)).repeated(2).returning(Future.successful(IndexedSeq(otherUser, self).map(u => ConversationMemberData(u, _1t1Conv.id))))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
+      (members.getByConvs _).expects(Set(_1t1Conv.id)).once().returning(Future.successful(IndexedSeq(otherUser, self).map(u => ConversationMemberData(u, _1t1Conv.id))))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state == SelfJoining))
@@ -217,7 +226,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
-      (members.getByConvs _).expects(Set(groupConv.id)).once().returning(Future.successful(IndexedSeq(groupMember1, groupMember2, self).map(u => ConversationMemberData(u, groupConv.id))))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       val service = initCallingService()
 
@@ -252,14 +261,13 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       val service = initCallingService()
       val estTime = clock.instant() + 10.seconds
 
       val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(c => c.state == SelfConnected && c.estabTime.contains(estTime)))
-//      val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(c => c.state == SelfConnected))
       val checkpoint2 = callCheckpoint(service, _.get(groupConv.id).exists(c => c.state == Ongoing && c.estabTime.contains(estTime)), _.isEmpty)
-//      val checkpoint2 = callCheckpoint(service, _.get(groupConv.id).exists(c => c.state == Ongoing), _.isEmpty)
 
       service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
 
@@ -292,6 +300,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(groupConv.id), _.exists(_.state == OtherCalling))
@@ -310,6 +319,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state == OtherCalling))
@@ -333,6 +343,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       val groupMember1 = UserId("groupUser1")
       val groupMember2 = UserId("groupUser2")
       val groupConv = ConversationData(ConvId(), RConvId(), Some("Group Conv"), self, ConversationType.Group)
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
       (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(groupConv)))
@@ -363,6 +374,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       val incomingUserId = UserId()
       val incomingConv = ConversationData(ConvId(incomingUserId.str), RConvId(incomingUserId.str), Some("Incoming Conv"), self, ConversationType.OneToOne)
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(true))
 
       (convs.convByRemoteId _).expects(*).anyNumberOfTimes().onCall { rConvId: RConvId =>
         Future.successful(rConvId match {
@@ -425,6 +437,12 @@ class CallingServiceSpec extends AndroidFreeSpec {
           case _ => None
         })
       }
+
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().onCall { convId: ConvId => convId match {
+        case groupConv.id => Future.successful(true)
+        case otoConv.id => Future.successful(false)
+        case other => fail(s"Unknown conv: $other")
+      }}
 
       (avs.setVideoSendActive _).expects(*, otoConv.remoteId, false).anyNumberOfTimes()
       val service = initCallingService()
@@ -550,7 +568,10 @@ class CallingServiceSpec extends AndroidFreeSpec {
     (network.networkMode _).expects().once().returning(Signal.empty[NetworkMode])
 
     (avs.registerAccount _).expects(*).once().returning(Future.successful(wCall))
-    val service = new CallingService(self, clientId, account1Id, context, avs, convs, members, null, flows, messages, media, null, callLogService, network, null, null, prefs, tracking)
+    val service = new CallingService(
+      self, clientId, account1Id, context, avs, convs, convsService, members, null,
+      flows, messages, media, null, callLogService, network, null, null, prefs, tracking
+    )
     result(service.wCall)
     service
   }
