@@ -19,6 +19,7 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
@@ -71,13 +72,23 @@ class ConversationsClient(netClient: ZNetClient) {
   def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
     netClient.withErrorHandling("postMemberJoin", Request.Post(s"$ConversationsPath/$conv/members", Json("users" -> Json(members)))) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberJoinEvent), _) => Some(event)
-      case Response(HttpStatus(Response.Status.NoResponse, _), EmptyResponse, _) => None
+      case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
     }
 
   def postMemberLeave(conv: RConvId, user: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] =
     netClient.withErrorHandling("postMemberLeave", Request.Delete(s"$ConversationsPath/$conv/members/$user")) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberLeaveEvent), _) => Some(event)
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
+    }
+
+  def postAccessUpdate(conv: RConvId, access: Set[Access], accessRole: AccessRole): ErrorOrResponse[Unit] =
+    netClient.withErrorHandling("postAccessUpdate",
+      Request.Put(
+        accessUpdatePath(conv),
+        Json(
+          "access" -> JsonEncoder.encodeAccess(access),
+          "access_role" -> JsonEncoder.encodeAccessRole(accessRole)))) {
+      case Response(SuccessHttpStatus(), _, _) | Response(HttpStatus(Status.NoResponse, _), _, _) => //no op
     }
 
   def postConversation(users: Seq[UserId], name: Option[String] = None, team: Option[TeamId]): ErrorOrResponse[ConversationResponse] = {
@@ -103,6 +114,8 @@ object ConversationsClient {
   val ConversationIdsPageSize = 1000
   val IdsCountThreshold = 32
 
+  def accessUpdatePath(id: RConvId) = s"$ConversationsPath/${id.str}/access"
+
   def conversationsQuery(start: Option[RConvId] = None, limit: Int = ConversationsPageSize, ids: Seq[RConvId] = Nil): String = {
     val args = (start, ids) match {
       case (None, Nil) =>   Seq("size" -> limit)
@@ -125,7 +138,7 @@ object ConversationsClient {
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
-      val (creator, name, team, id, convType, lastEventTime) = {
+      val (creator, name, team, id, convType, lastEventTime, access, accessRole) = {
         implicit val jsObj = js
         (
           decodeUserId('creator),
@@ -133,7 +146,9 @@ object ConversationsClient {
           decodeOptId[TeamId]('team),
           decodeRConvId('id),
           ConversationType(decodeInt('type)),
-          decodeISOInstant('last_event_time)
+          decodeISOInstant('last_event_time),
+          decodeAccess('access),
+          decodeAccessRole('access_role)
         )
       }
       val state = ConversationState.Decoder(self)
@@ -141,8 +156,23 @@ object ConversationsClient {
       val isManaged = team.map(_ => false)
 
       ConversationData(
-        ConvId(id.str), id, name filterNot (_.isEmpty), creator, convType, team, isManaged, lastEventTime, isActive = true,
-        Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime))
+        ConvId(id.str),
+        id,
+        name.filterNot(_.isEmpty),
+        creator,
+        convType,
+        team,
+        isManaged,
+        lastEventTime,
+        isActive = true,
+        Instant.EPOCH,
+        state.muted.getOrElse(false),
+        state.muteTime.getOrElse(lastEventTime),
+        state.archived.getOrElse(false),
+        state.archiveTime.getOrElse(lastEventTime),
+        access = access,
+        accessRole = Some(accessRole)
+      )
     }
 
     implicit lazy val Decoder: JsonDecoder[ConversationResponse] = new JsonDecoder[ConversationResponse] {

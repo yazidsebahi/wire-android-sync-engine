@@ -54,7 +54,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 99
+  val DbVersion = 100
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -188,6 +188,10 @@ object ZMessagingDB {
                                                         decrypted INTEGER, event TEXT,
                                                         plain BLOB, transient BOOLEAN,
                     PRIMARY KEY (pushId, event_index))""")
+    },
+    Migration(99, 100) { db =>
+      db.execSQL("ALTER TABLE Conversations ADD COLUMN access TEXT DEFAULT null")
+      db.execSQL("ALTER TABLE Conversations ADD COLUMN access_role TEXT DEFAULT null")
     }
   )
 }

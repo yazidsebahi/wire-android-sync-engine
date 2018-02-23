@@ -19,6 +19,7 @@ package com.waz.service.conversation
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
@@ -50,6 +51,7 @@ trait ConversationsContentUpdater {
   def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], name: Option[String] = None, hidden: Boolean = false, teamId: Option[TeamId] = None): Future[ConversationData]
   def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
+  def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]): Future[Option[(ConversationData, ConversationData)]]
 }
 
 class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
@@ -219,4 +221,7 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
           retry()
     } (ec)
   }
+
+  override def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]) =
+    storage.update(id, conv => conv.copy(access = access, accessRole = accessRole))
 }

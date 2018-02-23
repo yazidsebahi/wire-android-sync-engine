@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import java.util.{Date, Locale, TimeZone}
 
 import android.util.Base64
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.model.AssetMetaData.Loudness
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -183,4 +184,8 @@ object JsonDecoder {
   implicit def decodeId[A](s: Symbol)(implicit js: JSONObject, id: Id[A]): A = id.decode(js.getString(s.name))
 
   implicit def decodeOptId[A](s: Symbol)(implicit js: JSONObject, id: Id[A]): Option[A] = if (js.has(s.name) && !js.isNull(s.name)) Some(id.decode(js.getString(s.name))) else None
+
+  implicit def decodeAccessRole(s: Symbol)(implicit js: JSONObject): AccessRole = AccessRole.valueOf(js.getString(s.name).toUpperCase())
+  implicit def decodeOptAccessRole(s: Symbol)(implicit js: JSONObject): Option[AccessRole] = opt(s, js => AccessRole.valueOf(js.getString(s.name).toUpperCase()))
+  implicit def decodeAccess(s: Symbol)(implicit js: JSONObject): Set[Access] = array[Access](s)((arr: JSONArray, i: Int) => Access.valueOf(arr.getString(i).toUpperCase())).toSet
 }

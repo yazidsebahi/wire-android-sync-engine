@@ -20,6 +20,7 @@ package com.waz.service.conversation
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.MessageContent.Asset.ErrorHandler
 import com.waz.api.MessageContent.Text
 import com.waz.api.NetworkMode.{OFFLINE, WIFI}

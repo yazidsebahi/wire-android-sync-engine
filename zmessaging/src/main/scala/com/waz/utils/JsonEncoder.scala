@@ -19,6 +19,7 @@ package com.waz.utils
 
 import java.util.Date
 
+import com.waz.api.IConversation.{Access, AccessRole}
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
@@ -56,4 +57,9 @@ object JsonEncoder {
   def encodeInstant(instant: Instant): Long = instant.toEpochMilli
 
   def encodeISOInstant(time: Instant): String = JsonDecoder.utcDateFormat.get().format(new Date(time.toEpochMilli))
+
+  def encodeAccess(a: Set[Access]): JSONArray = JsonEncoder.array(a)((arr, e) => arr.put(e.name().toLowerCase()))
+  def encodeAccessRoleOpt(a: Option[AccessRole]): String = a.map(encodeAccessRole).getOrElse("")
+  def encodeAccessRole(a: AccessRole): String = a.name().toLowerCase()
+
 }

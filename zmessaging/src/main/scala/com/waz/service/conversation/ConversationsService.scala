@@ -22,6 +22,7 @@ import com.softwaremill.macwire._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ErrorType
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.impl.ErrorResponse
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
@@ -30,11 +31,13 @@ import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
 import com.waz.service.tracking.TrackingService
+import com.waz.sync.client.ConversationsClient
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.Threading
 import com.waz.utils._
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{EventContext, FutureEventStream}
+import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
@@ -52,9 +55,11 @@ trait ConversationsService {
   def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
   def isWithBot(convId: ConvId): Future[Boolean]
+  def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
 }
 
 class ConversationsServiceImpl(context:         Context,
+                               teamId:          Option[TeamId],
                                selfUserId:      UserId,
                                push:            PushService,
                                users:           UserServiceImpl,
@@ -70,6 +75,8 @@ class ConversationsServiceImpl(context:         Context,
                                requests:        SyncRequestService,
                                eventScheduler:  => EventScheduler,
                                tracking:        TrackingService,
+                               client:          ConversationsClient,
+                               stats:           ConversationsListStateService,
                                syncReqService:  SyncRequestService) extends ConversationsService {
 
   private implicit val ev = EventContext.Global
@@ -77,6 +84,14 @@ class ConversationsServiceImpl(context:         Context,
 
   private val nameUpdater = wire[NameUpdater]
   nameUpdater.registerForUpdates()
+
+  //On conversation changed, update the state of the access roles as part of migration
+  stats.selectedConversationId {
+    case Some(convId) => convsStorage.get(convId).flatMap {
+      case Some(conv) if conv.accessRole.isEmpty => sync.syncConversations(Set(conv.id))
+      case _ => Future.successful({})
+    }
+  }
 
   val convStateEventProcessingStage = EventScheduler.Stage[ConversationStateEvent] { (_, events) =>
     RichFuture.processSequential(events)(processConversationEvent(_, selfUserId))
@@ -160,6 +175,9 @@ class ConversationsServiceImpl(context:         Context,
           sync.syncUsersIfNotEmpty(userIdsAdded.filterNot(id => localUsers exists (_.id == id)).toSeq)
         }
       }
+
+    case ConversationAccessEvent(_, _, _, access, accessRole) =>
+      content.updateAccessMode(conv.id, access, Some(accessRole))
 
     case _ => successful(())
   }
@@ -287,6 +305,30 @@ class ConversationsServiceImpl(context:         Context,
     case None => false
     case Some(u) => u.isWireBot
   }
+
+  def setToTeamOnly(convId: ConvId, teamOnly: Boolean) =
+    if (teamId.isEmpty) Future.successful(Left(ErrorResponse.internalError("Private accounts can't be set to team-only or guest room access modes")))
+    else {
+      import Access._
+      import AccessRole._
+      val access = if (teamOnly) Set(INVITE) else Set(INVITE, CODE)
+      val accessRole = if (teamOnly) TEAM else NON_VERIFIED
+
+      for {
+        Some((old, upd)) <- content.updateAccessMode(convId, access, Some(accessRole))
+        resp <-
+          if (old.access != upd.access || old.accessRole != upd.accessRole) {
+            client.postAccessUpdate(upd.remoteId, access, accessRole)
+          }.future.flatMap {
+            case Right(_) => Future.successful(Right{})
+            case Left(err) =>
+              //set mode back on request failed
+              content.updateAccessMode(convId, old.access, old.accessRole).map(_ => Left(err))
+          }
+          else Future.successful(Right{})
+
+      } yield resp
+    }
 }
 
 object ConversationsService {
