@@ -320,7 +320,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
           allMembers <- this.members.getByConvs(allConvs.toSet).map(_.map(m => m.convId -> m.userId))
           onlyUs     = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, selfId) => c}
           data       <- convStorage.getAll(onlyUs).map(_.flatten)
-        } yield data.filter(_.team.contains(tId))).flatMap { convs =>
+        } yield data.filter(c => c.team.contains(tId) && c.name.isEmpty)).flatMap { convs =>
           if (convs.isEmpty) {
             verbose(s"No conversation with user $other found, creating new team 1:1 conversation (type == Group)")
             createAndPostConversation(ConvId(), None, Seq(other)).map(_._1)
