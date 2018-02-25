@@ -24,6 +24,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
+import com.waz.utils.JsonEncoder.{encodeAccess, encodeAccessRole}
 import com.waz.utils.{Json, JsonDecoder, JsonEncoder, returning}
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
@@ -86,12 +87,12 @@ class ConversationsClient(netClient: ZNetClient) {
       Request.Put(
         accessUpdatePath(conv),
         Json(
-          "access" -> JsonEncoder.encodeAccess(access),
-          "access_role" -> JsonEncoder.encodeAccessRole(accessRole)))) {
+          "access" -> encodeAccess(access),
+          "access_role" -> encodeAccessRole(accessRole)))) {
       case Response(SuccessHttpStatus(), _, _) | Response(HttpStatus(Status.NoResponse, _), _, _) => //no op
     }
 
-  def postConversation(users: Seq[UserId], name: Option[String] = None, team: Option[TeamId]): ErrorOrResponse[ConversationResponse] = {
+  def postConversation(users: Seq[UserId], name: Option[String] = None, team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): ErrorOrResponse[ConversationResponse] = {
     debug(s"postConversation($users, $name)")
     val payload = JsonEncoder { o =>
       o.put("users", Json(users))
@@ -100,6 +101,11 @@ class ConversationsClient(netClient: ZNetClient) {
         o.put("teamid", t.str)
         o.put("managed", false)
       }))
+      access.foreach {
+        case (a, ar) =>
+          o.put("access", encodeAccess(a))
+          o.put("access_role", encodeAccessRole(ar))
+      }
     }
     netClient.withErrorHandling("postConversation", Request.Post(ConversationsPath, payload)) {
       case Response(SuccessHttpStatus(), ConversationsResult(Seq(conv), _), _) => conv

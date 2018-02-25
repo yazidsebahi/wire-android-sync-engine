@@ -17,6 +17,8 @@
  */
 package com.waz.model
 
+import com.waz.api.IConversation.Access.{CODE, INVITE, PRIVATE}
+import com.waz.api.IConversation.AccessRole.{NON_VERIFIED, TEAM, VERIFIED}
 import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
@@ -142,6 +144,14 @@ object ConversationData {
     def isOneToOne(tp: IConversation.Type) = tp == OneToOne || tp == WaitForConnection || tp == Incoming
 
     def values = Set(Unknown, Group, OneToOne, Self, WaitForConnection, Incoming)
+  }
+
+  def getAccessAndRole(teamOnly: Boolean, teamId: Option[TeamId]): Option[(Set[Access], AccessRole)] = {
+    teamId match {
+      case Some(_) if teamOnly              => Some((Set(INVITE), TEAM))
+      case Some(_)                          => Some((Set(INVITE, CODE), NON_VERIFIED))
+      case _                                => None
+    }
   }
 
   implicit lazy val Decoder: JsonDecoder[ConversationData] = new JsonDecoder[ConversationData] {

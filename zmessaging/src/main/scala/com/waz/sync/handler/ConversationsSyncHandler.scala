@@ -22,6 +22,7 @@ import java.util.Date
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MessagesStorageImpl
 import com.waz.model._
@@ -129,10 +130,10 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
     conversationsClient.postConversationState(conv.remoteId, state).future map (_.fold(SyncResult(_), SyncResult(_)))
   }
 
-  def postConversation(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]): Future[SyncResult] = {
+  def postConversation(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): Future[SyncResult] = {
     debug(s"postConversation($convId, $users, $name)")
     val (toCreate, toAdd) = users.splitAt(PostMembersLimit)
-    conversationsClient.postConversation(toCreate, name, team).future.flatMap {
+    conversationsClient.postConversation(toCreate, name, team, access).future.flatMap {
       case Right(response) =>
         convService.updateConversations(Seq(response.copy(conversation = response.conversation.copy(id = convId)))) flatMap { _ =>
           if (toAdd.nonEmpty) postConversationMemberJoin(convId, toAdd)
