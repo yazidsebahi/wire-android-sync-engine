@@ -70,7 +70,7 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), _, _) => true
     }
 
-  def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
+  def postMemberJoin(conv: RConvId, members: Set[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
     netClient.withErrorHandling("postMemberJoin", Request.Post(s"$ConversationsPath/$conv/members", Json("users" -> Json(members)))) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberJoinEvent), _) => Some(event)
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
@@ -92,7 +92,7 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), _, _) | Response(HttpStatus(Status.NoResponse, _), _, _) => //no op
     }
 
-  def postConversation(users: Seq[UserId], name: Option[String] = None, team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): ErrorOrResponse[ConversationResponse] = {
+  def postConversation(users: Set[UserId], name: Option[String] = None, team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): ErrorOrResponse[ConversationResponse] = {
     debug(s"postConversation($users, $name)")
     val payload = JsonEncoder { o =>
       o.put("users", Json(users))

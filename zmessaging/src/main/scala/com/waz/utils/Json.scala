@@ -25,7 +25,7 @@ object Json {
   // TODO: re-implement as macro for typesafety and performance
   def apply(entries: (String, Any)*): JSONObject = apply(entries.toMap)
 
-  def apply(seq: Seq[Any]): JSONArray =
+  def apply(seq: Iterable[Any]): JSONArray =
     returning(new JSONArray()) { arr => seq.foreach(v => arr.put(wrap(v))) }
 
   def apply(map: Map[String, Any]): JSONObject =

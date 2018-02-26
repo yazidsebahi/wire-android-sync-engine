@@ -20,7 +20,6 @@ package com.waz.service.conversation
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.MessageContent.Asset.ErrorHandler
 import com.waz.api.MessageContent.Text
 import com.waz.api.NetworkMode.{OFFLINE, WIFI}
@@ -34,6 +33,7 @@ import com.waz.model._
 import com.waz.service.AccountsService.InForeground
 import com.waz.service._
 import com.waz.service.assets.AssetService
+import com.waz.service.conversation.ConversationsService.generateTempConversationId
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.service.tracking.TrackingService
 import com.waz.sync.SyncServiceHandle
@@ -48,6 +48,7 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.{higherKinds, implicitConversions}
+import scala.util.control.NonFatal
 
 trait ConversationsUiService {
   @Deprecated
@@ -71,10 +72,11 @@ trait ConversationsUiService {
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
   def setConversationMuted(id: ConvId, muted: Boolean): Future[Option[ConversationData]]
   def setConversationName(id: ConvId, name: String): Future[Option[ConversationData]]
-  def addConversationMembers(conv: ConvId, users: Seq[UserId]): Future[Seq[ConversationMemberData]]
+
+  def addConversationMembers(conv: ConvId, users: Set[UserId]): Future[Option[SyncId]]
   def removeConversationMember(conv: ConvId, user: UserId): Future[Option[SyncId]]
+
   def leaveConversation(conv: ConvId): Future[Option[ConversationData]]
-  def ifAbleToModifyMembers[A, M[_]](conv: ConvId, user: UserId, zero: M[A])(f: => Future[M[A]]): Future[M[A]]
   def clearConversation(id: ConvId): Future[Option[ConversationData]]
   def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]]
   def knock(id: ConvId): Future[Option[MessageData]]
@@ -83,7 +85,7 @@ trait ConversationsUiService {
 
   //conversation creation methods
   def getOrCreateOneToOneConversation(toUser: UserId): Future[ConversationData]
-  def createGroupConversation(name: Option[String] = None, members: Seq[UserId] = Seq.empty, teamOnly: Boolean = false): Future[(ConversationData, SyncId)]
+  def createGroupConversation(name: Option[String] = None, members: Set[UserId] = Set.empty, teamOnly: Boolean = false): Future[(ConversationData, SyncId)]
 
   def assetUploadCancelled : EventStream[Mime]
   def assetUploadFailed    : EventStream[ErrorResponse]
@@ -244,31 +246,42 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     }
   }
 
-  override def addConversationMembers(conv: ConvId, users: Seq[UserId]): Future[Seq[ConversationMemberData]] = this.users.withSelfUserFuture { selfUserId =>
-    ifAbleToModifyMembers(conv, selfUserId, Seq.empty[ConversationMemberData]) {
-      members.add(conv, users: _*) flatMap { members =>
-        if (members.nonEmpty) {
-          messages.addMemberJoinMessage(conv, selfUserId, members.map(_.userId).toSet) map { _ =>
-            sync.postConversationMemberJoin(conv, members.map(_.userId).toSeq)
-            members.toSeq
-          }
-        } else Future.successful(members.toSeq)
+  override def addConversationMembers(conv: ConvId, users: Set[UserId]) = {
+    (for {
+      true   <- canModifyMembers(conv)
+      added  <- members.add(conv, users) if added.nonEmpty
+      _      <- messages.addMemberJoinMessage(conv, selfId, added.map(_.userId))
+      syncId <- sync.postConversationMemberJoin(conv, added.map(_.userId).toSeq)
+    } yield Option(syncId))
+      .recover {
+        case NonFatal(e) =>
+          warn(s"Failed to add members: $users to conv: $conv", e)
+          Option.empty[SyncId]
       }
-    }
   }
 
-  override def removeConversationMember(conv: ConvId, user: UserId): Future[Option[SyncId]] = this.users.withSelfUserFuture { selfUserId =>
-    ifAbleToModifyMembers(conv, selfUserId, Option.empty[SyncId]) {
-      members.remove(conv, user) flatMap { members =>
-        if (members.isEmpty) Future.successful(None)
-        else messages.addMemberLeaveMessage(conv, selfUserId, user) flatMap { _ => sync.postConversationMemberLeave(conv, user).map(Some(_)) }
+  override def removeConversationMember(conv: ConvId, user: UserId) = {
+    (for {
+      true    <- canModifyMembers(conv)
+      Some(_) <- members.remove(conv, user)
+      _       <- messages.addMemberLeaveMessage(conv, selfId, user)
+      syncId  <- sync.postConversationMemberLeave(conv, user)
+    } yield Some(syncId))
+      .recover {
+        case NonFatal(e) =>
+          warn(s"Failed to remove member: $user from conv: $conv", e)
+          Option.empty[SyncId]
       }
-    }
   }
+
+  private def canModifyMembers(conv: ConvId) =
+    for {
+      selfActive <- members.isActiveMember(conv, selfId)
+      isGroup    <- convs.isGroupConversation(conv)
+    } yield selfActive && isGroup
 
   override def leaveConversation(conv: ConvId): Future[Option[ConversationData]] = {
     verbose(s"leaveConversation($conv)")
-
     for {
       updated <- convsContent.setConvActive(conv, active = false)
       _ <- users.withSelfUserFuture {
@@ -278,14 +291,13 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     } yield archived.map(_._2).orElse(updated.map(_._2))
   }
 
-  override def ifAbleToModifyMembers[A, M[_]](conv: ConvId, user: UserId, zero: M[A])(f: => Future[M[A]]): Future[M[A]] = {
-    val isGroup = convsContent.convById(conv).map(_.exists(_.convType == ConversationType.Group))
+  def isAbleToModifyMembers(conv: ConvId, user: UserId): Future[Boolean] = {
+    val isGroup = convs.isGroupConversation(conv)
     val isActiveMember = members.isActiveMember(conv, user)
     for {
       p1 <- isGroup
       p2 <- isActiveMember
-      res <- if (p1 && p2) f else Future.successful(zero)
-    } yield res
+    } yield p1 && p2
   }
 
   override def clearConversation(id: ConvId): Future[Option[ConversationData]] = convsContent.convById(id) flatMap {
@@ -320,10 +332,11 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
           allMembers <- this.members.getByConvs(allConvs.toSet).map(_.map(m => m.convId -> m.userId))
           onlyUs     = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, selfId) => c}
           data       <- convStorage.getAll(onlyUs).map(_.flatten)
+          _          = verbose(s"Found ${data.size} convs with other user: $other")
         } yield data.filter(c => c.team.contains(tId) && c.name.isEmpty)).flatMap { convs =>
           if (convs.isEmpty) {
             verbose(s"No conversation with user $other found, creating new team 1:1 conversation (type == Group)")
-            createAndPostConversation(ConvId(), None, Seq(other)).map(_._1)
+            createAndPostConversation(ConvId(), None, Set(other)).map(_._1)
           } else {
             if (convs.size > 1) warn(s"Found ${convs.size} available team conversations with user: $other, returning first conversation found")
             Future.successful(convs.head)
@@ -335,31 +348,30 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
         case _ => usersStorage.get(other).flatMap {
           case Some(u) if u.connection == ConnectionStatus.Ignored =>
             for {
-              conv <- convsContent.createConversationWithMembers(ConvId(other.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, other, Seq(selfId), hidden = true)
+              conv <- convsContent.createConversationWithMembers(ConvId(other.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, other, Set(selfId), hidden = true)
               _ <- messages.addMemberJoinMessage(conv.id, other, Set(selfId), firstMessage = true)
               _ <- u.connectionMessage.fold(Future.successful(conv))(messages.addConnectRequestMessage(conv.id, other, selfId, _, u.name).map(_ => conv))
             } yield conv
           case _ =>
             for {
-              _ <- sync.postConversation(ConvId(other.str), Seq(other), None, None, None)
-              conv <- convsContent.createConversationWithMembers(ConvId(other.str), RConvId(), ConversationType.OneToOne, selfId, Seq(other))
+              _ <- sync.postConversation(ConvId(other.str), Set(other), None, None, None)
+              conv <- convsContent.createConversationWithMembers(ConvId(other.str), RConvId(), ConversationType.OneToOne, selfId, Set(other))
               _ <- messages.addMemberJoinMessage(conv.id, selfId, Set(other), firstMessage = true)
             } yield conv
         }
       }
     }
 
-  override def createGroupConversation(name: Option[String] = None, members: Seq[UserId] = Seq.empty, teamOnly: Boolean = false) =
+  override def createGroupConversation(name: Option[String] = None, members: Set[UserId] = Set.empty, teamOnly: Boolean = false) =
     createAndPostConversation(ConvId(), name, members, teamOnly)
 
-  private def createAndPostConversation(id: ConvId, name: Option[String], members: Seq[UserId], teamOnly: Boolean = false) =
-    convsContent.createConversationWithMembers(id, ConversationsService.generateTempConversationId((selfId +: members).distinct: _*), ConversationType.Group, selfId, members, name = name, teamOnly = teamOnly).flatMap { conv =>
-      debug(s"created: $conv")
-      for {
-        _      <- messages.addConversationStartMessage(conv.id, selfId, members.toSet, name)
-        syncId <- sync.postConversation(id, members, conv.name, teamId, getAccessAndRole(teamOnly, teamId))
-      } yield (conv, syncId)
-    }
+  private def createAndPostConversation(id: ConvId, name: Option[String], members: Set[UserId], teamOnly: Boolean = false) =
+    for {
+      conv   <- convsContent.createConversationWithMembers(id, generateTempConversationId(selfId +: members.toSeq), ConversationType.Group, selfId, members, name, teamOnly)
+      _      = verbose(s"created: $conv")
+      _      <- messages.addConversationStartMessage(conv.id, selfId, members, name)
+      syncId <- sync.postConversation(id, members, conv.name, teamId, getAccessAndRole(teamOnly, teamId))
+    } yield (conv, syncId)
 
   override def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
     users.withSelfUserFuture(id => convStorage.search(prefix, id, handleOnly)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))

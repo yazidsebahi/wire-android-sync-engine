@@ -116,7 +116,7 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
       val convId = ConvId(rId.str)
       Future.successful(ConversationData(convId, rId, None, selfUserId, tpe))
     }
-    (members.add _).expects(*, *).anyNumberOfTimes().onCall { (conv: ConvId, users: Seq[UserId]) =>
+    (members.add (_:ConvId, _:Iterable[UserId])).expects(*, *).anyNumberOfTimes().onCall { (conv: ConvId, users: Iterable[UserId]) =>
       Future.successful(users.map(uId => ConversationMemberData(uId, conv)).toSet)
     }
     (messagesStorage.getLastMessage _).expects(*).anyNumberOfTimes().returns(Future.successful(None))

@@ -90,8 +90,8 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
   def postConversationName(id: ConvId, name: String): Future[SyncResult] =
     postConv(id) { conv => conversationsClient.postName(conv.remoteId, name).future }
 
-  def postConversationMemberJoin(id: ConvId, members: Seq[UserId]): Future[SyncResult] = withConversation(id) { conv =>
-    def post(users: Seq[UserId]) = conversationsClient.postMemberJoin(conv.remoteId, users).future flatMap {
+  def postConversationMemberJoin(id: ConvId, members: Set[UserId]): Future[SyncResult] = withConversation(id) { conv =>
+    def post(users: Set[UserId]) = conversationsClient.postMemberJoin(conv.remoteId, users).future flatMap {
       case Left(resp @ ErrorResponse(403, _, "not-connected")) =>
         convService.onMemberAddFailed(id, users, ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION, resp) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
       case Left(resp @ ErrorResponse(403, _, "too-many-members")) =>
@@ -130,7 +130,7 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
     conversationsClient.postConversationState(conv.remoteId, state).future map (_.fold(SyncResult(_), SyncResult(_)))
   }
 
-  def postConversation(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): Future[SyncResult] = {
+  def postConversation(convId: ConvId, users: Set[UserId], name: Option[String], team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): Future[SyncResult] = {
     debug(s"postConversation($convId, $users, $name)")
     val (toCreate, toAdd) = users.splitAt(PostMembersLimit)
     conversationsClient.postConversation(toCreate, name, team, access).future.flatMap {

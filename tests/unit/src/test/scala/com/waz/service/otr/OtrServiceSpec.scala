@@ -153,7 +153,7 @@ import scala.util.Random
       usersStorage.addOrOverwrite(remote)
 
       convsStorage.insert(conv)
-      membersStorage.add(conv.id, self.id, remote.id)
+      membersStorage.add(conv.id, Set(self.id, remote.id))
     }
 
     lazy val user1 = UserData("user1")

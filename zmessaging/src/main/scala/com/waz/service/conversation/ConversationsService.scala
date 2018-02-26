@@ -51,7 +51,7 @@ trait ConversationsService {
   def updateConversations(conversations: Seq[ConversationResponse]): Future[Seq[ConversationData]]
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
-  def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
+  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
   def isWithBot(convId: ConvId): Future[Boolean]
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
@@ -131,7 +131,7 @@ class ConversationsServiceImpl(context:         Context,
               // this happens when we are added to group conversation
               for {
                 conv <- convsStorage.insert(ConversationData(ConvId(), rConvId, None, from, ConversationType.Group, lastEventTime = time.instant))
-                ms   <- membersStorage.add(conv.id, from +: members: _*)
+                ms   <- membersStorage.add(conv.id, from +: members)
                 _    <- messages.addMemberJoinMessage(conv.id, from, members.toSet)
                 _    <- sync.syncConversations(Set(conv.id))
               } yield {}
@@ -153,12 +153,12 @@ class ConversationsServiceImpl(context:         Context,
       for {
         syncId <- users.syncNotExistingOrExpired(userIds)
         _ <- syncId.fold(Future.successful(()))(sId => syncReqService.scheduler.await(sId).map(_ => ()))
-        _ <- membersStorage.add(conv.id, userIds: _*)
+        _ <- membersStorage.add(conv.id, userIds)
         _ <- if (userIds.contains(selfUserId)) ensureConvActive() else successful(None)
       } yield ()
 
     case MemberLeaveEvent(_, _, _, userIds) =>
-      membersStorage.remove(conv.id, userIds: _*) flatMap { _ =>
+      membersStorage.remove(conv.id, userIds) flatMap { _ =>
         if (userIds.contains(selfUserId)) content.setConvActive(conv.id, active = false)
         else successful(())
       }
@@ -167,7 +167,7 @@ class ConversationsServiceImpl(context:         Context,
 
     case ConnectRequestEvent(_, _, from, _, recipient, _, _) =>
       debug(s"ConnectRequestEvent(from = $from, recipient = $recipient")
-      membersStorage.add(conv.id, from, recipient) flatMap { added =>
+      membersStorage.add(conv.id, Set(from, recipient)).flatMap { added =>
         val userIdsAdded = added map (_.userId)
         usersStorage.listAll(userIdsAdded) map { localUsers =>
           users.syncIfNeeded(localUsers: _*)
@@ -219,7 +219,7 @@ class ConversationsServiceImpl(context:         Context,
           val matching = byRemoteId(conv.remoteId).orElse {
             convById.get(newId) orElse {
               if (ConversationType.isOneToOne(conv.convType)) None
-              else byRemoteId(ConversationsService.generateTempConversationId((members.map(_.userId) :+ selfUserId).distinct: _*))
+              else byRemoteId(ConversationsService.generateTempConversationId((members.map(_.userId) :+ selfUserId).distinct))
             }
           }
 
@@ -281,10 +281,10 @@ class ConversationsServiceImpl(context:         Context,
     nameUpdater.forceNameUpdate(id)
   }
 
-  def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse) = for {
+  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: ErrorType, resp: ErrorResponse) = for {
     _ <- errors.addErrorWhenActive(ErrorData(error, resp, conv, users))
-    _ <- membersStorage.remove(conv, users: _*)
-    _ <- messages.removeLocalMemberJoinMessage(conv, users.toSet)
+    _ <- membersStorage.remove(conv, users)
+    _ <- messages.removeLocalMemberJoinMessage(conv, users)
   } yield ()
 
   def isGroupConversation(convId: ConvId) =
@@ -334,6 +334,6 @@ object ConversationsService {
   /**
    * Generate temp ConversationID to identify conversations which don't have a RConvId yet
    */
-  def generateTempConversationId(users: UserId *) =
+  def generateTempConversationId(users: Seq[UserId]) =
     RConvId(users.map(_.toString).sorted.foldLeft("")(_ + _))
 }

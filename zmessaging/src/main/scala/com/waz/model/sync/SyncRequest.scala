@@ -137,7 +137,7 @@ object SyncRequest {
 
   sealed abstract class RequestForConversation(cmd: SyncCommand) extends BaseRequest(cmd) with ConversationReference
 
-  case class PostConv(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId], access: Option[(Set[Access], AccessRole)]) extends RequestForConversation(Cmd.PostConv) with SerialExecutionWithinConversation {
+  case class PostConv(convId: ConvId, users: Set[UserId], name: Option[String], team: Option[TeamId], access: Option[(Set[Access], AccessRole)]) extends RequestForConversation(Cmd.PostConv) with SerialExecutionWithinConversation {
     override def merge(req: SyncRequest) = mergeHelper[PostConv](req)(Merged(_))
   }
 
@@ -350,7 +350,7 @@ object SyncRequest {
           case Cmd.SyncIntegration       => SyncIntegration(decodeId[ProviderId]('providerId), decodeId[IntegrationId]('integrationId))
           case Cmd.SyncProvider          => SyncProvider(decodeId[ProviderId]('providerId))
           case Cmd.ExactMatchHandle      => ExactMatchHandle(Handle(decodeString('handle)))
-          case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)), 'name, 'team, if (js.has("access")) Some((decodeAccess('access), decodeAccessRole('access_role))) else None)
+          case Cmd.PostConv              => PostConv(convId, decodeStringSeq('users).map(UserId(_)).toSet, 'name, 'team, if (js.has("access")) Some((decodeAccess('access), decodeAccessRole('access_role))) else None)
           case Cmd.PostConvName          => PostConvName(convId, 'name)
           case Cmd.PostConvState         => PostConvState(convId, JsonDecoder[ConversationState]('state))
           case Cmd.PostLastRead          => PostLastRead(convId, 'time)
@@ -480,7 +480,7 @@ object SyncRequest {
         case PostConvState(_, state) => o.put("state", JsonEncoder.encode(state))
         case PostConvName(_, name) => o.put("name", name)
         case PostConv(_, users, name, team, access) =>
-          o.put("users", arrString(users.map(_.str)))
+          o.put("users", arrString(users.map(_.str).toSeq))
           name.foreach(o.put("name", _))
           team.foreach(o.put("team", _))
           access.foreach {
