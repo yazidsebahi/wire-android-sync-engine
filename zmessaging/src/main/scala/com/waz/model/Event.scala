@@ -261,7 +261,7 @@ object ConversationEvent {
         case "conversation.generic-asset" => genericAssetEvent('convId, 'time, 'from, 'content, 'dataId)
         case "conversation.otr-error" => otrErrorEvent('convId, 'time, 'from)
         case "conversation.call-message" => CallMessageEvent('convId, 'time, 'from, 'sender, 'content)
-        case "conversation.access-update" => ConversationAccessEvent('convId, 'time, 'from, decodeAccess('access)(data.get), decodeAccessRole('access_role)(data.get))
+        case "conversation.access-update" => ConversationAccessEvent('conversation, 'time, 'from, decodeAccess('access)(data.get), decodeAccessRole('access_role)(data.get))
         case _ =>
           error(s"unhandled event: $js")
           UnknownConvEvent(js)
