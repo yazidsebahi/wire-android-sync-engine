@@ -363,7 +363,7 @@ class DeviceActor(val deviceName: String,
 
     case AddMembers(remoteId, users@_*) =>
       whenConversationExistsFuture(remoteId) { conv =>
-        zmessaging.convsUi.addConversationMembers(conv.id, users).map { _ =>
+        zmessaging.convsUi.addConversationMembers(conv.id, users.toSet).map { _ =>
           Successful
         }
       }

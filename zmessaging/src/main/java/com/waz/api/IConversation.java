@@ -46,6 +46,15 @@ public interface IConversation extends UiObservable, Parcelable {
         }
     }
 
+    //https://github.com/wireapp/architecture/blob/master/topics/conversations/access%20modes.md
+    enum Access {
+        INVITE, CODE, SELF, PRIVATE;
+    }
+
+    enum AccessRole {
+        TEAM, VERIFIED, NON_VERIFIED //TODO name VERIFIED clashes with concept of device verification
+    }
+
     Parcelable.Creator<IConversation> CREATOR = new Parcelable.Creator<IConversation>() {
         @Override
         public IConversation createFromParcel(Parcel source) {

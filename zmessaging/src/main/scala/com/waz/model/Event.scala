@@ -22,6 +22,7 @@ import java.util.Date
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.model.ConversationEvent.ConversationEventDecoder
 import com.waz.model.Event.EventDecoder
 import com.waz.model.UserData.ConnectionStatus
@@ -124,6 +125,8 @@ case class MemberLeaveEvent(convId: RConvId, time: Date, from: UserId, userIds: 
 case class MemberUpdateEvent(convId: RConvId, time: Date, from: UserId, state: ConversationState) extends ConversationStateEvent
 
 case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent
+
+case class ConversationAccessEvent(convId: RConvId, time: Date, from: UserId, access: Set[Access], accessRole: AccessRole) extends ConversationEvent
 
 sealed trait OtrEvent extends ConversationEvent {
   val sender: ClientId
@@ -258,6 +261,7 @@ object ConversationEvent {
         case "conversation.generic-asset" => genericAssetEvent('convId, 'time, 'from, 'content, 'dataId)
         case "conversation.otr-error" => otrErrorEvent('convId, 'time, 'from)
         case "conversation.call-message" => CallMessageEvent('convId, 'time, 'from, 'sender, 'content)
+        case "conversation.access-update" => ConversationAccessEvent('convId, 'time, 'from, decodeAccess('access)(data.get), decodeAccessRole('access_role)(data.get))
         case _ =>
           error(s"unhandled event: $js")
           UnknownConvEvent(js)

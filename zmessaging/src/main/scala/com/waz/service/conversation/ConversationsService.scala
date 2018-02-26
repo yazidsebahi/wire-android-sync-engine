@@ -24,17 +24,19 @@ import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.content._
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationType, getAccessAndRole}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
 import com.waz.service.tracking.TrackingService
+import com.waz.sync.client.ConversationsClient
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
 import com.waz.threading.Threading
 import com.waz.utils._
 import com.waz.utils.events.EventContext
+import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
@@ -49,12 +51,14 @@ trait ConversationsService {
   def updateConversations(conversations: Seq[ConversationResponse]): Future[Seq[ConversationData]]
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
-  def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
+  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
   def isWithBot(convId: ConvId): Future[Boolean]
+  def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
 }
 
 class ConversationsServiceImpl(context:         Context,
+                               teamId:          Option[TeamId],
                                selfUserId:      UserId,
                                push:            PushService,
                                users:           UserServiceImpl,
@@ -70,6 +74,8 @@ class ConversationsServiceImpl(context:         Context,
                                requests:        SyncRequestService,
                                eventScheduler:  => EventScheduler,
                                tracking:        TrackingService,
+                               client:          ConversationsClient,
+                               stats:           ConversationsListStateService,
                                syncReqService:  SyncRequestService) extends ConversationsService {
 
   private implicit val ev = EventContext.Global
@@ -77,6 +83,14 @@ class ConversationsServiceImpl(context:         Context,
 
   private val nameUpdater = wire[NameUpdater]
   nameUpdater.registerForUpdates()
+
+  //On conversation changed, update the state of the access roles as part of migration
+  stats.selectedConversationId {
+    case Some(convId) => convsStorage.get(convId).flatMap {
+      case Some(conv) if conv.accessRole.isEmpty => sync.syncConversations(Set(conv.id))
+      case _ => Future.successful({})
+    }
+  }
 
   val convStateEventProcessingStage = EventScheduler.Stage[ConversationStateEvent] { (_, events) =>
     RichFuture.processSequential(events)(processConversationEvent(_, selfUserId))
@@ -117,7 +131,7 @@ class ConversationsServiceImpl(context:         Context,
               // this happens when we are added to group conversation
               for {
                 conv <- convsStorage.insert(ConversationData(ConvId(), rConvId, None, from, ConversationType.Group, lastEventTime = time.instant))
-                ms   <- membersStorage.add(conv.id, from +: members: _*)
+                ms   <- membersStorage.add(conv.id, from +: members)
                 _    <- messages.addMemberJoinMessage(conv.id, from, members.toSet)
                 _    <- sync.syncConversations(Set(conv.id))
               } yield {}
@@ -139,12 +153,12 @@ class ConversationsServiceImpl(context:         Context,
       for {
         syncId <- users.syncNotExistingOrExpired(userIds)
         _ <- syncId.fold(Future.successful(()))(sId => syncReqService.scheduler.await(sId).map(_ => ()))
-        _ <- membersStorage.add(conv.id, userIds: _*)
+        _ <- membersStorage.add(conv.id, userIds)
         _ <- if (userIds.contains(selfUserId)) ensureConvActive() else successful(None)
       } yield ()
 
     case MemberLeaveEvent(_, _, _, userIds) =>
-      membersStorage.remove(conv.id, userIds: _*) flatMap { _ =>
+      membersStorage.remove(conv.id, userIds) flatMap { _ =>
         if (userIds.contains(selfUserId)) content.setConvActive(conv.id, active = false)
         else successful(())
       }
@@ -153,13 +167,16 @@ class ConversationsServiceImpl(context:         Context,
 
     case ConnectRequestEvent(_, _, from, _, recipient, _, _) =>
       debug(s"ConnectRequestEvent(from = $from, recipient = $recipient")
-      membersStorage.add(conv.id, from, recipient) flatMap { added =>
+      membersStorage.add(conv.id, Set(from, recipient)).flatMap { added =>
         val userIdsAdded = added map (_.userId)
         usersStorage.listAll(userIdsAdded) map { localUsers =>
           users.syncIfNeeded(localUsers: _*)
           sync.syncUsersIfNotEmpty(userIdsAdded.filterNot(id => localUsers exists (_.id == id)).toSeq)
         }
       }
+
+    case ConversationAccessEvent(_, _, _, access, accessRole) =>
+      content.updateAccessMode(conv.id, access, Some(accessRole))
 
     case _ => successful(())
   }
@@ -202,7 +219,7 @@ class ConversationsServiceImpl(context:         Context,
           val matching = byRemoteId(conv.remoteId).orElse {
             convById.get(newId) orElse {
               if (ConversationType.isOneToOne(conv.convType)) None
-              else byRemoteId(ConversationsService.generateTempConversationId((members.map(_.userId) :+ selfUserId).distinct: _*))
+              else byRemoteId(ConversationsService.generateTempConversationId((members.map(_.userId) :+ selfUserId).distinct))
             }
           }
 
@@ -264,10 +281,10 @@ class ConversationsServiceImpl(context:         Context,
     nameUpdater.forceNameUpdate(id)
   }
 
-  def onMemberAddFailed(conv: ConvId, users: Seq[UserId], error: ErrorType, resp: ErrorResponse) = for {
+  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: ErrorType, resp: ErrorResponse) = for {
     _ <- errors.addErrorWhenActive(ErrorData(error, resp, conv, users))
-    _ <- membersStorage.remove(conv, users: _*)
-    _ <- messages.removeLocalMemberJoinMessage(conv, users.toSet)
+    _ <- membersStorage.remove(conv, users)
+    _ <- messages.removeLocalMemberJoinMessage(conv, users)
   } yield ()
 
   def isGroupConversation(convId: ConvId) =
@@ -287,6 +304,26 @@ class ConversationsServiceImpl(context:         Context,
     case None => false
     case Some(u) => u.isWireBot
   }
+
+  def setToTeamOnly(convId: ConvId, teamOnly: Boolean) =
+    getAccessAndRole(teamOnly, teamId) match {
+      case None => Future.successful(Left(ErrorResponse.internalError("Private accounts can't be set to team-only or guest room access modes")))
+      case Some((access, accessRole)) =>
+        for {
+          Some((old, upd)) <- content.updateAccessMode(convId, access, Some(accessRole))
+          resp <-
+            if (old.access != upd.access || old.accessRole != upd.accessRole) {
+              client.postAccessUpdate(upd.remoteId, access, accessRole)
+            }.future.flatMap {
+              case Right(_) => Future.successful(Right {})
+              case Left(err) =>
+                //set mode back on request failed
+                content.updateAccessMode(convId, old.access, old.accessRole).map(_ => Left(err))
+            }
+            else Future.successful(Right {})
+
+        } yield resp
+    }
 }
 
 object ConversationsService {
@@ -297,6 +334,6 @@ object ConversationsService {
   /**
    * Generate temp ConversationID to identify conversations which don't have a RConvId yet
    */
-  def generateTempConversationId(users: UserId *) =
+  def generateTempConversationId(users: Seq[UserId]) =
     RConvId(users.map(_.toString).sorted.foldLeft("")(_ + _))
 }

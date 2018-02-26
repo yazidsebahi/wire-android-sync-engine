@@ -55,7 +55,7 @@ class MessageSendingSpec extends AndroidFreeSpec { test =>
                            tracking:        TrackingService              = stub[TrackingService],
                            errors:          ErrorsService                = null //stub[ErrorsService]
   ) = new ConversationsUiServiceImpl(AccountId(),
-    UserId(), assets, users, usersStorage, messages, messagesStorage, messagesContent, members,
+    UserId(), None, assets, users, usersStorage, messages, messagesStorage, messagesContent, members,
     assetStorage, convsContent, convStorage, network, convs, sync, accounts, tracking, errors
   )
 
