@@ -52,7 +52,7 @@ public interface IConversation extends UiObservable, Parcelable {
     }
 
     enum AccessRole {
-        TEAM, VERIFIED, NON_VERIFIED //TODO name VERIFIED clashes with concept of device verification
+        TEAM, VERIFIED, NON_VERIFIED, PRIVATE //TODO name VERIFIED clashes with concept of device verification
     }
 
     Parcelable.Creator<IConversation> CREATOR = new Parcelable.Creator<IConversation>() {
