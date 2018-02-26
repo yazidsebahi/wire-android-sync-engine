@@ -48,7 +48,7 @@ public interface IConversation extends UiObservable, Parcelable {
 
     //https://github.com/wireapp/architecture/blob/master/topics/conversations/access%20modes.md
     enum Access {
-        INVITE, CODE, SELF, PRIVATE;
+        INVITE, CODE, LINK, PRIVATE;
     }
 
     enum AccessRole {
