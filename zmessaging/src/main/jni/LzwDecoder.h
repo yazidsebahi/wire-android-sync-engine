@@ -26,7 +26,7 @@ typedef unsigned char byte;
 class LzwDecoder {
 
     public:
-        LzwDecoder(byte* image, int* pixels, int* colors, int width, int height);
+        LzwDecoder(byte* image, int* pixels, int* colors, int width, int height, int* failed);
 	~LzwDecoder();
 
         void clear(int x, int y, int w, int h, int color);
@@ -50,8 +50,8 @@ class LzwDecoder {
 extern "C" {
 #endif
 
-JNIEXPORT long JNICALL Java_com_waz_bitmap_gif_LzwDecoder_init(JNIEnv *env, jobject obj, jobject image, jobject pixels, jobject colors, jint width, jint height) {
-    return (long) (new LzwDecoder((byte*) env->GetDirectBufferAddress(image), (int*) env->GetDirectBufferAddress(pixels), (int*) env->GetDirectBufferAddress(colors), width, height));
+JNIEXPORT long JNICALL Java_com_waz_bitmap_gif_LzwDecoder_init(JNIEnv *env, jobject obj, jobject image, jobject pixels, jobject colors, jint width, jint height, jobject failed) {
+    return (long) (new LzwDecoder((byte*) env->GetDirectBufferAddress(image), (int*) env->GetDirectBufferAddress(pixels), (int*) env->GetDirectBufferAddress(colors), width, height, (int*) env->GetDirectBufferAddress(failed)));
 }
 
 JNIEXPORT void JNICALL Java_com_waz_bitmap_gif_LzwDecoder_destroy(JNIEnv *env, jobject obj, jlong decoder) {
