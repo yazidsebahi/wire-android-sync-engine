@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model._
+import com.waz.model.{UserId, _}
 import com.waz.service.UserServiceImpl
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -48,10 +48,19 @@ trait ConversationsContentUpdater {
   def setConvActive(id: ConvId, active: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
-  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, creator: UserId, members: Set[UserId], name: Option[String] = None, hidden: Boolean = false, teamOnly: Boolean = false): Future[ConversationData]
   def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
   def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]): Future[Option[(ConversationData, ConversationData)]]
+
+  def createConversationWithMembers(convId:     ConvId,
+                                    remoteId:   RConvId,
+                                    convType:   ConversationType,
+                                    creator:    UserId,
+                                    members:    Set[UserId],
+                                    name:       Option[String] = None,
+                                    hidden:     Boolean = false,
+                                    access:     Set[Access] = Set(Access.PRIVATE),
+                                    accessRole: AccessRole = AccessRole.PRIVATE): Future[ConversationData]
 }
 
 class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
@@ -140,8 +149,15 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
 
   override def setConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
 
-  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, creator: UserId, members: Set[UserId], name: Option[String] = None, hidden: Boolean = false, teamOnly: Boolean = false) = {
-    val accAndRole = ConversationData.getAccessAndRole(teamOnly, teamId)
+  override def createConversationWithMembers(convId:     ConvId,
+                                             remoteId:   RConvId,
+                                             convType:   ConversationType,
+                                             creator:    UserId,
+                                             members:    Set[UserId],
+                                             name:       Option[String] = None,
+                                             hidden:     Boolean = false,
+                                             access:     Set[Access] = Set(Access.PRIVATE),
+                                             accessRole: AccessRole = AccessRole.PRIVATE) = {
     for {
       user <- users.getUsers(members.toSeq)
       conv <- storage.insert(
@@ -155,8 +171,8 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
           hidden        = hidden,
           team          = teamId,
           isManaged     = teamId.map(_ => false),
-          access        = accAndRole.map(_._1).getOrElse(Set.empty),
-          accessRole    = accAndRole.map(_._2)))
+          access        = access,
+          accessRole    = Some(accessRole)))
       _ <- membersStorage.add(convId, members + creator)
     } yield conv
   }

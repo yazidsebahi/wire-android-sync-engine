@@ -20,13 +20,14 @@ package com.waz.service.conversation
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.MessageContent.Asset.ErrorHandler
 import com.waz.api.MessageContent.Text
 import com.waz.api.NetworkMode.{OFFLINE, WIFI}
 import com.waz.api.impl._
 import com.waz.api.{EphemeralExpiration, ImageAssetFactory, Message, NetworkMode}
 import com.waz.content._
-import com.waz.model.ConversationData.{ConversationType, getAccessAndRole}
+import com.waz.model.ConversationData.{ConversationType, getAccessAndRoleForGroupConv}
 import com.waz.model.GenericContent.{Location, MsgEdit}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -354,7 +355,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
             } yield conv
           case _ =>
             for {
-              _ <- sync.postConversation(ConvId(other.str), Set(other), None, None, None)
+              _ <- sync.postConversation(ConvId(other.str), Set(other), None, None, Set(Access.PRIVATE), AccessRole.PRIVATE)
               conv <- convsContent.createConversationWithMembers(ConvId(other.str), RConvId(), ConversationType.OneToOne, selfId, Set(other))
               _ <- messages.addMemberJoinMessage(conv.id, selfId, Set(other), firstMessage = true)
             } yield conv
@@ -365,13 +366,15 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   override def createGroupConversation(name: Option[String] = None, members: Set[UserId] = Set.empty, teamOnly: Boolean = false) =
     createAndPostConversation(ConvId(), name, members, teamOnly)
 
-  private def createAndPostConversation(id: ConvId, name: Option[String], members: Set[UserId], teamOnly: Boolean = false) =
+  private def createAndPostConversation(id: ConvId, name: Option[String], members: Set[UserId], teamOnly: Boolean = false) = {
+    val (ac, ar) = getAccessAndRoleForGroupConv(teamOnly, teamId)
     for {
-      conv   <- convsContent.createConversationWithMembers(id, generateTempConversationId(selfId +: members.toSeq), ConversationType.Group, selfId, members, name, teamOnly)
-      _      = verbose(s"created: $conv")
-      _      <- messages.addConversationStartMessage(conv.id, selfId, members, name)
-      syncId <- sync.postConversation(id, members, conv.name, teamId, getAccessAndRole(teamOnly, teamId))
+      conv <- convsContent.createConversationWithMembers(id, generateTempConversationId(selfId +: members.toSeq), ConversationType.Group, selfId, members, name, access = ac, accessRole = ar)
+      _    = verbose(s"created: $conv")
+      _    <- messages.addConversationStartMessage(conv.id, selfId, members, name)
+      syncId <- sync.postConversation(id, members, conv.name, teamId, ac, ar)
     } yield (conv, syncId)
+  }
 
   override def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
     users.withSelfUserFuture(id => convStorage.search(prefix, id, handleOnly)).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))

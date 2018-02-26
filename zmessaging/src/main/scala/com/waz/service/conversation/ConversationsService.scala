@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.api.ErrorType
 import com.waz.api.impl.ErrorResponse
 import com.waz.content._
-import com.waz.model.ConversationData.{ConversationType, getAccessAndRole}
+import com.waz.model.ConversationData.{ConversationType, getAccessAndRoleForGroupConv}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
@@ -41,7 +41,7 @@ import com.waz.znet.ZNetClient.ErrorOr
 import scala.collection.{breakOut, mutable}
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
-import scala.util.control.NoStackTrace
+import scala.util.control.{NoStackTrace, NonFatal}
 
 trait ConversationsService {
   def content: ConversationsContentUpdater
@@ -306,14 +306,16 @@ class ConversationsServiceImpl(context:         Context,
   }
 
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean) =
-    getAccessAndRole(teamOnly, teamId) match {
+    teamId match {
       case None => Future.successful(Left(ErrorResponse.internalError("Private accounts can't be set to team-only or guest room access modes")))
-      case Some((access, accessRole)) =>
-        for {
-          Some((old, upd)) <- content.updateAccessMode(convId, access, Some(accessRole))
+      case Some(_) =>
+        (for {
+          true <- isGroupConversation(convId)
+          (ac, ar) = getAccessAndRoleForGroupConv(teamOnly, teamId)
+          Some((old, upd)) <- content.updateAccessMode(convId, ac, Some(ar))
           resp <-
             if (old.access != upd.access || old.accessRole != upd.accessRole) {
-              client.postAccessUpdate(upd.remoteId, access, accessRole)
+              client.postAccessUpdate(upd.remoteId, ac, ar)
             }.future.flatMap {
               case Right(_) => Future.successful(Right {})
               case Left(err) =>
@@ -321,8 +323,11 @@ class ConversationsServiceImpl(context:         Context,
                 content.updateAccessMode(convId, old.access, old.accessRole).map(_ => Left(err))
             }
             else Future.successful(Right {})
-
-        } yield resp
+        } yield resp).recover {
+          case NonFatal(e) =>
+            warn("Unable to set team only mode on conversation", e)
+            Left(ErrorResponse.internalError("Unable to set team only mode on conversation"))
+        }
     }
 }
 

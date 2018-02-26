@@ -130,10 +130,10 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
     conversationsClient.postConversationState(conv.remoteId, state).future map (_.fold(SyncResult(_), SyncResult(_)))
   }
 
-  def postConversation(convId: ConvId, users: Set[UserId], name: Option[String], team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): Future[SyncResult] = {
+  def postConversation(convId: ConvId, users: Set[UserId], name: Option[String], team: Option[TeamId], access: Set[Access], accessRole: AccessRole): Future[SyncResult] = {
     debug(s"postConversation($convId, $users, $name)")
     val (toCreate, toAdd) = users.splitAt(PostMembersLimit)
-    conversationsClient.postConversation(toCreate, name, team, access).future.flatMap {
+    conversationsClient.postConversation(toCreate, name, team, access, accessRole).future.flatMap {
       case Right(response) =>
         convService.updateConversations(Seq(response.copy(conversation = response.conversation.copy(id = convId)))) flatMap { _ =>
           if (toAdd.nonEmpty) postConversationMemberJoin(convId, toAdd)

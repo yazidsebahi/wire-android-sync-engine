@@ -146,11 +146,11 @@ object ConversationData {
     def values = Set(Unknown, Group, OneToOne, Self, WaitForConnection, Incoming)
   }
 
-  def getAccessAndRole(teamOnly: Boolean, teamId: Option[TeamId]): Option[(Set[Access], AccessRole)] = {
+  def getAccessAndRoleForGroupConv(teamOnly: Boolean, teamId: Option[TeamId]): (Set[Access], AccessRole) = {
     teamId match {
-      case Some(_) if teamOnly              => Some((Set(INVITE), TEAM))
-      case Some(_)                          => Some((Set(INVITE, CODE), NON_VERIFIED))
-      case _                                => None
+      case Some(_) if teamOnly => (Set(INVITE), TEAM)
+      case Some(_)             => (Set(INVITE, CODE), NON_VERIFIED)
+      case _                   => (Set(INVITE), VERIFIED)
     }
   }
 

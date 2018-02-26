@@ -92,7 +92,7 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), _, _) | Response(HttpStatus(Status.NoResponse, _), _, _) => //no op
     }
 
-  def postConversation(users: Set[UserId], name: Option[String] = None, team: Option[TeamId], access: Option[(Set[Access], AccessRole)]): ErrorOrResponse[ConversationResponse] = {
+  def postConversation(users: Set[UserId], name: Option[String] = None, team: Option[TeamId], access: Set[Access], accessRole: AccessRole): ErrorOrResponse[ConversationResponse] = {
     debug(s"postConversation($users, $name)")
     val payload = JsonEncoder { o =>
       o.put("users", Json(users))
@@ -101,11 +101,8 @@ class ConversationsClient(netClient: ZNetClient) {
         o.put("teamid", t.str)
         o.put("managed", false)
       }))
-      access.foreach {
-        case (a, ar) =>
-          o.put("access", encodeAccess(a))
-          o.put("access_role", encodeAccessRole(ar))
-      }
+      o.put("access", encodeAccess(access))
+      o.put("access_role", encodeAccessRole(accessRole))
     }
     netClient.withErrorHandling("postConversation", Request.Post(ConversationsPath, payload)) {
       case Response(SuccessHttpStatus(), ConversationsResult(Seq(conv), _), _) => conv
