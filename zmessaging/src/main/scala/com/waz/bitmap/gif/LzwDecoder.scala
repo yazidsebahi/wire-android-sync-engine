@@ -45,14 +45,7 @@ class LzwDecoder(gif: Gif) {
   // temp, used only when frame disposal is set to PREVIOUS
   lazy val pixelsSwap = ByteBuffer.allocateDirect(imageWidth * imageHeight * 4).order(ByteOrder.BIG_ENDIAN).asIntBuffer()
 
-  val failed = ByteBuffer.allocateDirect(4).asIntBuffer()
-
-  val decoder = init(inputData, pixels, colors, imageWidth, imageHeight, failed)
-
-  if(failed.get(0) == -1) {
-    throw new IllegalArgumentException("Invalid parameters given to decoder")
-  }
-
+  val decoder = init(inputData, pixels, colors, imageWidth, imageHeight)
   private var destroyed = false
 
   def destroy(): Unit = {
@@ -111,7 +104,7 @@ class LzwDecoder(gif: Gif) {
 
   @native protected def clear(decoder: Long, x: Int, y: Int, w: Int, h: Int, color: Int): Unit
   @native protected def decode(decoder: Long, x: Int, y: Int, w: Int, h: Int, inputSize: Int, transIndex: Int, bgColor: Int, interlace: Boolean, transparency: Boolean): Unit
-  @native protected def init(image: ByteBuffer, pixels: IntBuffer, colors: IntBuffer, width: Int, height: Int, failed: IntBuffer): Long
+  @native protected def init(image: ByteBuffer, pixels: IntBuffer, colors: IntBuffer, width: Int, height: Int): Long
   @native protected def destroy(decoder: Long): Unit
 }
 
