@@ -17,8 +17,8 @@
  */
 package com.waz.model
 
-import com.waz.api.IConversation.Access.{CODE, INVITE, PRIVATE}
-import com.waz.api.IConversation.AccessRole.{NON_VERIFIED, TEAM, VERIFIED}
+import com.waz.api.IConversation.Access.{CODE, INVITE}
+import com.waz.api.IConversation.AccessRole._
 import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
@@ -93,12 +93,12 @@ case class ConversationData(id:                   ConvId              = ConvId()
   }
 
   def isTeamOnly: Boolean = accessRole match {
-    case Some(AccessRole.TEAM) if access.contains(Access.INVITE) => true
+    case Some(TEAM) if access.contains(Access.INVITE) => true
     case _ => false
   }
 
   def isGuestRoom: Boolean = accessRole match {
-    case Some(AccessRole.NON_VERIFIED) if access == Set(Access.INVITE, Access.CODE) => true
+    case Some(NON_ACTIVATED) if access == Set(Access.INVITE, Access.CODE) => true
     case _ => false
   }
 
@@ -149,8 +149,8 @@ object ConversationData {
   def getAccessAndRoleForGroupConv(teamOnly: Boolean, teamId: Option[TeamId]): (Set[Access], AccessRole) = {
     teamId match {
       case Some(_) if teamOnly => (Set(INVITE), TEAM)
-      case Some(_)             => (Set(INVITE, CODE), NON_VERIFIED)
-      case _                   => (Set(INVITE), VERIFIED)
+      case Some(_)             => (Set(INVITE, CODE), NON_ACTIVATED)
+      case _                   => (Set(INVITE), ACTIVATED)
     }
   }
 
