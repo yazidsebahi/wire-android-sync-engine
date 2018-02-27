@@ -296,14 +296,10 @@ class ConversationsServiceImpl(context:         Context,
         else membersStorage.getActiveUsers(convId).map(ms => !(ms.contains(selfUserId) && ms.size == 2))
     } yield res
 
-  def isWithBot(convId: ConvId) = for {
-    Some(conv) <- convsStorage.get(convId)
-    membersIds <- membersStorage.getActiveUsers(convId)
-    users <- usersStorage.getAll(membersIds)
-  } yield users.exists {
-    case None => false
-    case Some(u) => u.isWireBot
-  }
+  def isWithBot(convId: ConvId) =
+    membersStorage.getActiveUsers(convId)
+      .flatMap(usersStorage.getAll)
+      .map(_.flatten.exists(_.isWireBot))
 
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean) =
     teamId match {
