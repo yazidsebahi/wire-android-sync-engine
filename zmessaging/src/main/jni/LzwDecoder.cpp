@@ -31,15 +31,15 @@
 #define INT_MIN       (-INT_MAX - 1)
 #define INT_MAX       2147483647
 
-static const int32_t MAX_STACK_SIZE = 4096;
-static const int32_t PIXEL_STACK_SIZE = 8192;
-static const int32_t NULL_CODE = -1;
+static const int MAX_STACK_SIZE = 4096;
+static const int PIXEL_STACK_SIZE = 8192;
+static const int NULL_CODE = -1;
 
 
 /* We use failed to signal failure since using exceptions would require us to include the entire
  * C++ stdlib in this library, and we are trying to keep the size down */
-LzwDecoder::LzwDecoder(byte* image, int32_t* pixels, int32_t* colors, int32_t width, int32_t height, int32_t* failed) {
-	if (image == NULL || width <= 0 || height <= 0) {
+LzwDecoder::LzwDecoder(byte* image, int* pixels, int* colors, int width, int height, int* failed) {
+	if (image == 0 || width <= 0 || height <= 0) {
 		*failed = -1;
 	} else {
         this->image = image;
@@ -65,26 +65,26 @@ LzwDecoder::~LzwDecoder() {
 }
 
 
-void LzwDecoder::clear(int32_t x, int32_t y, int32_t w, int32_t h, int32_t color) {
+void LzwDecoder::clear(int x, int y, int w, int h, int color) {
     if (x < 0 || y < 0 || x >= w || y >= h ||
         (((y > 0) && (x > (INT_MAX - y))) ||
          ((y < 0) && (x < (INT_MIN - y))))) {
         return;
     }
-    int32_t* dst = pixels + (x + y * width);
-    for (int32_t l = 0; l < h; ++l) {
-        for (int32_t i = 0; i < w; ++i) {
+    int* dst = pixels + (x + y * width);
+    for (int l = 0; l < h; ++l) {
+        for (int i = 0; i < w; ++i) {
             (*dst++) = color;
         }
         dst += width - w - x;
     }
 }
 
-void LzwDecoder::decode(int32_t fx, int32_t fy, int32_t fw, int32_t fh, int32_t inputSize, int32_t transIndex, int32_t bgColor, bool interlace, bool transparency) {
-    int32_t idx = 0;
-    int32_t npix = fw * fh;
-    int32_t available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
-    int32_t endX, x, end, pass, inc, line;
+void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int transIndex, int bgColor, bool interlace, bool transparency) {
+    int idx = 0;
+    int npix = fw * fh;
+    int available, clear, code_mask, code_size, end_of_information, in_code, old_code, bits, code, count, i, datum, data_size, first, top, bi, pi;
+    int endX, x, end, pass, inc, line;
 
     // Initialize GIF data stream decoder.
     data_size = image[idx++];
@@ -119,7 +119,7 @@ void LzwDecoder::decode(int32_t fx, int32_t fy, int32_t fw, int32_t fh, int32_t 
                 if (idx >= inputSize) break; //bounds check
                 count = image[idx++];
                 if (idx + count >= inputSize) break; // bounds check
-                for (int32_t k = 0; k < count; ++k) {
+                for (int k = 0; k < count; ++k) {
                     block[k] = image[idx++];
                 }
 
