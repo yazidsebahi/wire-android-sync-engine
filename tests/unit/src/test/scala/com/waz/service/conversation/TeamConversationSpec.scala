@@ -75,13 +75,12 @@ class TeamConversationSpec extends AndroidFreeSpec {
       )))
 
       (convsStorage.getAll _).expects(Seq(existingConv.id)).once().returning(Future.successful(Seq(Some(existingConv))))
-      (convsContent.createConversationWithMembers _).expects(*, *, Group, self, Set(otherUser), None, false, false).once().onCall {
-        (conv: ConvId, r: RConvId, tpe: ConversationType, cr: UserId, us: Set[UserId], n: Option[String], to: Boolean, hid: Boolean) =>
-          val (access, role) = ConversationData.getAccessAndRole(to, team).get
-          Future.successful(ConversationData(conv, r, n, cr, tpe, team, hidden = hid, access = access, accessRole = Some(role)))
+      (convsContent.createConversationWithMembers _).expects(*, *, Group, self, Set(otherUser), None, false, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().onCall {
+        (conv: ConvId, r: RConvId, tpe: ConversationType, cr: UserId, us: Set[UserId], n: Option[String], hid: Boolean, ac: Set[Access], ar: AccessRole) =>
+          Future.successful(ConversationData(conv, r, n, cr, tpe, team, hidden = hid, access = ac, accessRole = Some(ar)))
       }
       (messages.addConversationStartMessage _).expects(*, self, Set(otherUser), None).once().returning(Future.successful(null))
-      (sync.postConversation _).expects(*, Set(otherUser), None, team, Some((Set(Access.INVITE, Access.CODE), AccessRole.NON_VERIFIED))).once().returning(Future.successful(null))
+      (sync.postConversation _).expects(*, Set(otherUser), None, team, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().returning(Future.successful(null))
 
       val conv = result(initService.getOrCreateOneToOneConversation(otherUser))
       conv shouldNot equal(existingConv)

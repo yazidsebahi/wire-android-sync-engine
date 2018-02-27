@@ -18,6 +18,7 @@
 package com.waz.model
 
 import com.waz.api.EphemeralExpiration
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.db.ZMessagingDB
 import com.waz.model.AddressBook.ContactHashes
 import com.waz.model.UserData.ConnectionStatus
@@ -61,7 +62,7 @@ import org.threeten.bp.Instant
     scenario("SyncUser requests") { SyncUser(Set(UserId(), UserId(), UserId())) should beUnchangedByEncodingAndDecoding }
     scenario("SyncConversation requests") { SyncConversation(Set(ConvId(), ConvId(), ConvId())) should beUnchangedByEncodingAndDecoding }
     scenario("PostSelf requests") { PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, Some(TrackingId()))) should beUnchangedByEncodingAndDecoding }
-    scenario("PostConv requests") { PostConv(ConvId(), Set(UserId(), UserId()), Some("name"), Some(TeamId()), None) should beUnchangedByEncodingAndDecoding }
+    scenario("PostConv requests") { PostConv(ConvId(), Set(UserId(), UserId()), Some("name"), Some(TeamId()), Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED) should beUnchangedByEncodingAndDecoding }
     scenario("PostConvName requests") { PostConvName(ConvId(), "name") should beUnchangedByEncodingAndDecoding }
     scenario("PostConvState requests") { PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))) should beUnchangedByEncodingAndDecoding }
     scenario("PostTypingState requests") { PostTypingState(ConvId(), isTyping = true) should beUnchangedByEncodingAndDecoding }
@@ -93,7 +94,7 @@ import org.threeten.bp.Instant
         SyncConversations,
         SyncUser(Set(UserId(), UserId(), UserId())),
         SyncConversation(Set(ConvId(), ConvId(), ConvId())),
-        PostConv(ConvId(), Set(UserId()), None, Some(TeamId()), None),
+        PostConv(ConvId(), Set(UserId()), None, Some(TeamId()), Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED),
         DeletePushToken(PushToken()),
         PostSelf(UserInfo(UserId(), Some("name"), Some(1), Some(EmailAddress("email")), Some(PhoneNumber("phone")), None, None)),
         PostConvState(ConvId(), ConversationState(Some(false), Some(Instant.now), Some(true), Some(Instant.EPOCH))),
