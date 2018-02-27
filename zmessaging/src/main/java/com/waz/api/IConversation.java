@@ -46,13 +46,27 @@ public interface IConversation extends UiObservable, Parcelable {
         }
     }
 
-    //https://github.com/wireapp/architecture/blob/master/topics/conversations/access%20modes.md
+    /**
+     * https://github.com/wireapp/architecture/blob/master/topics/conversations/access%20modes.md
+     *
+     * Access:
+     * Specifies the means by which a user (with the correct access role) may join a conversation
+     */
     enum Access {
-        INVITE, CODE, LINK, PRIVATE;
+        INVITE,  //possible to join only via invite from another conv member
+        CODE,    //possible to join conversation via a "link" (confusingly enough)
+        LINK,    //possible to join if the convId is known
+        PRIVATE; //for 1:1 conversations
     }
 
+    /**
+     * Specifies what types of users may join a conversation
+     */
     enum AccessRole {
-        TEAM, VERIFIED, NON_VERIFIED, PRIVATE //TODO name VERIFIED clashes with concept of device verification
+        TEAM,          //only team members may join the conversation
+        ACTIVATED,     //only users with activated account may join the conversation
+        NON_ACTIVATED, //"wireless" users may join the conversation
+        PRIVATE        //for 1:1 conversations
     }
 
     Parcelable.Creator<IConversation> CREATOR = new Parcelable.Creator<IConversation>() {
