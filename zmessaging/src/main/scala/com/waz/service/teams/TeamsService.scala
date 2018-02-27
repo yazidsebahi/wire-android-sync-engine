@@ -134,7 +134,7 @@ class TeamsServiceImpl(selfUser:           UserId,
   override def isGuest(userId: UserId): Signal[Boolean] = teamId match {
     case None => Signal.const(false)
     case Some(tId) => new RefreshingSignal[Boolean, Seq[UserId]](
-      CancellableFuture.lift(userStorage.get(userId).map(!_.flatMap(_.teamId).contains(tId))),
+      CancellableFuture.lift(userStorage.get(userId).map(_.forall(_.isGuest(teamId)))),
       userStorage.onChanged.map(_.map(_.id))
     )
   }

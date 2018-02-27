@@ -127,6 +127,8 @@ case class UserData(
         connectionMessage = message.orElse(this.connectionMessage))
     }
   }
+
+  def isGuest(ourTeamId: Option[TeamId]): Boolean = ourTeamId.isDefined && teamId != ourTeamId
 }
 
 object UserData {

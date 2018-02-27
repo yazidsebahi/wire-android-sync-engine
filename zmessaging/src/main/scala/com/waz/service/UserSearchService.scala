@@ -19,7 +19,7 @@ package com.waz.service
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.content.{MembersStorage, MessagesStorage, SearchQueryCacheStorage, UsersStorage}
+import com.waz.content._
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{SearchQuery, _}
@@ -41,7 +41,7 @@ case class SearchResults(top:   IndexedSeq[UserData]         = IndexedSeq.empty,
                          local: IndexedSeq[UserData]         = IndexedSeq.empty,
                          convs: IndexedSeq[ConversationData] = IndexedSeq.empty,
                          dir:   IndexedSeq[UserData]         = IndexedSeq.empty) { //directory (backend search)
-  override def toString = s"SearchResults(top: ${top.size}, local: ${local.size}, convs: ${convs.size}, dir: ${dir.size}, ab: ${ab.size})"
+  override def toString = s"SearchResults(top: ${top.size}, local: ${local.size}, convs: ${convs.size}, dir: ${dir.size})"
 }
 
 class UserSearchService(selfUserId:           UserId,
@@ -54,6 +54,7 @@ class UserSearchService(selfUserId:           UserId,
                         timeouts:             Timeouts,
                         sync:                 SyncServiceHandle,
                         messages:             MessagesStorage,
+                        convsStorage:         ConversationStorage,
                         convsUi:              ConversationsUiService,
                         conversationsService: ConversationsService) {
 
@@ -66,26 +67,34 @@ class UserSearchService(selfUserId:           UserId,
   private val exactMatchUser = new SourceSignal[Option[UserData]]()
   private val signalMap = mutable.HashMap[SearchQuery, Signal[IndexedSeq[UserData]]]()
 
-  def searchLocal(filter: Filter = "", toConv: Option[ConvId] = None, showBlockedUsers: Boolean = false): Signal[IndexedSeq[UserData]] = {
+  def usersForNewConversation(filter: Filter = "", teamOnly: Boolean): Signal[IndexedSeq[UserData]] =
+    searchLocal(filter).map(_.filter(u => !(u.isGuest(teamId) && teamOnly)))
+
+  def usersToAddToConversation(filter: Filter = "", toConv: ConvId): Signal[IndexedSeq[UserData]] =
+    for {
+      curr <- membersStorage.activeMembers(toConv)
+      conv <- convsStorage.signal(toConv)
+      res  <- searchLocal(filter, curr)
+    } yield res.filter(conv.isUserAllowed)
+
+  private def searchLocal(filter: Filter, excluded: Set[UserId] = Set.empty, showBlockedUsers: Boolean = false): Signal[IndexedSeq[UserData]] = {
     val isHandle = Handle.isHandle(filter)
     val symbolStripped = if (isHandle) Handle.stripSymbol(filter) else filter
     for {
       connected <- userService.acceptedOrBlockedUsers.map(_.values)
-      members <- teamId.fold(Signal.const(Set.empty[UserData])) { _ =>
+      members   <- teamId.fold(Signal.const(Set.empty[UserData])) { _ =>
         teamsService.searchTeamMembers(if (filter.isEmpty) None else Some(SearchKey(filter)), handleOnly = Handle.isHandle(filter))
       }
-      exc <- toConv.fold(Signal.const(Set.empty[UserId]))(membersStorage.activeMembers).map(_ + selfUserId)
     } yield {
-      val users = connected.filter(
-          connectedUsersPredicate(
-            searchTerm         = filter,
-            filteredIds        = exc.map(_.str),
-            alsoSearchByEmail  = true,
-            showBlockedUsers   = showBlockedUsers,
-            searchByHandleOnly = isHandle))
+      val included = (connected.toSet ++ members).filter { user =>
+        !excluded.contains(user.id) &&
+          selfUserId != user.id &&
+          !user.isWireBot &&
+          ((SearchKey(filter).isAtTheStartOfAnyWordIn(user.searchKey) && !isHandle) || user.handle.exists(_.startsWithQuery(filter)) || user.email.exists(e => filter.trim.equalsIgnoreCase(e.str))) &&
+          (showBlockedUsers || (user.connection != ConnectionStatus.Blocked))
+      }.toIndexedSeq
 
-      val includedIds = (users.map(_.id).toSet ++ members.map(_.id)).diff(exc)
-      sortUsers((connected ++ members).filter(u => includedIds.contains(u.id)).toIndexedSeq.filter(!_.isWireBot), filter, isHandle, symbolStripped)
+      sortUsers(included, filter, isHandle, symbolStripped)
     }
   }
 
@@ -104,7 +113,7 @@ class UserSearchService(selfUserId:           UserId,
     results.sortBy(predicate)
   }
 
-  def search(filter: Filter = "", selectedUsers: Set[UserId] = Set.empty): Signal[SearchResults] = {
+  def search(filter: Filter = ""): Signal[SearchResults] = {
 
     val isHandle       = Handle.isHandle(filter)
     val symbolStripped = if (isHandle) Handle.stripSymbol(filter) else filter
@@ -112,8 +121,8 @@ class UserSearchService(selfUserId:           UserId,
 
     val shouldShowTopUsers = filter.isEmpty && teamId.isEmpty
 
-    val shouldShowGroupConversations = (if (isHandle) symbolStripped.length > 1 else !filter.isEmpty) && selectedUsers.isEmpty
-    val shouldShowDirectorySearch    = !filter.isEmpty && selectedUsers.isEmpty
+    val shouldShowGroupConversations = if (isHandle) symbolStripped.length > 1 else !filter.isEmpty
+    val shouldShowDirectorySearch    = !filter.isEmpty
 
     exactMatchUser ! None // reset the exact match to None on any query change
 
@@ -161,7 +170,7 @@ class UserSearchService(selfUserId:           UserId,
 
     for {
       top   <- topUsers
-      local <- searchLocal(filter, None, showBlockedUsers = true)
+      local <- searchLocal(filter, showBlockedUsers = true)
       convs <- conversations
       dir   <- directorySearch
     } yield SearchResults(top, local, convs, dir)
@@ -257,20 +266,6 @@ class UserSearchService(selfUserId:           UserId,
 
   private def recommendedHandlePredicate(prefix: String): UserData => Boolean = {
     u => ! u.deleted && ! u.isConnected && u.handle.exists(_.startsWithQuery(prefix))
-  }
-
-  private def connectedUsersPredicate(searchTerm: String,
-                                      filteredIds: Set[String],
-                                      alsoSearchByEmail: Boolean,
-                                      showBlockedUsers: Boolean,
-                                      searchByHandleOnly: Boolean): UserData => Boolean = {
-    val query = SearchKey(searchTerm)
-    user =>
-      ((query.isAtTheStartOfAnyWordIn(user.searchKey) && !searchByHandleOnly) ||
-        user.handle.exists(_.startsWithQuery(searchTerm)) ||
-        (alsoSearchByEmail && user.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) &&
-        !filteredIds.contains(user.id.str) &&
-        (showBlockedUsers || (user.connection != ConnectionStatus.Blocked))
   }
 
 }

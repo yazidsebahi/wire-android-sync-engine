@@ -103,6 +103,9 @@ case class ConversationData(id:                   ConvId              = ConvId()
   }
 
   def isWirelessLegacy: Boolean = !(isTeamOnly || isGuestRoom)
+
+  def isUserAllowed(userData: UserData): Boolean =
+    !(userData.isGuest(team) && isTeamOnly)
 }
 
 /**
