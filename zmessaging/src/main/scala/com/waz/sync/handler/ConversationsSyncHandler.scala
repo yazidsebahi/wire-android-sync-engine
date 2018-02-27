@@ -92,10 +92,14 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
 
   def postConversationMemberJoin(id: ConvId, members: Set[UserId]): Future[SyncResult] = withConversation(id) { conv =>
     def post(users: Set[UserId]) = conversationsClient.postMemberJoin(conv.remoteId, users).future flatMap {
-      case Left(resp @ ErrorResponse(403, _, "not-connected")) =>
-        convService.onMemberAddFailed(id, users, ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION, resp) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
-      case Left(resp @ ErrorResponse(403, _, "too-many-members")) =>
-        convService.onMemberAddFailed(id, users, ErrorType.CANNOT_ADD_USER_TO_FULL_CONVERSATION, resp) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
+      case Left(resp @ ErrorResponse(403, _, label)) =>
+        val errTpe = label match {
+          case "not-connected"    => Some(ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION)
+          case "too-many-members" => Some(ErrorType.CANNOT_ADD_USER_TO_FULL_CONVERSATION)
+          case _ => None
+        }
+        convService.onMemberAddFailed(id, users, errTpe, resp)
+          .map(_ => SyncResult.Failure(Some(resp), shouldRetry = false))
       case resp =>
         postConvRespHandler(resp)
     }

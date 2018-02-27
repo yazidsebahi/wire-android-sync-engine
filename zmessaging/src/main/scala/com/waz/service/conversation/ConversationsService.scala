@@ -51,7 +51,7 @@ trait ConversationsService {
   def updateConversations(conversations: Seq[ConversationResponse]): Future[Seq[ConversationData]]
   def setConversationArchived(id: ConvId, archived: Boolean): Future[Option[ConversationData]]
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
-  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: ErrorType, resp: ErrorResponse): Future[Unit]
+  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: Option[ErrorType], resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
   def isWithBot(convId: ConvId): Future[Boolean]
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
@@ -281,8 +281,8 @@ class ConversationsServiceImpl(context:         Context,
     nameUpdater.forceNameUpdate(id)
   }
 
-  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: ErrorType, resp: ErrorResponse) = for {
-    _ <- errors.addErrorWhenActive(ErrorData(error, resp, conv, users))
+  def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: Option[ErrorType], resp: ErrorResponse) = for {
+    _ <- error.fold(Future.successful({}))(e => errors.addErrorWhenActive(ErrorData(e, resp, conv, users)).map(_ => {}))
     _ <- membersStorage.remove(conv, users)
     _ <- messages.removeLocalMemberJoinMessage(conv, users)
   } yield ()
