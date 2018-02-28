@@ -90,6 +90,7 @@ class ConversationsServiceImpl(context:         Context,
       case Some(conv) if conv.accessRole.isEmpty => sync.syncConversations(Set(conv.id))
       case _ => Future.successful({})
     }
+    case None => //
   }
 
   val convStateEventProcessingStage = EventScheduler.Stage[ConversationStateEvent] { (_, events) =>
