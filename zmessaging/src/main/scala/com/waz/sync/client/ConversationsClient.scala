@@ -35,6 +35,7 @@ import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
 import scala.util.control.NonFatal
+import scala.concurrent.duration._
 
 class ConversationsClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
@@ -88,7 +89,8 @@ class ConversationsClient(netClient: ZNetClient) {
         accessUpdatePath(conv),
         Json(
           "access" -> encodeAccess(access),
-          "access_role" -> encodeAccessRole(accessRole)))) {
+          "access_role" -> encodeAccessRole(accessRole)),
+        timeout = 3.seconds)) {
       case Response(SuccessHttpStatus(), _, _) | Response(HttpStatus(Status.NoResponse, _), _, _) => //no op
     }
 

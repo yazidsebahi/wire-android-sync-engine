@@ -94,10 +94,11 @@ object Request {
                              baseUri: Option[URI] = None,
                              uploadCallback: Option[ProgressCallback] = None,
                              requiresAuthentication: Boolean = true,
-                             headers: Map[String, String] = EmptyHeaders) =
+                             headers: Map[String, String] = EmptyHeaders,
+                             timeout: FiniteDuration = AsyncClient.DefaultTimeout) =
     Request[A](PutMethod, resourcePath = Some(path), baseUri = baseUri, data = Some(data),
                uploadCallback = uploadCallback, requiresAuthentication = requiresAuthentication,
-               headers = headers)
+               headers = headers, timeout = timeout)
 
   def Delete[A: ContentEncoder](path: String,
                                 data: Option[A] = None,
