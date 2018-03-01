@@ -153,7 +153,7 @@ object ConversationsClient {
           ConversationType(decodeInt('type)),
           decodeISOInstant('last_event_time),
           decodeAccess('access),
-          decodeAccessRole('access_role)
+          decodeOptAccessRole('access_role)
         )
       }
       val state = ConversationState.Decoder(self)
@@ -176,7 +176,7 @@ object ConversationsClient {
         state.archived.getOrElse(false),
         state.archiveTime.getOrElse(lastEventTime),
         access = access,
-        accessRole = Some(accessRole)
+        accessRole = accessRole
       )
     }
 
