@@ -101,16 +101,24 @@ class UserSearchService(selfUserId:           UserId,
   private def sortUsers(results: IndexedSeq[UserData], filter: Filter, isHandle: Boolean, symbolStripped: Filter): IndexedSeq[UserData] = {
     def toLower(str: String) = Locales.transliteration.transliterate(str).trim.toLowerCase
 
-    val predicate: (UserData) => Int =
-      if (filter.isEmpty) (_: UserData) => 0
-      else if (isHandle) (u: UserData) => if (u.handle.exists(_.exactMatchQuery(filter))) 0 else 1
-      else (u: UserData) => {
+    def bucket(u: UserData): Int =
+      if (filter.isEmpty) 0
+      else if (isHandle) {
+        if (u.handle.exists(_.exactMatchQuery(filter))) 0 else 1
+      } else {
         val userName = toLower(u.getDisplayName)
         val query = toLower(symbolStripped)
         if (userName == query) 0 else if (userName.startsWith(query)) 1 else 2
       }
 
-    results.sortBy(predicate)
+    results.sortWith { case (u1, u2) =>
+        val b1 = bucket(u1)
+        val b2 = bucket(u2)
+        if (b1 == b2)
+          u1.getDisplayName.compareTo(u2.getDisplayName) < 0
+        else
+          b1 < b2
+    }
   }
 
   def search(filter: Filter = ""): Signal[SearchResults] = {
