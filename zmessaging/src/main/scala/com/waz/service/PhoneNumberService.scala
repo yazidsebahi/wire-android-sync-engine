@@ -18,7 +18,9 @@
 package com.waz.service
 
 import android.content.Context
+import android.os.Build
 import android.telephony.TelephonyManager
+import com.github.ghik.silencer.silent
 import com.google.i18n.phonenumbers.PhoneNumberUtil
 import com.google.i18n.phonenumbers.Phonenumber.{PhoneNumber => GooglePhoneNumber}
 import com.waz.ZLog.ImplicitTag._
@@ -42,9 +44,13 @@ class PhoneNumberServiceImpl(context: Context) extends PhoneNumberService{
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
   private lazy val phoneNumberUtil = PhoneNumberUtil.getInstance()
 
-  lazy val defaultRegion = Option(telephonyManager.getSimCountryIso).orElse(Option(context.getResources.getConfiguration.locale.getCountry).filter(_ != "")).getOrElse("US").toUpperCase
+  lazy val defaultRegion = Option(telephonyManager.getSimCountryIso).orElse(getLocale(context).filter(_ != "")).getOrElse("US").toUpperCase
 
   private val qaShortcutRegex = "^\\+0\\d+$".r
+
+  @silent def getLocale(context: Context): Option[String] =
+    Option(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) context.getResources.getConfiguration.getLocales.get(0).getCountry
+    else context.getResources.getConfiguration.locale.getCountry)
 
   def myPhoneNumber: Future[Option[PhoneNumber]] =
     Try(telephonyManager.getLine1Number).toOption.flatMap(Option(_)).filter(_.nonEmpty).map(PhoneNumber).map(normalize) match {

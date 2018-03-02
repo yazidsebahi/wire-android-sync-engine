@@ -26,10 +26,9 @@ import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.push.PushNotificationEventsStorage.{EventIndex, PlainWriter}
 import com.waz.sync.client.PushNotificationEncoded
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.EventContext
-import com.waz.utils.events.Events.Subscriber
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 import org.json.JSONArray
 
