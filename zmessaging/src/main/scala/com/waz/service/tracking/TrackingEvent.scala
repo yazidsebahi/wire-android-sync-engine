@@ -24,7 +24,6 @@ import com.waz.api.{EphemeralExpiration, NetworkMode}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConversationData, IntegrationId, Mime}
 import com.waz.service.push.ReceivedPushData
-import com.waz.service.tracking.IntegrationAdded.Method
 import com.waz.utils.returning
 import org.json
 import org.json.JSONObject

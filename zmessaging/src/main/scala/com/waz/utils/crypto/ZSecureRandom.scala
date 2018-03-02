@@ -19,7 +19,7 @@ package com.waz.utils.crypto
 
 import java.security.SecureRandom
 
-object SecureRandom {
+object ZSecureRandom {
   lazy val random = new SecureRandom()
 
   def nextInt(): Int = random.nextInt

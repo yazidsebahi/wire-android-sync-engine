@@ -20,6 +20,7 @@ package com.waz.znet
 import java.security.cert.{CertificateException, X509Certificate}
 import javax.net.ssl._
 
+import com.github.ghik.silencer.silent
 import com.google.android.gms.security.ProviderInstaller
 import com.koushikdutta.async._
 import com.koushikdutta.async.future.{FutureCallback, Future => AFuture}
@@ -99,7 +100,7 @@ object ClientWrapper {
 
     installGmsCoreOpenSslProvider map { _ =>
       // using specific hostname verifier to ensure compatibility with `isCertForDomain` (below)
-      client.getSSLSocketMiddleware.setHostnameVerifier(new StrictHostnameVerifier)
+      client.getSSLSocketMiddleware.setHostnameVerifier(strictHostnameVerifier())
       client.getSSLSocketMiddleware.setTrustManagers(Array(new X509TrustManager {
         override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {
           debug(s"checking certificate for authType $authType, name: ${chain(0).getSubjectDN.getName}")
@@ -138,7 +139,7 @@ object ClientWrapper {
           */
         private def isCertForWireHost(cert: X509Certificate): Boolean = {
           def iter(arr: Array[String]) = Option(arr).fold2(Iterator.empty, _.iterator)
-          (iter(AbstractVerifier.getCNs(cert)) ++ iter(AbstractVerifier.getDNSSubjectAlts(cert))).exists(_.endsWith(s".$wireDomain"))
+          (iter(getCNs(cert)) ++ iter(getDNSSubjectAlts(cert))).exists(_.endsWith(s".$wireDomain"))
         }
       }))
 
@@ -166,4 +167,10 @@ object ClientWrapper {
 
     }
   }
+
+  @silent def strictHostnameVerifier(): StrictHostnameVerifier = new StrictHostnameVerifier
+
+  @silent def getCNs(cert: X509Certificate): Array[String] = AbstractVerifier.getCNs(cert)
+
+  @silent def getDNSSubjectAlts(cert: X509Certificate): Array[String] = AbstractVerifier.getDNSSubjectAlts(cert)
 }
