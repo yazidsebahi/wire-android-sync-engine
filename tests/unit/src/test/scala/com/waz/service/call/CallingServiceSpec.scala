@@ -28,7 +28,6 @@ import com.waz.service.call.Avs.WCall
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
-import com.waz.service.tracking.TrackingService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
@@ -37,7 +36,6 @@ import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, Serialized}
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.LogTag
 import org.json.JSONObject
 import org.threeten.bp.Instant
 

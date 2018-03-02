@@ -53,8 +53,8 @@ import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
   feature("parsing") {
     scenario("random response") {
-      new StringResponse(RandomResponse) should beMatching {
-        case RandomGiphyResponse(resp) if resp == randomSeqResponse => true
+      StringResponse(RandomResponse) should beMatching {
+        case RandomGiphyResponse(resp@(_, _)) if resp == randomSeqResponse => true
       }
     }
 

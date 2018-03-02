@@ -34,7 +34,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.collection.generic.CanBuild
 import scala.concurrent.Future
-import scala.language.higherKinds
+//import scala.language.higherKinds
 
 class UserSearchServiceSpec extends AndroidFreeSpec {
 

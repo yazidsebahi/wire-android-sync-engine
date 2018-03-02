@@ -17,30 +17,30 @@
  */
 package com.waz.sync
 
-import java.util.Date
+//import java.util.Date
 
 import com.waz._
-import com.waz.api.ErrorType
-import com.waz.api.impl.ErrorResponse
-import com.waz.model.ConversationData.ConversationType
-import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model._
-import com.waz.service.conversation.{ConversationsService, ConversationsServiceImpl}
-import com.waz.sync.client.ConversationsClient.ConversationResponse
-import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
-import com.waz.sync.client._
-import com.waz.testutils._
-import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, MockZMessaging, _}
-import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.wrappers.DB
-import com.waz.znet.ZNetClient._
+//import com.waz.api.ErrorType
+//import com.waz.api.impl.ErrorResponse
+//import com.waz.model.ConversationData.ConversationType
+//import com.waz.model.ErrorData.ErrorDataDao
+//import com.waz.model._
+//import com.waz.service.conversation.{ConversationsService, ConversationsServiceImpl}
+//import com.waz.sync.client.ConversationsClient.ConversationResponse
+//import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
+//import com.waz.sync.client._
+//import com.waz.testutils._
+//import com.waz.testutils.Matchers._
+import com.waz.testutils.{DefaultPatienceConfig}//, MockZMessaging, _}
+//import com.waz.threading.{CancellableFuture, Threading}
+//import com.waz.utils.wrappers.DB
+//import com.waz.znet.ZNetClient._
 import org.scalatest._
 import org.scalatest.concurrent.{ScalaFutures, ScaledTimeSpans}
-import org.threeten.bp.Instant
+//import org.threeten.bp.Instant
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+//import scala.concurrent.duration._
+//import scala.concurrent.{Await, Future}
 
 @Ignore class ConversationsSyncHandlerSpec extends FeatureSpec with Matchers with ScalaFutures with ScaledTimeSpans with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils with DefaultPatienceConfig { test =>
 

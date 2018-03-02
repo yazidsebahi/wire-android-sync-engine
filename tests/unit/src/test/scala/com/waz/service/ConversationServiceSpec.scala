@@ -17,23 +17,23 @@
  */
 package com.waz.service
 
-import java.util.Date
+//import java.util.Date
 
 import com.waz._
-import com.waz.api.Message
-import com.waz.content.GlobalDatabase
-import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
-import com.waz.model._
-import com.waz.sync.client.ConversationsClient.ConversationResponse
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
-import com.waz.threading.Threading
-import com.waz.utils._
-import com.waz.utils.wrappers.DB
-import org.robolectric.Robolectric
+//import com.waz.api.Message
+//import com.waz.content.GlobalDatabase
+//import com.waz.model.ConversationData.{ConversationDataDao, ConversationType}
+//import com.waz.model._
+//import com.waz.sync.client.ConversationsClient.ConversationResponse
+//import com.waz.testutils.{EmptySyncService, MockZMessaging}
+//import com.waz.threading.Threading
+//import com.waz.utils._
+//import com.waz.utils.wrappers.DB
+//import org.robolectric.Robolectric
 import org.scalatest._
 
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+//import scala.concurrent.duration._
+//import scala.concurrent.{Await, Future}
 
 @Ignore class ConversationServiceSpec extends FeatureSpec with Matchers with BeforeAndAfter with GivenWhenThen with RobolectricTests with RobolectricUtils { test =>
 //  implicit lazy val dispatcher = Threading.Background

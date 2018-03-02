@@ -17,27 +17,28 @@
  */
 package com.waz.service.conversation
 
-import java.util.Date
+//import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
-import com.waz.RobolectricUtils
-import com.waz.api.Message
-import com.waz.content.{ConversationStorage, GlobalDatabase, MembersStorage}
-import com.waz.model.ConversationData.ConversationType
+//import android.database.sqlite.SQLiteDatabase
+//import com.waz.RobolectricUtils
+//import com.waz.api.Message
+import com.waz.content.{ConversationStorage, MembersStorage}
+//import com.waz.content.GlobalDatabase
+//import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.messages.MessagesService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
-import com.waz.sync.client.ConversationsClient.ConversationResponse
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
-import com.waz.threading.Threading
-import org.robolectric.Robolectric
-import org.robolectric.shadows.ShadowLog
-import org.scalatest._
-import org.threeten.bp.Instant
-
-import scala.concurrent.Await
-import scala.concurrent.duration._
+//import com.waz.sync.client.ConversationsClient.ConversationResponse
+//import com.waz.testutils.{EmptySyncService, MockZMessaging}
+//import com.waz.threading.Threading
+//import org.robolectric.Robolectric
+//import org.robolectric.shadows.ShadowLog
+//import org.scalatest._
+//import org.threeten.bp.Instant
+//
+//import scala.concurrent.Await
+//import scala.concurrent.duration._
 
 class PrivateConversationSpec extends AndroidFreeSpec {
 

@@ -17,27 +17,29 @@
  */
 package com.waz.service
 
-import java.util.Date
+//import java.util.Date
 
-import com.waz.{RobolectricUtils, testutils}
-import com.waz.api.{ErrorType, Message}
-import com.waz.model.ConversationData.ConversationType
-import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model._
-import com.waz.service.conversation.ConversationsService
-import com.waz.sync.SyncServiceHandle
-import com.waz.sync.client.ConversationsClient.ConversationResponse
-import com.waz.testutils.Matchers._
-import com.waz.testutils.{DefaultPatienceConfig, EmptySyncService, MockZMessaging}
-import com.waz.threading.Threading
-import com.waz.utils._
-import com.waz.utils.wrappers.DB
+import com.waz.RobolectricUtils
+//import com.waz.testutils
+//import com.waz.api.{ErrorType, Message}
+//import com.waz.model.ConversationData.ConversationType
+//import com.waz.model.ErrorData.ErrorDataDao
+//import com.waz.model._
+//import com.waz.service.conversation.ConversationsService
+//import com.waz.sync.SyncServiceHandle
+//import com.waz.sync.client.ConversationsClient.ConversationResponse
+//import com.waz.testutils.Matchers._
+import com.waz.testutils.DefaultPatienceConfig
+//import com.waz.testutils.{EmptySyncService, MockZMessaging}
+//import com.waz.threading.Threading
+//import com.waz.utils._
+//import com.waz.utils.wrappers.DB
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
-import org.threeten.bp.Instant
+//import org.threeten.bp.Instant
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
+//import scala.concurrent.Await
+//import scala.concurrent.duration._
 
 @Ignore class ConversationsServiceSpec extends FeatureSpec with OptionValues with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures with DefaultPatienceConfig { test =>
 //  implicit lazy val dispatcher = Threading.Background
