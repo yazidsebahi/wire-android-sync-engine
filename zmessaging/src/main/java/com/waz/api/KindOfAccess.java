@@ -19,9 +19,12 @@ package com.waz.api;
 
 public enum KindOfAccess {
     /**
-     * Code will be sent only if user has no password, will return PasswordExists otherwise.
+     * @deprecated - use Login_IF_NO_PASSWD instead
      */
     LOGIN,
+    /**
+     * Code will be sent only if user has no password, will return PasswordExists otherwise.
+     */
     LOGIN_IF_NO_PASSWD,
     REGISTRATION
 }

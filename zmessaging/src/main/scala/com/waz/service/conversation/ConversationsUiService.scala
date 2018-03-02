@@ -48,7 +48,7 @@ import org.threeten.bp.Instant
 import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.implicitConversions
+import scala.language.{higherKinds, implicitConversions}
 import scala.util.control.NonFatal
 
 trait ConversationsUiService {

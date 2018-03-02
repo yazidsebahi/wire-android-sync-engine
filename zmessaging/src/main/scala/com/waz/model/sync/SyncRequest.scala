@@ -33,6 +33,7 @@ import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.reflect.ClassTag
+import scala.util.Try
 import scala.util.control.NonFatal
 
 sealed abstract class SyncRequest {
@@ -90,6 +91,12 @@ object SyncRequest {
 
   case class PostInvitation(invitation: Invitation) extends BaseRequest(Cmd.PostInvitation) {
     override val mergeKey: Any = (cmd, invitation.id, invitation.method)
+    override def merge(req: SyncRequest) = mergeHelper[PostInvitation](req)(Merged(_))
+    override def isDuplicateOf(req: SyncRequest) = req.mergeKey == mergeKey
+  }
+
+  case class PostTeamInvitations(invitations: Seq[TeamInvitation]) extends BaseRequest(Cmd.PostTeamInvitations) {
+    override val mergeKey: Any = (cmd, invitations.map(_.emailAddress))
     override def merge(req: SyncRequest) = mergeHelper[PostInvitation](req)(Merged(_))
     override def isDuplicateOf(req: SyncRequest) = req.mergeKey == mergeKey
   }

@@ -22,10 +22,10 @@ version in ThisBuild := {
 crossPaths in ThisBuild := false
 organization in ThisBuild := "com.wire"
 
-scalaVersion in ThisBuild := "2.11.12"
+scalaVersion in ThisBuild := "2.11.8"
 
 javacOptions in ThisBuild ++= Seq("-source", "1.7", "-target", "1.7", "-encoding", "UTF-8")
-scalacOptions in ThisBuild ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-Xfatal-warnings", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8")
+scalacOptions in ThisBuild ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8")
 
 platformTarget in ThisBuild := "android-24"
 
@@ -77,17 +77,13 @@ lazy val root = Project("zmessaging-android", file("."))
       (publishM2 in zmessaging).value
       (publishM2 in actors).value
       (publishM2 in testutils).value
-    },
-    libraryDependencies ++= Seq(
-      compilerPlugin("com.github.ghik" %% "silencer-plugin" % "0.6"),
-      "com.github.ghik" %% "silencer-lib" % "0.6"
-    )
+    }
   )
 
 lazy val zmessaging = project
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
   .dependsOn(macrosupport)
-  .enablePlugins(AndroidLib)
+  .settings(android.Plugin.androidBuildAar: _*)
   .settings(publishSettings: _*)
   .settings(
     name := "zmessaging-android",
@@ -125,15 +121,13 @@ lazy val zmessaging = project
       "org.threeten" % "threetenbp" % "1.3.+" % Provided,
       "com.googlecode.mp4parser" % "isoparser" % "1.1.7",
       "net.java.dev.jna" % "jna" % "4.4.0" % Provided,
-      "org.robolectric" % "android-all" % RobolectricVersion % Provided,
-      compilerPlugin("com.github.ghik" %% "silencer-plugin" % "0.6"),
-      "com.github.ghik" %% "silencer-lib" % "0.6"
+      "org.robolectric" % "android-all" % RobolectricVersion % Provided
     )
   )
 
 lazy val unit = project.in(file("tests") / "unit")
   .enablePlugins(AutomateHeaderPlugin).settings(licenseHeaders)
-  .enablePlugins(AndroidApp).dependsOn(zmessaging)
+  .androidBuildWith(zmessaging)
   .dependsOn(testutils % Test)
   .settings(testSettings: _*)
   .settings(

@@ -46,7 +46,7 @@ import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils._
-import com.waz.utils.crypto.ZSecureRandom
+import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Bitmap, URI}
 
@@ -299,7 +299,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
       // prepend a number to the name to get unique file name,
       // will try sequential numbers from 0 - 10 first, and then fallback to random ones
       // will give up after 100 tries
-      val prefix = ((0 to 10).iterator ++ Iterator.continually(ZSecureRandom.nextInt(10000))).take(100)
+      val prefix = ((0 to 10).iterator ++ Iterator.continually(SecureRandom.nextInt(10000))).take(100)
       prefix.map(i => new File(dir, nextFileName(baseName, i))).find(!_.exists())
     }
 

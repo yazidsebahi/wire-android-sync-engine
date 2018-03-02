@@ -30,7 +30,7 @@ import com.waz.service.EventScheduler
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.VerificationStateUpdater.{ClientAdded, ClientUnverified, MemberAdded, VerificationChange}
-import com.waz.service.otr.OtrService
+import com.waz.service.otr.{OtrService, VerificationStateUpdater}
 import com.waz.threading.Threading
 import com.waz.utils.events.EventContext
 import com.waz.utils.{RichFuture, _}

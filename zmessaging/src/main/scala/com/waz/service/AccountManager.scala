@@ -27,7 +27,7 @@ import com.waz.model.otr.{Client, ClientId}
 import com.waz.model.{UserData, _}
 import com.waz.service.AccountsService.LoggedOut
 import com.waz.service.otr.OtrService.sessionId
-import com.waz.service.otr.OtrClientsService
+import com.waz.service.otr.{OtrClientsService, VerificationStateUpdater}
 import com.waz.service.tracking.{LoggedOutEvent, TrackingService}
 import com.waz.sync._
 import com.waz.sync.client.OtrClient

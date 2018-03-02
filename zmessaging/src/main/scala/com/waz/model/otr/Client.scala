@@ -23,7 +23,7 @@ import com.waz.api.{OtrClientType, Verification}
 import com.waz.db.Col._
 import com.waz.db.Dao
 import com.waz.model.{Id, UserId}
-import com.waz.utils.crypto.ZSecureRandom
+import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import org.json.JSONObject
@@ -39,7 +39,7 @@ case class ClientId(str: String) {
 object ClientId {
 
   implicit val id: Id[ClientId] = new Id[ClientId] {
-    override def random(): ClientId = ClientId(ZSecureRandom.nextLong().toHexString)
+    override def random(): ClientId = ClientId(SecureRandom.nextLong().toHexString)
     override def decode(str: String): ClientId = ClientId(str)
     override def encode(id: ClientId): String = id.str
   }

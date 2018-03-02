@@ -22,7 +22,7 @@ import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
 import com.waz.api.ConversationsList.VerificationStateCallback
 import com.waz.api.impl.{Conversation, ConversationsList}
-import com.waz.api.{IConversation, MessageContent}
+import com.waz.api.{IConversation, MessageContent, User}
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.threading.{CancellableFuture, Threading}

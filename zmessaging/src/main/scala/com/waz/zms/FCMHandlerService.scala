@@ -27,6 +27,7 @@ import com.waz.service.ZMessaging.clock
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.OtrService
 import com.waz.service.push.{PushService, ReceivedPushData, ReceivedPushStorage}
+import com.waz.service.tracking.TrackingService
 import com.waz.service.tracking.TrackingService.exception
 import com.waz.service.{AccountsService, NetworkModeService, ZMessaging}
 import com.waz.sync.client.PushNotification

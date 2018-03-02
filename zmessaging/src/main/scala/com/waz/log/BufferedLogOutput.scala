@@ -21,7 +21,7 @@ import java.io.{BufferedWriter, File, FileWriter, IOException}
 
 import com.waz.ZLog.LogTag
 import com.waz.threading.{SerialDispatchQueue, Threading}
-import com.waz.utils.crypto.ZSecureRandom
+import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.returning
 
 import scala.annotation.tailrec
@@ -35,7 +35,7 @@ class BufferedLogOutput(val baseDir: String,
   assert(maxBufferSize < maxFileSize)
   assert(maxRollFiles > 0)
 
-  override val id = "BufferedLogOutput" + ZSecureRandom.nextInt().toHexString
+  override val id = "BufferedLogOutput" + SecureRandom.nextInt().toHexString
 
   private implicit val dispatcher = new SerialDispatchQueue(Threading.IO, id)
 

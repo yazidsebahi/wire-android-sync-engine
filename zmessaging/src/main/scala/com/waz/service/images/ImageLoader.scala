@@ -149,6 +149,7 @@ class ImageLoaderImpl(context:                  Context,
 
   private def saveImageToGallery(data: LocalData, mime: Mime) =
     {
+      import PermissionsService._
       permissions.requestAllPermissions(Set(WRITE_EXTERNAL_STORAGE)).flatMap {
         case true =>
           Future {

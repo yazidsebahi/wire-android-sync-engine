@@ -17,7 +17,7 @@
  */
 package com.waz.utils
 
-import com.waz.utils.crypto.ZSecureRandom
+import com.waz.utils.crypto.SecureRandom
 
 import scala.concurrent.duration._
 import scala.math.abs
@@ -46,7 +46,7 @@ class ExponentialBackoff(initialDelay: FiniteDuration, maxDelay: FiniteDuration)
 
   private def randomized(delay: Duration) = {
     val ms = delay.toMillis / 2d
-    (ms + abs(ZSecureRandom.nextDouble()) * ms).millis
+    (ms + abs(SecureRandom.nextDouble()) * ms).millis
   }
 }
 
