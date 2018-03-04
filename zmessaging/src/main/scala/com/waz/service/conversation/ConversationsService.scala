@@ -29,7 +29,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
-import com.waz.service.tracking.TrackingService
+import com.waz.service.tracking.{GuestsAllowedToggled, TrackingService}
 import com.waz.sync.client.ConversationsClient
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
@@ -308,6 +308,7 @@ class ConversationsServiceImpl(context:         Context,
       case Some(_) =>
         (for {
           true <- isGroupConversation(convId)
+          _ = tracking.track(GuestsAllowedToggled(!teamOnly))
           (ac, ar) = getAccessAndRoleForGroupConv(teamOnly, teamId)
           Some((old, upd)) <- content.updateAccessMode(convId, ac, Some(ar))
           resp <-

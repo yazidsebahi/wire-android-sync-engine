@@ -21,8 +21,7 @@ import java.lang.Math.max
 
 import com.waz.ZLog.LogTag
 import com.waz.api.{EphemeralExpiration, NetworkMode}
-import com.waz.model.ConversationData.ConversationType
-import com.waz.model.{ConversationData, IntegrationId, Mime}
+import com.waz.model.{IntegrationId, Mime}
 import com.waz.service.call.Avs.AvsClosedReason.reasonString
 import com.waz.service.call.CallInfo.EndedReason
 import com.waz.service.push.ReceivedPushData
@@ -45,15 +44,22 @@ trait OptEvent extends TrackingEvent {
 case object OptInEvent  extends OptEvent { override val name = s"settings.opted_in_tracking" }
 case object OptOutEvent extends OptEvent { override val name = s"settings.opted_out_tracking" }
 
-case class ContributionEvent(action: ContributionEvent.Action, conversationType: ConversationType, ephExp: EphemeralExpiration, withBot: Boolean) extends TrackingEvent {
+case class ContributionEvent(action:        ContributionEvent.Action,
+                             isGroup:       Boolean,
+                             ephExp:        EphemeralExpiration,
+                             withService:   Boolean,
+                             guestsAllowed: Boolean,
+                             fromGuest:     Boolean) extends TrackingEvent {
   override val name = "contributed"
 
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("action", action.name)
-    o.put("conversation_type", if (conversationType == ConversationType.Group) "group" else "one_to_one")
-    o.put("with_service", withBot)
+    o.put("conversation_type", if (isGroup) "group" else "one_to_one")
+    o.put("with_service", withService)
     o.put("is_ephemeral", ephExp != EphemeralExpiration.NONE) //TODO is this flag necessary?
     o.put("ephemeral_expiration", ephExp.duration().toSeconds.toString)
+    o.put("is_allow_guests", guestsAllowed)
+    o.put("user_type", if (fromGuest) "guest" else "user")
   })
 }
 
@@ -72,9 +78,6 @@ object ContributionEvent {
     lazy val File = Action("file")
     lazy val Location = Action("location")
   }
-
-  def apply(action: Action, conv: ConversationData, withBot: Boolean): ContributionEvent =
-    ContributionEvent(action, conv.convType, conv.ephemeral, withBot)
 
   def fromMime(mime: Mime) = {
     import Action._
@@ -203,11 +206,31 @@ case class OpenSelectParticipants(method: GroupConversationEvent.Method) extends
   })
 }
 
-case class GroupConversationSuccessful(withParticipants: Boolean, method: GroupConversationEvent.Method) extends TrackingEvent {
+case class GroupConversationSuccessful(withParticipants: Boolean, guestsAllowed: Boolean, method: GroupConversationEvent.Method) extends TrackingEvent {
   override val name = "conversation.group_creation_succeeded"
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("method", method.str)
     o.put("with_participants", withParticipants)
+    o.put("is_allow_guests", guestsAllowed)
+  })
+}
+
+case class GuestsAllowedToggled(guestsAllowed: Boolean) extends TrackingEvent {
+  override val name = "guest_rooms.allow_guests"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("is_allow_guests", guestsAllowed)
+  })
+}
+
+case class AddParticipantsEvent(guestsAllowed: Boolean, userCount: Int, guestCount: Int, method: GroupConversationEvent.Method) extends TrackingEvent {
+  override val name = "conversation.add_participants"
+
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("user_num", userCount)
+    o.put("guest_num", guestCount)
+    o.put("temporary_guest_num", 0) //TODO add when we have "wireless guests"
+    o.put("is_allow_guests", guestsAllowed)
+    o.put("method", method.str)
   })
 }
 
@@ -217,6 +240,7 @@ class CallingEvent(partName:              String,
                    groupMemberCount:      Int,
                    callParticipantsCount: Int,
                    withService:           Boolean,
+                   guestsAllowed:         Boolean,
                    uiActive:              Option[Boolean]     = None,
                    incoming:              Option[Boolean]     = None,
                    setupTime:             Option[Duration]    = None,
@@ -229,6 +253,7 @@ class CallingEvent(partName:              String,
     o.put("conversation_participants", groupMemberCount)
     o.put("conversation_participants_in_call", callParticipantsCount)
     o.put("with_service", withService)
+    o.put("is_allow_guests", guestsAllowed)
 
     uiActive.foreach(v => o.put("app_is_active", v))
     incoming.foreach(v => o.put("direction", if (v) "incoming" else "outgoing"))

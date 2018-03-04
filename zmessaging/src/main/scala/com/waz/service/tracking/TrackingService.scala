@@ -19,9 +19,6 @@ package com.waz.service.tracking
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.EphemeralExpiration
-import com.waz.content.MembersStorage
-import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.service.call.CallInfo
@@ -32,7 +29,7 @@ import com.waz.utils.RichInstant
 import com.waz.utils.events.{EventContext, EventStream}
 
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 trait TrackingService {
@@ -74,12 +71,11 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         Some(conv)   <- z.convsStorage.get(convId)
         userIds      <- z.membersStorage.activeMembers(convId).head
         users        <- z.users.getUsers(userIds.toSeq)
-        convType     <- TrackingService.convType(conv, z.membersStorage)
+        isGroup      <- z.conversations.isGroupConversation(convId)
       } {
-        events ! Option(z) -> ContributionEvent(action, convType, conv.ephemeral, users.exists(_.isWireBot))
+        events ! Option(z) -> ContributionEvent(action, isGroup, conv.ephemeral, users.exists(_.isWireBot), !conv.isTeamOnly, conv.isMemberFromTeamGuest(z.teamId))
       }
-    case None =>
-      events ! None -> ContributionEvent(action, ConversationData.ConversationType.Unknown, EphemeralExpiration.NONE, withBot = false)
+    case _ => //
   }
 
   override def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit = {
@@ -107,10 +103,10 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         Some(msg)   <- z.messagesStorage.get(MessageId(assetId.str))
         Some(conv)  <- z.convsContent.convById(msg.convId)
         Some(asset) <- z.assetsStorage.get(assetId)
-        convType    <- TrackingService.convType(conv, z.membersStorage)
         userIds     <- z.membersStorage.activeMembers(conv.id).head
         users       <- z.users.getUsers(userIds.toSeq)
-      } yield track(ContributionEvent(fromMime(asset.mime), convType, msg.ephemeral, users.exists(_.isWireBot)), Some(accountId))
+        isGroup     <- z.conversations.isGroupConversation(conv.id)
+      } yield track(ContributionEvent(fromMime(asset.mime), isGroup, msg.ephemeral, users.exists(_.isWireBot), !conv.isTeamOnly, conv.isMemberFromTeamGuest(z.teamId)), Some(accountId))
     case _ => //
   }
 
@@ -142,6 +138,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         isGroup  <- z.conversations.isGroupConversation(callInfo.convId)
         memCount <- z.membersStorage.activeMembers(callInfo.convId).map(_.size).head
         withService <- z.conversations.isWithService(callInfo.convId)
+        withGuests  <- z.convsStorage.get(callInfo.convId).collect { case Some(conv) => !conv.isTeamOnly }
         uiActive    <- ZMessaging.currentGlobal.lifecycle.uiActive.head
       } yield
         track(new CallingEvent(
@@ -151,6 +148,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
           memCount,
           callInfo.maxParticipants,
           withService,
+          withGuests,
           Some(uiActive),
           Some(callInfo.caller != z.selfUserId),
           callInfo.estabTime.map(est => callInfo.joinedTime.getOrElse(est).until(est)),
@@ -182,14 +180,5 @@ object TrackingService {
 
   trait NoReporting { self: Throwable => }
 
-  //TODO remove workarounds for 1:1 team conversations when supported on backend
-  private[waz] def convType(conv: ConversationData, membersStorage: MembersStorage)(implicit executionContext: ExecutionContext): Future[ConversationType] =
-    if (conv.team.isEmpty) Future.successful(conv.convType)
-    else membersStorage.getByConv(conv.id).map(_.map(_.userId).size > 2).map {
-      case true => ConversationType.Group
-      case _ => ConversationType.OneToOne
-    }
-
-  case class AssetTrackingData(conversationType: ConversationType, withOtto: Boolean, expiration: EphemeralExpiration, assetSize: Long, mime: Mime)
 }
 
