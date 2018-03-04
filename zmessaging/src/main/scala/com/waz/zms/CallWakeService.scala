@@ -22,6 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model.{AccountId, ConvId}
 import com.waz.service.ZMessaging
+import com.waz.service.call.CallInfo.CallState
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events.EventContext
@@ -72,7 +73,7 @@ class CallWakeService extends FutureService with ZMessagingService {
     */
   private def track(zms: ZMessaging, conv: ConvId): Future[Unit] = {
     val timeoutFuture = CancellableFuture.delay(zms.timeouts.calling.callConnectingTimeout) flatMap { _ =>
-      CancellableFuture.lift(zms.calling.currentCall.head.collect{case Some(i) => i.state}.map(isConnectingStates.contains).map {
+      CancellableFuture.lift(zms.calling.currentCall.head.collect { case Some(i) if i.state.isDefined => i.state.get } .map(isConnectingStates.contains).map {
         case true => zms.calling.endCall(conv)
         case _ =>
       })
@@ -95,7 +96,7 @@ object CallWakeService {
   val ActionLeave = "com.waz.zclient.call.ACTION_LEAVE"
   val ActionSilence = "com.waz.zclient.call.ACTION_SILENCE"
 
-  lazy val isConnectingStates = Set(SelfCalling, SelfJoining, OtherCalling)
+  lazy val isConnectingStates = Set[CallState](SelfCalling, SelfJoining, OtherCalling)
 
   def apply(context: Context, user: AccountId, conv: ConvId) = {
     if (!context.startService(trackIntent(context, user, conv))) {

@@ -28,9 +28,10 @@ import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service.ZMessaging.clock
 import com.waz.service._
-import com.waz.service.call.Avs.ClosedReason.{AnsweredElsewhere, Interrupted, StillOngoing}
-import com.waz.service.call.Avs.{ClosedReason, VideoReceiveState, WCall}
+import com.waz.service.call.Avs.AvsClosedReason.{StillOngoing, reasonString}
+import com.waz.service.call.Avs.{AvsClosedReason, VideoReceiveState, WCall}
 import com.waz.service.call.CallInfo.CallState._
+import com.waz.service.call.CallInfo.EndedReason._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
@@ -82,7 +83,6 @@ class CallingService(val selfUserId:      UserId,
                      messagesService:     MessagesService,
                      mediaManagerService: MediaManagerService,
                      pushService:         PushService,
-                     callLogService:      CallLogService,
                      network:             NetworkModeService,
                      netClient:           ZNetClient,
                      errors:              ErrorsService,
@@ -101,7 +101,12 @@ class CallingService(val selfUserId:      UserId,
   val availableCalls = callProfile.map(_.availableCalls) //any call a user can potentially join
   //state about any call for which we should show the CallingActivity
   val currentCall: Signal[Option[CallInfo]] = callProfile.map(_.activeCall)
-  val previousCall: SourceSignal[Option[CallInfo]] = Signal(Option.empty[CallInfo]) //Snapshot of last active call after hangup for tracking
+
+  //track call on all state changes - except for when the state becomes None, this will be handled in onClosedCall
+  currentCall.map(_.flatMap(_.state)).onChanged {
+    case Some(_) => currentCall.currentValue.flatten.foreach(tracking.trackCallState(account, _))
+    case _ => //
+  }
 
   //exposed for tests only
   lazy val wCall = returningF(avs.registerAccount(this)) { call =>
@@ -121,7 +126,7 @@ class CallingService(val selfUserId:      UserId,
 
   callProfile.onChanged { p =>
     verbose(s"Call profile changed. active call: ${p.activeCall}, non active calls: ${p.nonActiveCalls}")
-    p.activeCall.foreach(i => if (i.state == SelfCalling) CallWakeService(context, account, i.convId))
+    p.activeCall.foreach(i => if (i.state.contains(SelfCalling)) CallWakeService(context, account, i.convId))
   }
 
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
@@ -141,8 +146,8 @@ class CallingService(val selfUserId:      UserId,
     val newCall = CallInfo(
       conv.id,
       userId,
-      OtherCalling,
-      Set(userId),
+      Some(OtherCalling),
+      others = Set(userId),
       isVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
       videoSendState = if (videoCall) PREVIEW else DONT_SEND)
@@ -162,7 +167,7 @@ class CallingService(val selfUserId:      UserId,
   def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { (_, conv) =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     updateActiveCall {
-      case call if call.convId == conv.id => call.copy(state = SelfJoining)
+      case call if call.convId == conv.id => call.updateState(SelfJoining)
       case call => warn("Other side answered non-active call, ignoring"); call
     }("onOtherSideAnsweredCall")
   }
@@ -179,36 +184,45 @@ class CallingService(val selfUserId:      UserId,
       setCallMuted(c.muted) //Need to set muted only after call is established
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
       val others = c.others + userId - selfUserId
-      c.copy(state = SelfConnected, estabTime = Some(clock.instant), others = others, maxParticipants = others.size + 1)
+      c.updateState(SelfConnected).copy(others = others, maxParticipants = others.size + 1)
     }("onEstablishedCall")
   }
 
-  def onClosedCall(reason: ClosedReason, convId: RConvId, time: Instant, userId: UserId) = withConv(convId) { (_, conv) =>
-    verbose(s"call closed for reason: $reason, conv: ${conv.id} at $time, userId: $userId")
+  def onClosedCall(reason: AvsClosedReason, rConvId: RConvId, time: Instant, userId: UserId) = withConv(rConvId) { (_, conv) =>
+    verbose(s"call closed for reason: ${reasonString(reason)}, conv: ${conv.id} at $time, userId: $userId")
     callProfile.mutate { p =>
-      //also handles call messages and call logs based on the state the call is in directly before being closed
+
+      //also handles call messages based on the state the call is in directly before being closed
       val newActive = p.activeCall match {
         case Some(call) if call.convId == conv.id =>
+
+          val endTime = clock.instant()
+          import AvsClosedReason._
+          val endReason = (call.endReason, reason) match {
+            case (Some(er), Normal | StillOngoing) => er
+            case (_, Normal)        => OtherEnded
+            case (_, _)             => Dropped(reason)
+          }
+
           if (reason != AnsweredElsewhere) call.state match {
-            case SelfCalling =>
+            case Some(SelfCalling) =>
               //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
               verbose("Call timed out out the other didn't answer - add a \"you called\" message")
               messagesService.addMissedCallMessage(conv.id, selfUserId, clock.instant)
-            case OtherCalling | SelfJoining if reason == StillOngoing => // do nothing - call is still ongoing in the background
-            case OtherCalling | SelfJoining | Ongoing =>
+            case Some(OtherCalling) | Some(SelfJoining) if reason == StillOngoing => // do nothing - call is still ongoing in the background
+            case Some(OtherCalling) | Some(SelfJoining) | Some(Ongoing) =>
               verbose("Call timed out out and we didn't answer - mark as missed call")
               messagesService.addMissedCallMessage(conv.id, call.caller, clock.instant)
-            case SelfConnected =>
-              verbose("Had a successful call, save duration as a message")
-              call.estabTime.foreach { est =>
-                messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(clock.instant))
-                //TODO can this information be gathered some other way - we really only care about successful calls.
-                callLogService.addEstablishedCall(None, conv.id, call.isVideoCall)
-              }
+            case Some(SelfConnected) =>
+              verbose("Had a call, save duration as a message")
+              call.estabTime.foreach(est => messagesService.addSuccessfulCallMessage(conv.id, call.caller, est, est.until(endTime)))
+            case _ =>
+              warn(s"unexpected call state: ${call.state}")
           }
-          previousCall ! Some(call)
+          //need to track here manually, since the current call will either change or be set to None
+          tracking.trackCallState(account, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
           //Switch to any available calls that are still incoming and should ring
-          p.nonActiveCalls.filter(_.state == OtherCalling).sortBy(_.startTime).headOption.map(_.convId)
+          p.nonActiveCalls.filter(_.state.contains(OtherCalling)).sortBy(_.startTime).headOption.map(_.convId)
         case Some(call) =>
           verbose("A call other than the current one was closed - likely missed another incoming call.")
           messagesService.addMissedCallMessage(conv.id, userId, clock.instant)
@@ -220,12 +234,12 @@ class CallingService(val selfUserId:      UserId,
       }
 
       //Group calls that you don't answer (but are answered by other users) will be "closed" with reason StillOngoing. We need to keep these around so the user can join them later
-      val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.copy(state = Ongoing)) else None
+      val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.updateState(Ongoing)) else None
       p.copy(activeId = newActive, callUpdated.fold(p.availableCalls - conv.id)(c => p.availableCalls + (conv.id -> c)))
     }
   }
 
-  def onMetricsReady(convId: RConvId, metricsJson: String) =
+  def onMetricsReady(convId: RConvId, metricsJson: String): Unit =
     tracking.track(AVSMetricsEvent(metricsJson), Some(account))
 
   def onConfigRequest(wcall: WCall): Int = {
@@ -293,10 +307,10 @@ class CallingService(val selfUserId:      UserId,
       profile.activeCall match {
         case Some(call) if call.convId == convId =>
           call.state match {
-            case OtherCalling =>
+            case Some(OtherCalling) =>
               verbose(s"Answering call")
               avs.answerCall(w, conv.remoteId, !vbr)
-              updateActiveCall(_.copy(state = SelfJoining))("startCall/OtherCalling")
+              updateActiveCall(_.updateState(SelfJoining))("startCall/OtherCalling")
             case _ =>
               warn("Tried to join an already joined/connecting call - ignoring")
           }
@@ -307,7 +321,7 @@ class CallingService(val selfUserId:      UserId,
             case Some(call) =>
               verbose("Joining an ongoing background call")
               avs.answerCall(w, conv.remoteId, !vbr)
-              val active = call.copy(state = SelfJoining)
+              val active = call.updateState(SelfJoining)
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
             case None =>
               verbose("No active call, starting new call")
@@ -317,8 +331,8 @@ class CallingService(val selfUserId:      UserId,
                   val newCall = CallInfo(
                     conv.id,
                     selfUserId,
-                    SelfCalling,
-                    others,
+                    Some(SelfCalling),
+                    others = others,
                     isVideoCall = isVideo,
                     videoSendState = if (isVideo) PREVIEW else DONT_SEND)
                   callProfile.mutate(_.copy(activeId = Some(newCall.convId), availableCalls = profile.availableCalls + (newCall.convId -> newCall)))
@@ -338,8 +352,8 @@ class CallingService(val selfUserId:      UserId,
     updateActiveCall { call =>
       verbose(s"Call ended in state: ${call.state}")
       //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
-      if (call.state == OtherCalling) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
-      call.copy(hangupRequested = true)
+      if (call.state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
+      call.copy(endReason = Some(SelfEnded))
     }("endCall")
   }
 
@@ -347,7 +361,7 @@ class CallingService(val selfUserId:      UserId,
     case Some(info) =>
       (info.outstandingMsg, info.state) match {
         case (Some((msg, ctx)), _) => convs.storage.setUnknownVerification(info.convId).map(_ => sendCallMessage(info.convId, msg, ctx))
-        case (None, OtherCalling) => convs.storage.setUnknownVerification(info.convId).map(_ => startCall(info.convId))
+        case (None, Some(OtherCalling)) => convs.storage.setUnknownVerification(info.convId).map(_ => startCall(info.convId))
         case _ => error(s"Tried resending message on invalid info: ${info.convId} in state ${info.state} with msg: ${info.outstandingMsg}")
       }
     case None => warn("Tried to continue degraded call without a current active call")
@@ -377,7 +391,7 @@ class CallingService(val selfUserId:      UserId,
       withConv(convId) { (w, conv) =>
         updateActiveCall { c =>
           avs.endCall(w, conv.remoteId)
-          c.copy(closedReason = Interrupted)
+          c.copy(endReason = Some(GSMInterrupted))
         }("onInterrupted")
       }
     }

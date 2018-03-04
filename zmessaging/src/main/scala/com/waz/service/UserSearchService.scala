@@ -141,7 +141,7 @@ class UserSearchService(selfUserId:           UserId,
             val gConvs = convs.map { c =>
               conversationsService.isGroupConversation(c.id).flatMap {
                 case true  => Future.successful(true)
-                case false => conversationsService.isWithBot(c.id)
+                case false => conversationsService.isWithService(c.id)
               }.map {
                 case true  => Some(c)
                 case false => None

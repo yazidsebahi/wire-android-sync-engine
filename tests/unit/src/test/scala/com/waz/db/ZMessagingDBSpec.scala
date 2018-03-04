@@ -26,7 +26,6 @@ import com.waz.utils.wrappers.{DB, DBHelper, URI}
 import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
-import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.MessageData.MessageDataDao
 import com.waz.model.MsgDeletion.MsgDeletionDao
@@ -132,15 +131,6 @@ import org.threeten.bp.Instant
         conv.incomingKnockMessage shouldEqual None
         conv.lastRead should be >= Instant.EPOCH
       }
-    }
-
-    scenario("New call log table in 66") {
-      implicit val db = loadDb("/db/zmessaging_60.db")
-      dbHelper.onUpgrade(db, 60, 66)
-
-      val entry = CallLogEntry(KindOfCallingEvent.CALL_ESTABLISHED, Some(CallSessionId()), ConvId(), Instant.now, true)
-      CallLogEntryDao.insertOrReplace(entry)
-      CallLogEntryDao.list should contain only entry
     }
 
     scenario("MsgDeletion table added in 68") {

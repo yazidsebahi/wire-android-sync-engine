@@ -53,7 +53,7 @@ trait ConversationsService {
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: Option[ErrorType], resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
-  def isWithBot(convId: ConvId): Future[Boolean]
+  def isWithService(convId: ConvId): Future[Boolean]
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
 }
 
@@ -276,7 +276,7 @@ class ConversationsServiceImpl(context:         Context,
     _ <- membersStorage.delete(convId)
     _ <- msgContent.deleteMessagesForConversation(convId: ConvId)
   } yield ()
-  
+
   def forceNameUpdate(id: ConvId) = {
     warn(s"forceNameUpdate($id)")
     nameUpdater.forceNameUpdate(id)
@@ -297,7 +297,7 @@ class ConversationsServiceImpl(context:         Context,
         else membersStorage.getActiveUsers(convId).map(ms => !(ms.contains(selfUserId) && ms.size == 2))
     } yield res
 
-  def isWithBot(convId: ConvId) =
+  def isWithService(convId: ConvId) =
     membersStorage.getActiveUsers(convId)
       .flatMap(usersStorage.getAll)
       .map(_.flatten.exists(_.isWireBot))

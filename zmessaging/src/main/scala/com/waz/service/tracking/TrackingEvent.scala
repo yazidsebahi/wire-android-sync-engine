@@ -23,8 +23,9 @@ import com.waz.ZLog.LogTag
 import com.waz.api.{EphemeralExpiration, NetworkMode}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConversationData, IntegrationId, Mime}
+import com.waz.service.call.Avs.AvsClosedReason.reasonString
+import com.waz.service.call.CallInfo.EndedReason
 import com.waz.service.push.ReceivedPushData
-import com.waz.service.tracking.IntegrationAdded.Method
 import com.waz.utils.returning
 import org.json
 import org.json.JSONObject
@@ -201,6 +202,7 @@ case class OpenSelectParticipants(method: GroupConversationEvent.Method) extends
     o.put("method", method.str)
   })
 }
+
 case class GroupConversationSuccessful(withParticipants: Boolean, method: GroupConversationEvent.Method) extends TrackingEvent {
   override val name = "conversation.group_creation_succeeded"
   override val props = Some(returning(new JSONObject()) { o =>
@@ -208,3 +210,42 @@ case class GroupConversationSuccessful(withParticipants: Boolean, method: GroupC
     o.put("with_participants", withParticipants)
   })
 }
+
+class CallingEvent(partName:              String,
+                   video:                 Boolean,
+                   isGroup:               Boolean,
+                   groupMemberCount:      Int,
+                   callParticipantsCount: Int,
+                   withService:           Boolean,
+                   uiActive:              Option[Boolean]     = None,
+                   incoming:              Option[Boolean]     = None,
+                   setupTime:             Option[Duration]    = None,
+                   callDuration:          Option[Duration]    = None,
+                   endReason:             Option[EndedReason] = None) extends TrackingEvent {
+
+  override lazy val name = s"calling.$partName${if (video) "_video" else ""}_call"
+  override val props = Some(returning(new JSONObject()) { o =>
+    o.put("conversation_type", if (isGroup) "group" else "one_to_one")
+    o.put("conversation_participants", groupMemberCount)
+    o.put("conversation_participants_in_call", callParticipantsCount)
+    o.put("with_service", withService)
+
+    uiActive.foreach(v => o.put("app_is_active", v))
+    incoming.foreach(v => o.put("direction", if (v) "incoming" else "outgoing"))
+
+    setupTime.foreach(v => o.put("setup_time", v.getSeconds))
+    callDuration.foreach(v => o.put("duration", v.getSeconds))
+
+    import EndedReason._
+    endReason.foreach(v => o.put("reason", v match {
+      case SelfEnded      => "self"
+      case OtherEnded     => "other"
+      case GSMInterrupted => "gsm_call"
+      case Dropped(r)     => reasonString(r)
+    }))
+  })
+}
+
+
+
+
