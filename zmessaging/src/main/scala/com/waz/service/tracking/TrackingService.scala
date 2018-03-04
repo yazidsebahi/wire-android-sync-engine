@@ -17,19 +17,19 @@
  */
 package com.waz.service.tracking
 
-import com.waz.ZLog.LogTag
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.EphemeralExpiration
-import com.waz.content.MembersStorage
-import com.waz.model.ConversationData.ConversationType
+import com.waz.ZLog._
 import com.waz.model._
 import com.waz.service.ZMessaging
+import com.waz.service.call.CallInfo
+import com.waz.service.call.CallInfo.CallState.{OtherCalling, SelfCalling, SelfConnected, SelfJoining}
 import com.waz.service.tracking.ContributionEvent.fromMime
 import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.RichInstant
 import com.waz.utils.events.{EventContext, EventStream}
 
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.util.Try
 
 trait TrackingService {
@@ -38,14 +38,20 @@ trait TrackingService {
   def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit
 
   def loggedOut(reason: String, accountId: AccountId): Unit = track(LoggedOutEvent(reason), Some(accountId))
+
   def optIn(): Unit = track(OptInEvent)
   def optOut(): Unit = track(OptOutEvent)
+
   def contribution(action: ContributionEvent.Action): Unit
   def assetContribution(assetId: AssetId, accountId: AccountId): Unit
-  def integrationAdded(integrationId: IntegrationId, convId: ConvId, method: IntegrationAdded.Method): Unit
-  def integrationRemoved(integrationId: IntegrationId): Unit
+
   def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit
   def crash(e: Throwable): Unit
+
+  def integrationAdded(integrationId: IntegrationId, convId: ConvId, method: IntegrationAdded.Method): Unit
+  def integrationRemoved(integrationId: IntegrationId): Unit
+
+  def trackCallState(account: AccountId, callInfo: CallInfo): Unit
 }
 
 class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingService.defaultZmsProvider) extends TrackingService {
@@ -65,12 +71,11 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         Some(conv)   <- z.convsStorage.get(convId)
         userIds      <- z.membersStorage.activeMembers(convId).head
         users        <- z.users.getUsers(userIds.toSeq)
-        convType     <- TrackingService.convType(conv, z.membersStorage)
+        isGroup      <- z.conversations.isGroupConversation(convId)
       } {
-        events ! Option(z) -> ContributionEvent(action, convType, conv.ephemeral, users.exists(_.isWireBot))
+        events ! Option(z) -> ContributionEvent(action, isGroup, conv.ephemeral, users.exists(_.isWireBot), !conv.isTeamOnly, conv.isMemberFromTeamGuest(z.teamId))
       }
-    case None =>
-      events ! None -> ContributionEvent(action, ConversationData.ConversationType.Unknown, EphemeralExpiration.NONE, withBot = false)
+    case _ => //
   }
 
   override def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit = {
@@ -98,10 +103,10 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         Some(msg)   <- z.messagesStorage.get(MessageId(assetId.str))
         Some(conv)  <- z.convsContent.convById(msg.convId)
         Some(asset) <- z.assetsStorage.get(assetId)
-        convType    <- TrackingService.convType(conv, z.membersStorage)
         userIds     <- z.membersStorage.activeMembers(conv.id).head
         users       <- z.users.getUsers(userIds.toSeq)
-      } yield track(ContributionEvent(fromMime(asset.mime), convType, msg.ephemeral, users.exists(_.isWireBot)), Some(accountId))
+        isGroup     <- z.conversations.isGroupConversation(conv.id)
+      } yield track(ContributionEvent(fromMime(asset.mime), isGroup, msg.ephemeral, users.exists(_.isWireBot), !conv.isTeamOnly, conv.isMemberFromTeamGuest(z.teamId)), Some(accountId))
     case _ => //
   }
 
@@ -116,6 +121,41 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
   }
 
   def integrationRemoved(integrationId: IntegrationId) = track(IntegrationRemoved(integrationId))
+
+  override def trackCallState(account: AccountId, callInfo: CallInfo) =
+    ((callInfo.prevState, callInfo.state) match {
+      case (None, Some(SelfCalling))      => Some("initiated")
+      case (None, Some(OtherCalling))     => Some("received")
+      case (Some(_), Some(SelfJoining))   => Some("joined")
+      case (Some(_), Some(SelfConnected)) => Some("established")
+      case (Some(_), None)                => Some("ended")
+      case _ =>
+        warn(s"Unexpected call state change: ${callInfo.prevState} => ${callInfo.state}, not tracking")
+        None
+    }).foreach { eventName =>
+      for {
+        Some(z)  <- zmsProvider(account)
+        isGroup  <- z.conversations.isGroupConversation(callInfo.convId)
+        memCount <- z.membersStorage.activeMembers(callInfo.convId).map(_.size).head
+        withService <- z.conversations.isWithService(callInfo.convId)
+        withGuests  <- z.convsStorage.get(callInfo.convId).collect { case Some(conv) => !conv.isTeamOnly }
+        uiActive    <- ZMessaging.currentGlobal.lifecycle.uiActive.head
+      } yield
+        track(new CallingEvent(
+          eventName,
+          callInfo.isVideoCall,
+          isGroup,
+          memCount,
+          callInfo.maxParticipants,
+          withService,
+          withGuests,
+          Some(uiActive),
+          Some(callInfo.caller != z.selfUserId),
+          callInfo.estabTime.map(est => callInfo.joinedTime.getOrElse(est).until(est)),
+          callInfo.endTime.map(end => callInfo.estabTime.getOrElse(end).until(end)),
+          callInfo.endReason
+        ))
+    }
 }
 
 object TrackingService {
@@ -140,14 +180,5 @@ object TrackingService {
 
   trait NoReporting { self: Throwable => }
 
-  //TODO remove workarounds for 1:1 team conversations when supported on backend
-  private[waz] def convType(conv: ConversationData, membersStorage: MembersStorage)(implicit executionContext: ExecutionContext): Future[ConversationType] =
-    if (conv.team.isEmpty) Future.successful(conv.convType)
-    else membersStorage.getByConv(conv.id).map(_.map(_.userId).size > 2).map {
-      case true => ConversationType.Group
-      case _ => ConversationType.OneToOne
-    }
-
-  case class AssetTrackingData(conversationType: ConversationType, withOtto: Boolean, expiration: EphemeralExpiration, assetSize: Long, mime: Mime)
 }
 

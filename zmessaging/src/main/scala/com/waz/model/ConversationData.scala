@@ -106,6 +106,8 @@ case class ConversationData(id:                   ConvId              = ConvId()
 
   def isUserAllowed(userData: UserData): Boolean =
     !(userData.isGuest(team) && isTeamOnly)
+
+  def isMemberFromTeamGuest(teamId: Option[TeamId]): Boolean = team.isDefined && teamId != team
 }
 
 /**

@@ -18,16 +18,16 @@
 package com.waz.log
 
 import com.waz.ZLog.LogTag
+import com.waz.log.InternalLog.dateTag
 
 import scala.concurrent.Future
 
 class SystemLogOutput extends LogOutput {
   override val id = SystemLogOutput.id
 
-  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = println(s"${InternalLog.dateTag}/$level/$tag: $str")
-  override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit = {
-    println(s"${InternalLog.dateTag}/$level/$tag: $str")
-    println(InternalLog.stackTrace(cause))
+  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit = {
+    println(s"$dateTag/$level/$tag: $str")
+    ex.foreach(e => println(InternalLog.stackTrace(e)))
   }
 
   override def close(): Future[Unit] = Future.successful {}

@@ -23,7 +23,6 @@ import com.waz.db.ZMessagingDB.{DbVersion, daos, migrations}
 import com.waz.db.migrate._
 import com.waz.model.AddressBook.ContactHashesDao
 import com.waz.model.AssetData.AssetDataDao
-import com.waz.model.CallLogEntry.CallLogEntryDao
 import com.waz.model.Contact.{ContactsDao, ContactsOnWireDao, EmailAddressesDao, PhoneNumbersDao}
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
@@ -54,14 +53,14 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 100
+  val DbVersion = 101
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, NotificationDataDao, ErrorDataDao, ReceivedPushDataDao,
     ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
-    ContactsDao, EmailAddressesDao, PhoneNumbersDao, CallLogEntryDao, MsgDeletionDao,
+    ContactsDao, EmailAddressesDao, PhoneNumbersDao, MsgDeletionDao,
     EditHistoryDao, MessageContentIndexDao, PushNotificationEventsDao
   )
 
@@ -192,6 +191,9 @@ object ZMessagingDB {
     Migration(99, 100) { db =>
       db.execSQL("ALTER TABLE Conversations ADD COLUMN access TEXT DEFAULT null")
       db.execSQL("ALTER TABLE Conversations ADD COLUMN access_role TEXT DEFAULT null")
+    },
+    Migration(100, 101) { db =>
+      db.execSQL("DROP TABLE IF EXISTS CallLog")
     }
   )
 }

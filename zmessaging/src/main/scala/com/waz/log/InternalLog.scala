@@ -21,6 +21,7 @@ import java.io._
 import java.util.Calendar
 
 import com.waz.ZLog.LogTag
+import com.waz.api.ZmsVersion
 
 import scala.collection.mutable
 
@@ -36,39 +37,39 @@ object InternalLog {
 
   def getOutputs = outputs.values.toList
 
-  def reset() = this.synchronized {
-    outputs.values.foreach( _.close )
+  def reset(): Unit = this.synchronized {
+    outputs.values.foreach( _.close() )
     outputs.clear
   }
 
-  def flush() = outputs.values.foreach( _.flush )
+  def flush(): Unit = outputs.values.foreach( _.flush() )
 
   def apply(id: String) = outputs.get(id)
 
   def add(output: LogOutput) = this.synchronized {
-    outputs.get(output.id).getOrElse {
-      outputs += (output.id -> output)
-      output
-    }
+    outputs.getOrElseUpdate(output.id, output)
   }
 
   def remove(output: LogOutput) = this.synchronized { outputs.remove(output.id) match {
-    case Some(output) => output.close()
+    case Some(o) => o.close()
     case _ =>
   } }
 
-  def init(basePath: String) = {
-    add(new AndroidLogOutput)
-    add(new BufferedLogOutput(basePath))
-  }
+  def init(basePath: String) =
+    if (ZmsVersion.DEBUG) {
+      add(new AndroidLogOutput)
+      add(new BufferedLogOutput(basePath))
+    } else {
+      add(new ProductionBufferedOutput(basePath))
+    }
 
-  def error(msg: String, cause: Throwable, tag: LogTag) = log(msg, cause, Error, tag)
-  def error(msg: String, tag: LogTag)                   = log(msg, Error, tag)
-  def warn(msg: String, cause: Throwable, tag: LogTag)  = log(msg, cause, Warn, tag)
-  def warn(msg: String, tag: LogTag)                    = log(msg, Warn, tag)
-  def info(msg: String, tag: LogTag)                    = log(msg, Info, tag)
-  def debug(msg: String, tag: LogTag)                   = log(msg, Debug, tag)
-  def verbose(msg: String, tag: LogTag)                 = log(msg, Verbose, tag)
+  def error(msg: String, cause: Throwable, tag: LogTag): Unit = log(msg, cause, Error, tag)
+  def error(msg: String, tag: LogTag): Unit                   = log(msg, Error, tag)
+  def warn(msg: String, cause: Throwable, tag: LogTag): Unit  = log(msg, cause, Warn, tag)
+  def warn(msg: String, tag: LogTag): Unit                    = log(msg, Warn, tag)
+  def info(msg: String, tag: LogTag): Unit                    = log(msg, Info, tag)
+  def debug(msg: String, tag: LogTag): Unit                   = log(msg, Debug, tag)
+  def verbose(msg: String, tag: LogTag): Unit                 = log(msg, Verbose, tag)
 
   def stackTrace(cause: Throwable) = Option(cause) match {
     case Some(c) => val result = new StringWriter()

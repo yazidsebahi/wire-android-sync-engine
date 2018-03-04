@@ -25,18 +25,12 @@ class AndroidLogOutput extends LogOutput {
 
   override val id = AndroidLogOutput.id
 
-  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = level match {
-    case InternalLog.Error   => android.util.Log.e(tag, str)
-    case InternalLog.Warn    => android.util.Log.w(tag, str)
+  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit = level match {
+    case InternalLog.Error   => ex.fold(android.util.Log.e(tag, str))(e => android.util.Log.e(tag, str, e))
+    case InternalLog.Warn    => ex.fold(android.util.Log.w(tag, str))(e => android.util.Log.w(tag, str, e))
     case InternalLog.Info    => android.util.Log.i(tag, str)
     case InternalLog.Debug   => android.util.Log.d(tag, str)
     case InternalLog.Verbose => android.util.Log.v(tag, str)
-    case _ =>
-  }
-
-  override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit = level match {
-    case InternalLog.Error => android.util.Log.e(tag, str, cause)
-    case InternalLog.Warn  => android.util.Log.w(tag, str, cause)
     case _ =>
   }
 

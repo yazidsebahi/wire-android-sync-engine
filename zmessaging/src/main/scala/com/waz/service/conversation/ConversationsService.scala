@@ -29,7 +29,7 @@ import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
 import com.waz.service.push.PushService
-import com.waz.service.tracking.TrackingService
+import com.waz.service.tracking.{GuestsAllowedToggled, TrackingService}
 import com.waz.sync.client.ConversationsClient
 import com.waz.sync.client.ConversationsClient.ConversationResponse
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
@@ -53,7 +53,7 @@ trait ConversationsService {
   def forceNameUpdate(id: ConvId): Future[Option[(ConversationData, ConversationData)]]
   def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: Option[ErrorType], resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
-  def isWithBot(convId: ConvId): Future[Boolean]
+  def isWithService(convId: ConvId): Future[Boolean]
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
 }
 
@@ -276,7 +276,7 @@ class ConversationsServiceImpl(context:         Context,
     _ <- membersStorage.delete(convId)
     _ <- msgContent.deleteMessagesForConversation(convId: ConvId)
   } yield ()
-  
+
   def forceNameUpdate(id: ConvId) = {
     warn(s"forceNameUpdate($id)")
     nameUpdater.forceNameUpdate(id)
@@ -297,7 +297,7 @@ class ConversationsServiceImpl(context:         Context,
         else membersStorage.getActiveUsers(convId).map(ms => !(ms.contains(selfUserId) && ms.size == 2))
     } yield res
 
-  def isWithBot(convId: ConvId) =
+  def isWithService(convId: ConvId) =
     membersStorage.getActiveUsers(convId)
       .flatMap(usersStorage.getAll)
       .map(_.flatten.exists(_.isWireBot))
@@ -308,6 +308,7 @@ class ConversationsServiceImpl(context:         Context,
       case Some(_) =>
         (for {
           true <- isGroupConversation(convId)
+          _ = tracking.track(GuestsAllowedToggled(!teamOnly))
           (ac, ar) = getAccessAndRoleForGroupConv(teamOnly, teamId)
           Some((old, upd)) <- content.updateAccessMode(convId, ac, Some(ar))
           resp <-
