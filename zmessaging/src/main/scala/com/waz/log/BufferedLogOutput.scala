@@ -20,6 +20,9 @@ package com.waz.log
 import java.io.{BufferedWriter, File, FileWriter, IOException}
 
 import com.waz.ZLog.LogTag
+import com.waz.log.BufferedLogOutput.ProductionLogTags
+import com.waz.log.InternalLog.{LogLevel, dateTag, stackTrace}
+import com.waz.service.call.Avs
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.crypto.SecureRandom
 import com.waz.utils.returning
@@ -28,10 +31,10 @@ import scala.annotation.tailrec
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
 
-class BufferedLogOutput(val baseDir: String,
-                        val maxBufferSize: Long = BufferedLogOutput.DefMaxBufferSize,
-                        val maxFileSize: Long = BufferedLogOutput.DefMaxFileSize,
-                        val maxRollFiles: Int = BufferedLogOutput.DefMaxRollFiles) extends LogOutput {
+class BufferedLogOutput(baseDir: String,
+                        maxBufferSize: Long = BufferedLogOutput.DefMaxBufferSize,
+                        maxFileSize: Long = BufferedLogOutput.DefMaxFileSize,
+                        maxRollFiles: Int = BufferedLogOutput.DefMaxRollFiles) extends LogOutput {
   assert(maxBufferSize < maxFileSize)
   assert(maxRollFiles > 0)
 
@@ -40,7 +43,7 @@ class BufferedLogOutput(val baseDir: String,
   private implicit val dispatcher = new SerialDispatchQueue(Threading.IO, id)
 
   private val buffer = StringBuilder.newBuilder
-  private val pathRegex = (s"${baseDir}/${BufferedLogOutput.DefFileName}([0-9]+).log").r
+  private val pathRegex = s"$baseDir/${BufferedLogOutput.DefFileName}([0-9]+).log".r
   private var paths = this.synchronized {
     asScalaIterator(new File(baseDir).listFiles().iterator)
       .map(_.getAbsolutePath)
@@ -50,7 +53,7 @@ class BufferedLogOutput(val baseDir: String,
       .map(_._1)
   }
 
-  private def newPath = s"${baseDir}/${BufferedLogOutput.DefFileName}${paths.size}.log"
+  private def newPath = s"$baseDir/${BufferedLogOutput.DefFileName}${paths.size}.log"
 
   def currentPath = {
     if (paths.isEmpty) paths = List(newPath)
@@ -58,16 +61,13 @@ class BufferedLogOutput(val baseDir: String,
     paths.head
   }
 
+  //for tests
+  def getMaxBufferSize: Long = maxBufferSize
+
   def getPaths = paths.reverse // internally the first path is the youngest one, but to the outside we want to show paths from the oldest to the youngest
 
-  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit = this.synchronized {
-    buffer.append(InternalLog.dateTag).append('/').append(level).append('/').append(tag).append(": ").append(str).append('\n')
-    if (size > maxBufferSize) flush()
-  }
-
-  override def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit = this.synchronized {
-    buffer.append(InternalLog.dateTag).append('/').append(level).append("/").append(tag).append(": ").append(str).append('\n')
-          .append(InternalLog.stackTrace(cause)).append('\n')
+  override def log(str: String, level: LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit = this.synchronized {
+    buffer.append(s"$dateTag/$level/$tag: $str\n${ex.map(e => s"${stackTrace(e)}\n").getOrElse("")}")
     if (size > maxBufferSize) flush()
   }
 
@@ -114,13 +114,25 @@ class BufferedLogOutput(val baseDir: String,
 
   // delete the old "internalLog.log" file, from before rolling was introduced - this code can be deleted after some time
   private def deleteOldInternalLog() = {
-    val oldLog = new File(s"${baseDir}/internalLog.log")
+    val oldLog = new File(s"$baseDir/internalLog.log")
     if(oldLog.exists()) oldLog.delete()
   }
   deleteOldInternalLog()
 }
 
+class ProductionBufferedOutput(baseDir: String,
+                               maxBufferSize: Long = BufferedLogOutput.DefMaxBufferSize,
+                               maxFileSize: Long = BufferedLogOutput.DefMaxFileSize,
+                               maxRollFiles: Int = BufferedLogOutput.DefMaxRollFiles) extends BufferedLogOutput(baseDir, maxBufferSize, maxFileSize, maxRollFiles) {
+
+  override def log(str: String, level: LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit =
+    if (ProductionLogTags.contains(tag)) super.log(str, level, tag, ex)
+}
+
 object BufferedLogOutput {
+
+  val ProductionLogTags = Set(Avs.AvsLogTag)
+
   val DefMaxBufferSize = 256L * 1024L
   val DefMaxFileSize = 4L * DefMaxBufferSize
   val DefMaxRollFiles = 10

@@ -36,7 +36,7 @@ class InternalLogSpec extends AndroidFreeSpec {
 
   def overflow(log: BufferedLogOutput) = {
     var prevSize = -1L
-    while (log.maxBufferSize > log.size && log.size > prevSize) {
+    while (log.getMaxBufferSize > log.size && log.size > prevSize) {
       prevSize = log.size
       InternalLog.debug(Random.nextPrintableChar().toString, tag)
       Thread.sleep(100L) // simulating much longer logs and much bigger buffers

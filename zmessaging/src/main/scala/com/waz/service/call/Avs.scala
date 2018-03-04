@@ -60,11 +60,11 @@ class AvsImpl() extends Avs {
       Calling.wcall_set_log_handler(new LogHandler {
         override def onLog(level: Int, msg: String, arg: WCall): Unit = {
           level match {
-            case LogLevelDebug => debug(msg)("AVS")
-            case LogLevelInfo  => info(msg)("AVS")
-            case LogLevelWarn  => warn(msg)("AVS")
-            case LogLevelError => error(msg)("AVS")
-            case _             => verbose(msg)("AVS")
+            case LogLevelDebug => debug(msg)(AvsLogTag)
+            case LogLevelInfo  => info(msg)(AvsLogTag)
+            case LogLevelWarn  => warn(msg)(AvsLogTag)
+            case LogLevelError => error(msg)(AvsLogTag)
+            case _             => verbose(msg)(AvsLogTag)
           }
         }
       }, null)
@@ -180,6 +180,9 @@ class AvsImpl() extends Avs {
 }
 
 object Avs {
+
+  val AvsLogTag: LogTag = "AVS"
+
   type WCall = Pointer
 
   def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)

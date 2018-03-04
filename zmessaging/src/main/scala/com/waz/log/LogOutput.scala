@@ -24,8 +24,10 @@ import scala.concurrent.Future
 trait LogOutput {
   val id: String
 
-  def log(str: String, level: InternalLog.LogLevel, tag: LogTag): Unit
-  def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit
+  def log(str: String, level: InternalLog.LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit
+  def log(str: String, cause: Throwable, level: InternalLog.LogLevel, tag: LogTag): Unit =
+    log(str, level, tag, Some(cause))
+
   def close(): Future[Unit]
   def flush(): Future[Unit]
 }
