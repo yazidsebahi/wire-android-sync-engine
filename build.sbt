@@ -25,7 +25,7 @@ organization in ThisBuild := "com.wire"
 scalaVersion in ThisBuild := "2.11.12"
 
 javacOptions in ThisBuild ++= Seq("-source", "1.7", "-target", "1.7", "-encoding", "UTF-8")
-scalacOptions in ThisBuild ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-Xfatal-warnings", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8")
+scalacOptions in ThisBuild ++= Seq("-feature", "-target:jvm-1.7", "-Xfuture", "-deprecation", "-Yinline-warnings", "-Ywarn-unused-import", "-encoding", "UTF-8")
 
 platformTarget in ThisBuild := "android-24"
 
