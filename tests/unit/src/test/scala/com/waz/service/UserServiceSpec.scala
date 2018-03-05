@@ -28,8 +28,9 @@ import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.{BgEventSource, Signal, SourceSignal}
 import com.waz.znet.ZNetClient
 
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
+import scala.concurrent.Future
+//import scala.concurrent.Await
+//import scala.concurrent.duration._
 import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.model.UserData.ConnectionStatus
 import org.threeten.bp.Instant

@@ -21,6 +21,8 @@ import android.app.{AlarmManager, PendingIntent, Service}
 import android.content.{BroadcastReceiver, Context, Intent}
 import android.support.v4.app.NotificationCompat
 import android.support.v4.content.WakefulBroadcastReceiver
+import android.support.v4.app.NotificationCompat._
+import com.github.ghik.silencer.silent
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
@@ -90,7 +92,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
       stopForeground(true)
     case Some(state) =>
       verbose(s"startForeground $state")
-      startForeground(ForegroundId, new NotificationCompat.Builder(context)
+      startForeground(ForegroundId, getNotificationCompatBuilder(context)
         .setSmallIcon(R.drawable.ic_menu_logo)
         .setContentTitle(context.getResources.getString(state))
         .setContentText(context.getResources.getString(R.string.zms_websocket_connection_info))
@@ -122,6 +124,8 @@ class WebSocketService extends FutureService with ServiceEventContext {
         zms.websocket.useWebSocketFallback.filter(_ == false).head
     }
   }
+
+  @silent def getNotificationCompatBuilder(context: Context): Builder = new NotificationCompat.Builder(context)
 }
 
 object WebSocketService {

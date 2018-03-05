@@ -17,9 +17,10 @@
  */
 package com.waz.znet
 
-import java.security.cert.X509Certificate
+import java.security.cert.{CertificateException, X509Certificate}
 import javax.net.ssl._
 
+import com.github.ghik.silencer.silent
 import com.google.android.gms.security.ProviderInstaller
 import com.koushikdutta.async._
 import com.koushikdutta.async.future.{FutureCallback, Future => AFuture}
@@ -86,7 +87,7 @@ object ClientWrapper {
 
   def apply(): Future[ClientWrapper] = apply(new AsyncHttpClient(new AsyncServer))
 
-  val domains @ Seq(zinfra, wire) = Seq("zinfra.io", "wire.com")
+  val wireDomain = "wire.com"
   val protocol = "TLSv1.2"
   val cipherSuite = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
 
@@ -94,25 +95,28 @@ object ClientWrapper {
     val installGmsCoreOpenSslProvider = Future (try {
       ProviderInstaller.installIfNeeded(context)
     } catch {
-      case t: Throwable => debug("Looking up GMS Core OpenSSL provider failed fatally.") // this should only happen in the tests
+      case _: Throwable => debug("Looking up GMS Core OpenSSL provider failed fatally.") // this should only happen in the tests
     })
 
     installGmsCoreOpenSslProvider map { _ =>
       // using specific hostname verifier to ensure compatibility with `isCertForDomain` (below)
-      client.getSSLSocketMiddleware.setHostnameVerifier(new StrictHostnameVerifier)
+      client.getSSLSocketMiddleware.setHostnameVerifier(strictHostnameVerifier())
       client.getSSLSocketMiddleware.setTrustManagers(Array(new X509TrustManager {
         override def checkServerTrusted(chain: Array[X509Certificate], authType: String): Unit = {
           debug(s"checking certificate for authType $authType, name: ${chain(0).getSubjectDN.getName}")
-          chain.headOption.fold(throw new SSLException("expected at least one certificate!")) { cert =>
-            val tm = if (isCertForDomain(zinfra, cert) || isCertForDomain(wire, cert)) {
-              verbose("using backend trust manager")
-              ServerTrust.backendTrustManager
-            } else {
-              verbose("using system trust manager")
-              ServerTrust.systemTrustManager
+          if (chain == null || chain.isEmpty) {
+            throw new IllegalArgumentException("Expected at least one certificate!")
+          }
+          val cert = chain.head
+          if (isCertForWireHost(cert)) {
+            verbose("using backend key pin")
+            if (!ServerTrust.checkWireKeyPin(cert)) {
+              throw new CertificateException("Wire public key did not match pinned one")
             }
+          } else {
+            verbose("using system trust manager")
             try {
-              tm.checkServerTrusted(chain, authType)
+              ServerTrust.systemTrustManager.checkServerTrusted(chain, authType)
             } catch {
               case e: Throwable =>
                 error("certificate check failed", e)
@@ -133,9 +137,9 @@ object ClientWrapper {
           * If HostnameVerifier accepts this cert with some wire sub-domain then this function must return true,
           * otherwise pinning will be skipped and we risk MITM attack.
           */
-        private def isCertForDomain(domain: String, cert: X509Certificate): Boolean = {
+        private def isCertForWireHost(cert: X509Certificate): Boolean = {
           def iter(arr: Array[String]) = Option(arr).fold2(Iterator.empty, _.iterator)
-          (iter(AbstractVerifier.getCNs(cert)) ++ iter(AbstractVerifier.getDNSSubjectAlts(cert))).exists(_.endsWith(s".$domain"))
+          (iter(getCNs(cert)) ++ iter(getDNSSubjectAlts(cert))).exists(_.endsWith(s".$wireDomain"))
         }
       }))
 
@@ -148,7 +152,7 @@ object ClientWrapper {
         override def configureEngine(engine: SSLEngine, data: AsyncHttpClientMiddleware.GetSocketData, host: String, port: Int): Unit = {
           debug(s"configureEngine($host, $port)")
 
-          if (domains.exists(host.endsWith)) {
+          if (host.endsWith(wireDomain)) {
             verbose("restricting to TLSv1.2")
             engine.setSSLParameters(returning(engine.getSSLParameters) { params =>
               if (engine.getSupportedProtocols.contains(protocol)) params.setProtocols(Array(protocol))
@@ -163,4 +167,10 @@ object ClientWrapper {
 
     }
   }
+
+  @silent def strictHostnameVerifier(): StrictHostnameVerifier = new StrictHostnameVerifier
+
+  @silent def getCNs(cert: X509Certificate): Array[String] = AbstractVerifier.getCNs(cert)
+
+  @silent def getDNSSubjectAlts(cert: X509Certificate): Array[String] = AbstractVerifier.getDNSSubjectAlts(cert)
 }

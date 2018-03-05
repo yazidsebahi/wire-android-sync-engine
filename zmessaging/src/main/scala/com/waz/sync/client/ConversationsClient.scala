@@ -19,10 +19,12 @@ package com.waz.sync.client
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
+import com.waz.utils.JsonEncoder.{encodeAccess, encodeAccessRole}
 import com.waz.utils.{Json, JsonDecoder, JsonEncoder, returning}
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
@@ -33,6 +35,7 @@ import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
 import scala.util.control.NonFatal
+import scala.concurrent.duration._
 
 class ConversationsClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
@@ -68,10 +71,10 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), _, _) => true
     }
 
-  def postMemberJoin(conv: RConvId, members: Seq[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
+  def postMemberJoin(conv: RConvId, members: Set[UserId]): ErrorOrResponse[Option[MemberJoinEvent]] =
     netClient.withErrorHandling("postMemberJoin", Request.Post(s"$ConversationsPath/$conv/members", Json("users" -> Json(members)))) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberJoinEvent), _) => Some(event)
-      case Response(HttpStatus(Response.Status.NoResponse, _), EmptyResponse, _) => None
+      case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
     }
 
   def postMemberLeave(conv: RConvId, user: UserId): ErrorOrResponse[Option[MemberLeaveEvent]] =
@@ -80,7 +83,18 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
     }
 
-  def postConversation(users: Seq[UserId], name: Option[String] = None, team: Option[TeamId]): ErrorOrResponse[ConversationResponse] = {
+  def postAccessUpdate(conv: RConvId, access: Set[Access], accessRole: AccessRole): ErrorOrResponse[Unit] =
+    netClient.withErrorHandling("postAccessUpdate",
+      Request.Put(
+        accessUpdatePath(conv),
+        Json(
+          "access" -> encodeAccess(access),
+          "access_role" -> encodeAccessRole(accessRole)),
+        timeout = 3.seconds)) {
+      case Response(SuccessHttpStatus(), _, _) | Response(HttpStatus(Status.NoResponse, _), _, _) => //no op
+    }
+
+  def postConversation(users: Set[UserId], name: Option[String] = None, team: Option[TeamId], access: Set[Access], accessRole: AccessRole): ErrorOrResponse[ConversationResponse] = {
     debug(s"postConversation($users, $name)")
     val payload = JsonEncoder { o =>
       o.put("users", Json(users))
@@ -89,6 +103,8 @@ class ConversationsClient(netClient: ZNetClient) {
         o.put("teamid", t.str)
         o.put("managed", false)
       }))
+      o.put("access", encodeAccess(access))
+      o.put("access_role", encodeAccessRole(accessRole))
     }
     netClient.withErrorHandling("postConversation", Request.Post(ConversationsPath, payload)) {
       case Response(SuccessHttpStatus(), ConversationsResult(Seq(conv), _), _) => conv
@@ -102,6 +118,8 @@ object ConversationsClient {
   val ConversationsPageSize = 100
   val ConversationIdsPageSize = 1000
   val IdsCountThreshold = 32
+
+  def accessUpdatePath(id: RConvId) = s"$ConversationsPath/${id.str}/access"
 
   def conversationsQuery(start: Option[RConvId] = None, limit: Int = ConversationsPageSize, ids: Seq[RConvId] = Nil): String = {
     val args = (start, ids) match {
@@ -125,7 +143,7 @@ object ConversationsClient {
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
-      val (creator, name, team, id, convType, lastEventTime) = {
+      val (creator, name, team, id, convType, lastEventTime, access, accessRole) = {
         implicit val jsObj = js
         (
           decodeUserId('creator),
@@ -133,7 +151,9 @@ object ConversationsClient {
           decodeOptId[TeamId]('team),
           decodeRConvId('id),
           ConversationType(decodeInt('type)),
-          decodeISOInstant('last_event_time)
+          decodeISOInstant('last_event_time),
+          decodeAccess('access),
+          decodeOptAccessRole('access_role)
         )
       }
       val state = ConversationState.Decoder(self)
@@ -141,8 +161,23 @@ object ConversationsClient {
       val isManaged = team.map(_ => false)
 
       ConversationData(
-        ConvId(id.str), id, name filterNot (_.isEmpty), creator, convType, team, isManaged, lastEventTime, isActive = true,
-        Instant.EPOCH, state.muted.getOrElse(false), state.muteTime.getOrElse(lastEventTime), state.archived.getOrElse(false), state.archiveTime.getOrElse(lastEventTime))
+        ConvId(id.str),
+        id,
+        name.filterNot(_.isEmpty),
+        creator,
+        convType,
+        team,
+        isManaged,
+        lastEventTime,
+        isActive = true,
+        Instant.EPOCH,
+        state.muted.getOrElse(false),
+        state.muteTime.getOrElse(lastEventTime),
+        state.archived.getOrElse(false),
+        state.archiveTime.getOrElse(lastEventTime),
+        access = access,
+        accessRole = accessRole
+      )
     }
 
     implicit lazy val Decoder: JsonDecoder[ConversationResponse] = new JsonDecoder[ConversationResponse] {

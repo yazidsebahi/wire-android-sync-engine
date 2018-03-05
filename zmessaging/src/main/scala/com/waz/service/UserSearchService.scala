@@ -19,13 +19,11 @@ package com.waz.service
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.content.{MembersStorage, MessagesStorage, SearchQueryCacheStorage, UsersStorage}
+import com.waz.content._
 import com.waz.model.SearchQuery.{Recommended, RecommendedHandle}
 import com.waz.model.UserData.{ConnectionStatus, UserDataDao}
 import com.waz.model.{SearchQuery, _}
-import com.waz.service.ContactResult.ContactMethod
 import com.waz.service.conversation.{ConversationsService, ConversationsUiService}
-import com.waz.service.invitations.InvitationService
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
@@ -42,28 +40,8 @@ import scala.concurrent.duration._
 case class SearchResults(top:   IndexedSeq[UserData]         = IndexedSeq.empty,
                          local: IndexedSeq[UserData]         = IndexedSeq.empty,
                          convs: IndexedSeq[ConversationData] = IndexedSeq.empty,
-                         dir:   IndexedSeq[UserData]         = IndexedSeq.empty, //directory (backend search)
-                         ab:    IndexedSeq[ContactResult]    = IndexedSeq.empty) { //addressBook
-  override def toString = s"SearchResults(top: ${top.size}, local: ${local.size}, convs: ${convs.size}, dir: ${dir.size}, ab: ${ab.size})"
-}
-case class ContactResult(contact: Contact, invited: Boolean) {
-  def contactMethods =
-    contact.emailAddresses.map(e => ContactMethod(contact, Left(e)))
-      .++(contact.phoneNumbers.map(p => ContactMethod(contact, Right(p)))).toSeq
-}
-
-object ContactResult {
-  case class ContactMethod(contact: Contact, method: Either[EmailAddress, PhoneNumber]) {
-    import ContactMethod._
-    def stringRepresentation: String = method.fold(_.str, _.str)
-    def getType: ContactType = method.fold(_ => Email, _ => Phone)
-  }
-
-  object ContactMethod {
-    trait ContactType
-    object Email extends ContactType
-    object Phone extends ContactType
-  }
+                         dir:   IndexedSeq[UserData]         = IndexedSeq.empty) { //directory (backend search)
+  override def toString = s"SearchResults(top: ${top.size}, local: ${local.size}, convs: ${convs.size}, dir: ${dir.size})"
 }
 
 class UserSearchService(selfUserId:           UserId,
@@ -76,11 +54,9 @@ class UserSearchService(selfUserId:           UserId,
                         timeouts:             Timeouts,
                         sync:                 SyncServiceHandle,
                         messages:             MessagesStorage,
+                        convsStorage:         ConversationStorage,
                         convsUi:              ConversationsUiService,
-                        conversationsService: ConversationsService,
-                        invitations:          InvitationService,
-                        contacts:             ContactsService
-                       ) {
+                        conversationsService: ConversationsService) {
 
   import Threading.Implicits.Background
   import com.waz.service.UserSearchService._
@@ -91,55 +67,70 @@ class UserSearchService(selfUserId:           UserId,
   private val exactMatchUser = new SourceSignal[Option[UserData]]()
   private val signalMap = mutable.HashMap[SearchQuery, Signal[IndexedSeq[UserData]]]()
 
-  def searchLocal(filter: Filter = "", toConv: Option[ConvId] = None, showBlockedUsers: Boolean = false): Signal[IndexedSeq[UserData]] = {
+  def usersForNewConversation(filter: Filter = "", teamOnly: Boolean): Signal[IndexedSeq[UserData]] =
+    searchLocal(filter).map(_.filter(u => !(u.isGuest(teamId) && teamOnly)))
+
+  def usersToAddToConversation(filter: Filter = "", toConv: ConvId): Signal[IndexedSeq[UserData]] =
+    for {
+      curr <- membersStorage.activeMembers(toConv)
+      conv <- convsStorage.signal(toConv)
+      res  <- searchLocal(filter, curr)
+    } yield res.filter(conv.isUserAllowed)
+
+  private def searchLocal(filter: Filter, excluded: Set[UserId] = Set.empty, showBlockedUsers: Boolean = false): Signal[IndexedSeq[UserData]] = {
     val isHandle = Handle.isHandle(filter)
     val symbolStripped = if (isHandle) Handle.stripSymbol(filter) else filter
     for {
       connected <- userService.acceptedOrBlockedUsers.map(_.values)
-      members <- teamId.fold(Signal.const(Set.empty[UserData])) { _ =>
+      members   <- teamId.fold(Signal.const(Set.empty[UserData])) { _ =>
         teamsService.searchTeamMembers(if (filter.isEmpty) None else Some(SearchKey(filter)), handleOnly = Handle.isHandle(filter))
       }
-      exc <- toConv.fold(Signal.const(Set.empty[UserId]))(membersStorage.activeMembers).map(_ + selfUserId)
     } yield {
-      val users = connected.filter(
-          connectedUsersPredicate(
-            searchTerm         = filter,
-            filteredIds        = exc.map(_.str),
-            alsoSearchByEmail  = true,
-            showBlockedUsers   = showBlockedUsers,
-            searchByHandleOnly = isHandle))
+      val included = (connected.toSet ++ members).filter { user =>
+        !excluded.contains(user.id) &&
+          selfUserId != user.id &&
+          !user.isWireBot &&
+          ((SearchKey(filter).isAtTheStartOfAnyWordIn(user.searchKey) && !isHandle) || user.handle.exists(_.startsWithQuery(filter)) || user.email.exists(e => filter.trim.equalsIgnoreCase(e.str))) &&
+          (showBlockedUsers || (user.connection != ConnectionStatus.Blocked))
+      }.toIndexedSeq
 
-      val includedIds = (users.map(_.id).toSet ++ members.map(_.id)).diff(exc)
-      sortUsers((connected ++ members).filter(u => includedIds.contains(u.id)).toIndexedSeq.filter(!_.isWireBot), filter, isHandle, symbolStripped)
+      sortUsers(included, filter, isHandle, symbolStripped)
     }
   }
 
   private def sortUsers(results: IndexedSeq[UserData], filter: Filter, isHandle: Boolean, symbolStripped: Filter): IndexedSeq[UserData] = {
     def toLower(str: String) = Locales.transliteration.transliterate(str).trim.toLowerCase
 
-    val predicate: (UserData) => Int =
-      if (filter.isEmpty) (_: UserData) => 0
-      else if (isHandle) (u: UserData) => if (u.handle.exists(_.exactMatchQuery(filter))) 0 else 1
-      else (u: UserData) => {
+    def bucket(u: UserData): Int =
+      if (filter.isEmpty) 0
+      else if (isHandle) {
+        if (u.handle.exists(_.exactMatchQuery(filter))) 0 else 1
+      } else {
         val userName = toLower(u.getDisplayName)
         val query = toLower(symbolStripped)
         if (userName == query) 0 else if (userName.startsWith(query)) 1 else 2
       }
 
-    results.sortBy(predicate)
+    results.sortWith { case (u1, u2) =>
+        val b1 = bucket(u1)
+        val b2 = bucket(u2)
+        if (b1 == b2)
+          u1.getDisplayName.compareTo(u2.getDisplayName) < 0
+        else
+          b1 < b2
+    }
   }
 
-  def search(filter: Filter = "", selectedUsers: Set[UserId] = Set.empty, toConv: Option[ConvId] = None): Signal[SearchResults] = {
+  def search(filter: Filter = ""): Signal[SearchResults] = {
 
     val isHandle       = Handle.isHandle(filter)
     val symbolStripped = if (isHandle) Handle.stripSymbol(filter) else filter
     val query          = if (isHandle) RecommendedHandle(filter) else Recommended(filter)
 
-    val shouldShowTopUsers   = filter.isEmpty && teamId.isEmpty && toConv.isEmpty
-    val shouldShowAbContacts = toConv.isEmpty && selectedUsers.isEmpty && teamId.isEmpty
+    val shouldShowTopUsers = filter.isEmpty && teamId.isEmpty
 
-    val shouldShowGroupConversations = (if (isHandle) symbolStripped.length > 1 else !filter.isEmpty) && selectedUsers.isEmpty && toConv.isEmpty
-    val shouldShowDirectorySearch    = !filter.isEmpty && selectedUsers.isEmpty && toConv.isEmpty
+    val shouldShowGroupConversations = if (isHandle) symbolStripped.length > 1 else !filter.isEmpty
+    val shouldShowDirectorySearch    = !filter.isEmpty
 
     exactMatchUser ! None // reset the exact match to None on any query change
 
@@ -147,15 +138,8 @@ class UserSearchService(selfUserId:           UserId,
       System.gc() // TODO: [AN-5497] the user search should not create so many objects to trigger GC in-between
     }
 
-    val excluded = toConv.fold(Signal.const(Set.empty[UserId]))(membersStorage.activeMembers(_).map(_.toSet)).map(_ + selfUserId)
-
     val topUsers: Signal[IndexedSeq[UserData]] =
-      if (shouldShowTopUsers)
-        for {
-          top <- topPeople
-          exc <- excluded
-        } yield top.filter(u => !exc.contains(u.id) && !u.isWireBot)
-      else Signal.const(IndexedSeq.empty)
+      if (shouldShowTopUsers) topPeople.map(_.filter(!_.isWireBot)) else Signal.const(IndexedSeq.empty)
 
     val conversations: Signal[IndexedSeq[ConversationData]] =
       if (shouldShowGroupConversations)
@@ -165,7 +149,7 @@ class UserSearchService(selfUserId:           UserId,
             val gConvs = convs.map { c =>
               conversationsService.isGroupConversation(c.id).flatMap {
                 case true  => Future.successful(true)
-                case false => conversationsService.isWithBot(c.id)
+                case false => conversationsService.isWithService(c.id)
               }.map {
                 case true  => Some(c)
                 case false => None
@@ -179,10 +163,9 @@ class UserSearchService(selfUserId:           UserId,
       for {
         dir <-
           if (shouldShowDirectorySearch)
-            (for {
-              res <- searchUserData(query)
-              exc <- excluded
-            } yield res.filter(u => !exc.contains(u.id) && !u.isWireBot)).map(us => sortUsers(us, filter, isHandle, symbolStripped))
+            searchUserData(query)
+              .map(_.filter(!_.isWireBot))
+              .map(sortUsers(_, filter, isHandle, symbolStripped))
           else Signal.const(IndexedSeq.empty)
         exact <- exactMatchUser
       } yield {
@@ -193,25 +176,12 @@ class UserSearchService(selfUserId:           UserId,
         }
       }
 
-    val abContacts: Signal[IndexedSeq[ContactResult]] =
-      if (shouldShowAbContacts)
-        for {
-          invited <- invitations.invitedContacts
-          ab      <- contacts.unifiedContacts
-          onWire  <- contacts.contactsOnWire
-        } yield ab.contacts.values.toIndexedSeq
-          .map(c => ContactResult(c, invited = invited.contains(c.id)))
-          .filterNot(c => onWire.containsRight(c.contact.id))
-          .filter(c => filter.isEmpty || c.contact.name.toLowerCase.contains(filter.toLowerCase)) //TODO: proper filter
-      else Signal.const(IndexedSeq.empty)
-
     for {
       top   <- topUsers
-      local <- searchLocal(filter, toConv, showBlockedUsers = true)
+      local <- searchLocal(filter, showBlockedUsers = true)
       convs <- conversations
       dir   <- directorySearch
-      ab    <- abContacts
-    } yield SearchResults(top, local, convs, dir, ab)
+    } yield SearchResults(top, local, convs, dir)
   }
 
   def updateSearchResults(query: SearchQuery, results: Seq[UserSearchEntry]) = {
@@ -304,20 +274,6 @@ class UserSearchService(selfUserId:           UserId,
 
   private def recommendedHandlePredicate(prefix: String): UserData => Boolean = {
     u => ! u.deleted && ! u.isConnected && u.handle.exists(_.startsWithQuery(prefix))
-  }
-
-  private def connectedUsersPredicate(searchTerm: String,
-                                      filteredIds: Set[String],
-                                      alsoSearchByEmail: Boolean,
-                                      showBlockedUsers: Boolean,
-                                      searchByHandleOnly: Boolean): UserData => Boolean = {
-    val query = SearchKey(searchTerm)
-    user =>
-      ((query.isAtTheStartOfAnyWordIn(user.searchKey) && !searchByHandleOnly) ||
-        user.handle.exists(_.startsWithQuery(searchTerm)) ||
-        (alsoSearchByEmail && user.email.exists(e => searchTerm.trim.equalsIgnoreCase(e.str)))) &&
-        !filteredIds.contains(user.id.str) &&
-        (showBlockedUsers || (user.connection != ConnectionStatus.Blocked))
   }
 
 }

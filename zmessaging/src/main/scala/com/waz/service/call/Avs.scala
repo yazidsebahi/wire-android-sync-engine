@@ -60,11 +60,11 @@ class AvsImpl() extends Avs {
       Calling.wcall_set_log_handler(new LogHandler {
         override def onLog(level: Int, msg: String, arg: WCall): Unit = {
           level match {
-            case LogLevelDebug => debug(msg)("AVS")
-            case LogLevelInfo  => info(msg)("AVS")
-            case LogLevelWarn  => warn(msg)("AVS")
-            case LogLevelError => error(msg)("AVS")
-            case _             => verbose(msg)("AVS")
+            case LogLevelDebug => debug(msg)(AvsLogTag)
+            case LogLevelInfo  => info(msg)(AvsLogTag)
+            case LogLevelWarn  => warn(msg)(AvsLogTag)
+            case LogLevelError => error(msg)(AvsLogTag)
+            case _             => verbose(msg)(AvsLogTag)
           }
         }
       }, null)
@@ -108,7 +108,7 @@ class AvsImpl() extends Avs {
       },
       new CloseCallHandler {
         override def onClosedCall(reasonCode: Int, convId: String, msg_time: Uint32_t, userId: String, arg: Pointer) =
-          cs.onClosedCall(ClosedReason(reasonCode), RConvId(convId), instant(msg_time), UserId(userId))
+          cs.onClosedCall(reasonCode, RConvId(convId), instant(msg_time), UserId(userId))
       },
       new MetricsHandler {
         override def onMetricsReady(convId: String, metricsJson: String, arg: Pointer) =
@@ -180,6 +180,9 @@ class AvsImpl() extends Avs {
 }
 
 object Avs {
+
+  val AvsLogTag: LogTag = "AVS"
+
   type WCall = Pointer
 
   def instant(uint32_t: Uint32_t) = Instant.ofEpochMilli(uint32_t.value.toLong * 1000)
@@ -190,25 +193,37 @@ object Avs {
   /**
     * NOTE: All values should be kept up to date as defined in:
     * https://github.com/wearezeta/avs/blob/master/include/avs_wcall.h
-    */
-
-  /**
-    *   WCALL_REASON_NORMAL              0
-    *   WCALL_REASON_ERROR               1
-    *   WCALL_REASON_TIMEOUT             2
-    *   WCALL_REASON_LOST_MEDIA          3
-    *   WCALL_REASON_CANCELED            4
-    *   WCALL_REASON_ANSWERED_ELSEWHERE  5
-    *   WCALL_REASON_IO_ERROR            6
-    *   WCALL_REASON_STILL_ONGOING       7
-    *   WCALL_REASON_TIMEOUT_ECONN       8
-    *   WCALL_REASON_DATACHANNEL         9
     *
-    *   interrupted - SE only (when interrupted by GSM call)
+    * Also, these are the raw values from AVS - do not mix them up with the closed reason in the CallInfo object, which
+    * represents slightly different behaviour for UI and tracking
     */
-  type ClosedReason = ClosedReason.Value
-  object ClosedReason extends Enumeration {
-    val Normal, Error, Timeout, LostMedia, Canceled, AnsweredElsewhere, IOError, StillOngoing, TimeoutEconn, DataChannel, Interrupted = Value
+  type AvsClosedReason = Int
+  object AvsClosedReason {
+    val Normal             = 0
+    val Error              = 1
+    val Timeout            = 2
+    val LostMedia          = 3
+    val Canceled           = 4
+    val AnsweredElsewhere  = 5
+    val IOError            = 6
+    val StillOngoing       = 7
+    val TimeoutEconn       = 8
+    val DataChannel        = 9
+    val Rejected           = 10
+
+    def reasonString(r: AvsClosedReason): String = r match {
+      case Normal            => "normal"
+      case Error             => "internal_error"
+      case Timeout           => "timeout"
+      case LostMedia         => "lost_media"
+      case Canceled          => "cancelled"
+      case AnsweredElsewhere => "answered_elsewhere"
+      case IOError           => "io_error"
+      case StillOngoing      => "still_ongoing"
+      case TimeoutEconn      => "timeout_econn"
+      case DataChannel       => "data_channel"
+      case Rejected          => "rejected"
+    }
   }
 
   /**

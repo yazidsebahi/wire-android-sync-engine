@@ -28,22 +28,32 @@
 #define LOG(...) printf(__VA_ARGS__)
 #endif
 
+#define INT_MIN       (-INT_MAX - 1)
+#define INT_MAX       2147483647
+
 static const int MAX_STACK_SIZE = 4096;
 static const int PIXEL_STACK_SIZE = 8192;
 static const int NULL_CODE = -1;
 
 
-LzwDecoder::LzwDecoder(byte* image, int* pixels, int* colors, int width, int height) {
-	this->image = image;
-	this->pixels = pixels;
-	this->colors = colors;
-	this->width = width;
-	this->height = height;
+/* We use failed to signal failure since using exceptions would require us to include the entire
+ * C++ stdlib in this library, and we are trying to keep the size down */
+LzwDecoder::LzwDecoder(byte* image, int* pixels, int* colors, int width, int height, int* failed) {
+	if (image == 0 || width <= 0 || height <= 0) {
+		*failed = -1;
+	} else {
+        this->image = image;
+        this->pixels = pixels;
+        this->colors = colors;
+        this->width = width;
+        this->height = height;
 
-	prefix = new unsigned short[MAX_STACK_SIZE];    
-	suffix = new byte[MAX_STACK_SIZE];
-	pixelStack = new byte[PIXEL_STACK_SIZE];
-	block = new byte[256];
+        prefix = new unsigned short[MAX_STACK_SIZE];
+        suffix = new byte[MAX_STACK_SIZE];
+        pixelStack = new byte[PIXEL_STACK_SIZE];
+        block = new byte[256];
+		*failed = 0;
+	}
 }
 
 
@@ -56,6 +66,11 @@ LzwDecoder::~LzwDecoder() {
 
 
 void LzwDecoder::clear(int x, int y, int w, int h, int color) {
+    if (x < 0 || y < 0 || x >= w || y >= h ||
+        (((y > 0) && (x > (INT_MAX - y))) ||
+         ((y < 0) && (x < (INT_MIN - y))))) {
+        return;
+    }
     int* dst = pixels + (x + y * width);
     for (int l = 0; l < h; ++l) {
         for (int i = 0; i < w; ++i) {
@@ -79,7 +94,7 @@ void LzwDecoder::decode(int fx, int fy, int fw, int fh, int inputSize, int trans
     old_code = NULL_CODE;
     code_size = data_size + 1;
     code_mask = (1 << code_size) - 1;
-    if (clear >= MAX_STACK_SIZE) return;
+    if (clear >= MAX_STACK_SIZE || clear < 0) return;
     for (code = 0; code < clear; ++code) {
         prefix[code] = 0;
         suffix[code] = (byte)code;

@@ -106,7 +106,7 @@ class ConnectionServiceImpl(push: PushService, convs: ConversationsContentUpdate
     }
     val hidden = user.connection == ConnectionStatus.Ignored || user.connection == ConnectionStatus.Blocked || user.connection == ConnectionStatus.Cancelled
     convs.getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
-      members.add(conv.id, Seq(selfUserId, user.id): _*) flatMap { members =>
+      members.add(conv.id, Set(selfUserId, user.id)).flatMap { _ =>
         convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden, lastEventTime = Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
             case None if convType == ConversationType.Incoming =>

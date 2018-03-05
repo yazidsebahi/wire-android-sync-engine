@@ -90,7 +90,7 @@ import scala.util.Random
   def getConv(id: RConvId) = service.getConv(id)
   def listConvs = service.listConvs
 
-  def addMembers(conv: ConvId, users: UserId*) = Await.result(service.membersStorage.add(conv, users:_*), 1.second)
+  def addMembers(conv: ConvId, users: UserId*) = Await.result(service.membersStorage.add(conv, users), 1.second)
   def removeMember(conv: ConvId, user: UserId) = Await.result(service.membersStorage.remove(conv, user), 1.second)
   def listActiveMembers(conv: ConvId) = Await.result(service.membersStorage.getActiveUsers(conv), 1.second).toList
   def listMembers(conv: ConvId) = Await.result(service.membersStorage.getByConv(conv), 1.second).toList

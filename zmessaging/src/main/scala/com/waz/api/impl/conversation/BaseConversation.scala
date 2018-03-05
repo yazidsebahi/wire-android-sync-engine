@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api
 import com.waz.api.impl._
-import com.waz.api.{IConversation, MessageContent, Verification}
+import com.waz.api.{IConversation, Verification}
 import com.waz.content.Uris
 import com.waz.model.ConversationData
 import com.waz.service.ZMessaging

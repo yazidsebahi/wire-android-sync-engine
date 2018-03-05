@@ -30,9 +30,11 @@ import scala.concurrent.Future
 trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberData] {
   def getByConv(conv: ConvId): Future[IndexedSeq[ConversationMemberData]]
   def getByConvs(conv: Set[ConvId]): Future[IndexedSeq[ConversationMemberData]]
-  def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]]
+  def add(conv: ConvId, users: Iterable[UserId]): Future[Set[ConversationMemberData]]
+  def add(conv: ConvId, user: UserId): Future[Option[ConversationMemberData]]
   def isActiveMember(conv: ConvId, user: UserId): Future[Boolean]
-  def remove(conv: ConvId, users: UserId*): Future[Seq[ConversationMemberData]]
+  def remove(conv: ConvId, users: Iterable[UserId]): Future[Set[ConversationMemberData]]
+  def remove(conv: ConvId, user: UserId): Future[Option[ConversationMemberData]]
   def getByUsers(users: Set[UserId]): Future[IndexedSeq[ConversationMemberData]]
   def getActiveUsers(conv: ConvId): Future[Seq[UserId]]
   def getActiveConvs(user: UserId): Future[Seq[ConvId]]
@@ -46,7 +48,9 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
 
   def getByUser(user: UserId) = find(_.userId == user, ConversationMemberDataDao.findForUser(user)(_), identity)
 
-  def activeMembers(conv: ConvId): Signal[Set[UserId]] = new AggregatingSignal[Seq[(UserId, Boolean)], Set[UserId]](onConvMemberChanged(conv), getActiveUsers(conv).map(_.toSet), { (current, changes) =>
+  def activeMembers(conv: ConvId): Signal[Set[UserId]] =
+    new AggregatingSignal[Seq[(UserId, Boolean)], Set[UserId]](onConvMemberChanged(conv),
+                                                                getActiveUsers(conv).map(_.toSet), { (current, changes) =>
     val (active, inactive) = changes.partition(_._2)
 
     current -- inactive.map(_._1) ++ active.map(_._1)
@@ -58,7 +62,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
 
   override def getActiveConvs(user: UserId) = getByUser(user) map { _.map(_.convId) }
 
-  def add(conv: ConvId, users: UserId*): Future[Set[ConversationMemberData]] =
+  def add(conv: ConvId, users: Iterable[UserId]) =
     updateOrCreateAll2(users.map((_, conv)), { (k, v) =>
       v match {
         case Some(m) => m
@@ -66,16 +70,22 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
       }
     })
 
-  override def remove(conv: ConvId, users: UserId*) = {
-    getAll(users.map(_ -> conv)).flatMap(toBeRemoved => removeAll(users.map(_ -> conv)).map(_ => toBeRemoved.flatten))
+  def add(conv: ConvId, user: UserId) =
+    add(conv, Set(user)).map(_.headOption)
+
+  override def remove(conv: ConvId, users: Iterable[UserId]) = {
+    getAll(users.map(_ -> conv)).flatMap(toBeRemoved => removeAll(users.map(_ -> conv)).map(_ => toBeRemoved.flatten.toSet))
   }
+
+  override def remove(conv: ConvId, user: UserId) =
+    remove(conv, Set(user)).map(_.headOption)
 
   def set(conv: ConvId, users: Seq[UserId]): Future[Unit] = getActiveUsers(conv) flatMap { active =>
     val usersSet = users.toSet
     val toRemove = active.filterNot(usersSet)
     val toAdd = usersSet -- toRemove
 
-    remove(conv, toRemove: _*).zip(add(conv, toAdd.toSeq: _*)).map(_ => ())
+    remove(conv, toRemove).zip(add(conv, toAdd)).map(_ => ())
   }
 
   override def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)

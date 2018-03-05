@@ -52,7 +52,7 @@ class IntegrationsClientImpl(netClient: ZNetClient) extends IntegrationsClient {
 
   def getIntegration(pId: ProviderId, iId: IntegrationId) =
     netClient.withErrorHandling("getIntegration", Request.Get(integrationPath(pId, iId))) {
-      case Response(SuccessHttpStatus(), IntegrationResponse(data), _) => data
+      case Response(SuccessHttpStatus(), IntegrationResponse(data, assetData), _) => (data, assetData)
     }
 
   def getProvider(pId: ProviderId) =

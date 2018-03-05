@@ -23,15 +23,17 @@ import java.util
 import java.util.{Comparator, Locale}
 
 import android.annotation.TargetApi
+import android.content.res.Configuration
 import android.os.Build.VERSION.SDK_INT
 import android.os.Build.VERSION_CODES.{JELLY_BEAN_MR2, LOLLIPOP}
+import com.github.ghik.silencer.silent
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.service.ZMessaging
 import com.waz.utils
 
 import scala.annotation.tailrec
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 object Locales {
   def currentLocale =
@@ -39,10 +41,12 @@ object Locales {
       context   <- Option(ZMessaging.context)
       resources <- Option(context.getResources)
       config    <- Option(resources.getConfiguration)
-      locale    <- Option(config.locale)
+      locale    <- localeOptFromConfig(config)
     } yield locale) getOrElse Locale.getDefault
 
   lazy val bcp47 = if (SDK_INT >= LOLLIPOP) AndroidLanguageTags.create else FallbackLanguageTags.create
+
+  @silent def localeOptFromConfig(config: Configuration): Option[Locale] = Option(config.locale)
 
   // the underlying native collator shows no signs of being thread-safe & locale might change – that's why this is a def instead of a val
   def currentLocaleOrdering: Ordering[String] = new Ordering[String] {

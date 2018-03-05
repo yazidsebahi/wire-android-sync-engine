@@ -22,6 +22,7 @@ import java.util.Date
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.MessagesStorageImpl
 import com.waz.model._
@@ -89,12 +90,16 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
   def postConversationName(id: ConvId, name: String): Future[SyncResult] =
     postConv(id) { conv => conversationsClient.postName(conv.remoteId, name).future }
 
-  def postConversationMemberJoin(id: ConvId, members: Seq[UserId]): Future[SyncResult] = withConversation(id) { conv =>
-    def post(users: Seq[UserId]) = conversationsClient.postMemberJoin(conv.remoteId, users).future flatMap {
-      case Left(resp @ ErrorResponse(403, _, "not-connected")) =>
-        convService.onMemberAddFailed(id, users, ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION, resp) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
-      case Left(resp @ ErrorResponse(403, _, "too-many-members")) =>
-        convService.onMemberAddFailed(id, users, ErrorType.CANNOT_ADD_USER_TO_FULL_CONVERSATION, resp) map (_ => SyncResult.Failure(Some(resp), shouldRetry = false))
+  def postConversationMemberJoin(id: ConvId, members: Set[UserId]): Future[SyncResult] = withConversation(id) { conv =>
+    def post(users: Set[UserId]) = conversationsClient.postMemberJoin(conv.remoteId, users).future flatMap {
+      case Left(resp @ ErrorResponse(403, _, label)) =>
+        val errTpe = label match {
+          case "not-connected"    => Some(ErrorType.CANNOT_ADD_UNCONNECTED_USER_TO_CONVERSATION)
+          case "too-many-members" => Some(ErrorType.CANNOT_ADD_USER_TO_FULL_CONVERSATION)
+          case _ => None
+        }
+        convService.onMemberAddFailed(id, users, errTpe, resp)
+          .map(_ => SyncResult.Failure(Some(resp), shouldRetry = false))
       case resp =>
         postConvRespHandler(resp)
     }
@@ -129,10 +134,10 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
     conversationsClient.postConversationState(conv.remoteId, state).future map (_.fold(SyncResult(_), SyncResult(_)))
   }
 
-  def postConversation(convId: ConvId, users: Seq[UserId], name: Option[String], team: Option[TeamId]): Future[SyncResult] = {
+  def postConversation(convId: ConvId, users: Set[UserId], name: Option[String], team: Option[TeamId], access: Set[Access], accessRole: AccessRole): Future[SyncResult] = {
     debug(s"postConversation($convId, $users, $name)")
     val (toCreate, toAdd) = users.splitAt(PostMembersLimit)
-    conversationsClient.postConversation(toCreate, name, team).future.flatMap {
+    conversationsClient.postConversation(toCreate, name, team, access, accessRole).future.flatMap {
       case Right(response) =>
         convService.updateConversations(Seq(response.copy(conversation = response.conversation.copy(id = convId)))) flatMap { _ =>
           if (toAdd.nonEmpty) postConversationMemberJoin(convId, toAdd)

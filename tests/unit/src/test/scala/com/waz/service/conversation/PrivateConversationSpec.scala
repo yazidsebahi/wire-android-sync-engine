@@ -17,87 +17,101 @@
  */
 package com.waz.service.conversation
 
-import java.util.Date
+//import java.util.Date
 
-import android.database.sqlite.SQLiteDatabase
-import com.waz.RobolectricUtils
-import com.waz.api.Message
-import com.waz.content.GlobalDatabase
-import com.waz.model.ConversationData.ConversationType
+//import android.database.sqlite.SQLiteDatabase
+//import com.waz.RobolectricUtils
+//import com.waz.api.Message
+import com.waz.content.{ConversationStorage, MembersStorage}
+//import com.waz.content.GlobalDatabase
+//import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
-import com.waz.sync.client.ConversationsClient.ConversationResponse
-import com.waz.testutils.{EmptySyncService, MockZMessaging}
-import com.waz.threading.Threading
-import org.robolectric.Robolectric
-import org.robolectric.shadows.ShadowLog
-import org.scalatest._
-import org.threeten.bp.Instant
+import com.waz.service.messages.MessagesService
+import com.waz.specs.AndroidFreeSpec
+import com.waz.sync.SyncServiceHandle
+//import com.waz.sync.client.ConversationsClient.ConversationResponse
+//import com.waz.testutils.{EmptySyncService, MockZMessaging}
+//import com.waz.threading.Threading
+//import org.robolectric.Robolectric
+//import org.robolectric.shadows.ShadowLog
+//import org.scalatest._
+//import org.threeten.bp.Instant
+//
+//import scala.concurrent.Await
+//import scala.concurrent.duration._
 
-import scala.concurrent.Await
-import scala.concurrent.duration._
+class PrivateConversationSpec extends AndroidFreeSpec {
 
-@Ignore class CreateGroupConversationSpec extends FeatureSpec with Matchers with BeforeAndAfter with OptionValues with RobolectricTests with RobolectricUtils { test =>
-  implicit lazy val dispatcher = Threading.Background
-  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
+  val account      = AccountId()
+  val self         = UserId()
+  val members      = mock[MembersStorage]
+  val convsContent = mock[ConversationsContentUpdater]
+  val convsStorage = mock[ConversationStorage]
+  val sync         = mock[SyncServiceHandle]
+  val messages     = mock[MessagesService]
 
-  lazy val selfUser = UserData("self user")
-  lazy val user1 = UserData("user 1")
-  lazy val user2 = UserData("user 1")
-  lazy val user3 = UserData("user 3")
 
-  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+//  implicit lazy val dispatcher = Threading.Background
+//  lazy val globalStorage = new GlobalDatabase(Robolectric.application)
+//
+//  lazy val selfUser = UserData("self user")
+//  lazy val user1 = UserData("user 1")
+//  lazy val user2 = UserData("user 1")
+//  lazy val user3 = UserData("user 3")
+//
+//  implicit def db: SQLiteDatabase = service.db.dbHelper.getWritableDatabase
+//
+//  var service: MockZMessaging = _
+//  var convSync = None: Option[ConvId]
+//
+//  def storage = service.db
+//
+//  before {
+//    convSync = None
+//
+//    service = new MockZMessaging(selfUserId = selfUser.id) {
+//      override lazy val sync = new EmptySyncService {
+//        override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String], t: Option[TeamId]) = {
+//          convSync = Some(id)
+//          super.postConversation(id, us, n, t)
+//        }
+//      }
+//    }
+//
+//    service.insertUsers(Seq(selfUser, user1, user2, user3))
+//  }
+//
+//  after {
+//    ShadowLog.stream = null
+//    awaitStorage()
+//    Await.result(storage.close(), 10.seconds)
+//    Robolectric.application.getDatabasePath(storage.dbHelper.getDatabaseName).delete()
+//  }
+//
+//  implicit val timeout = 5.seconds
+//
+//  def awaitStorage() = Await.result(storage { _ => }, 25.seconds) // wait for storage operations to complete
+//
+//  def listMessages(conv: ConvId) = service.listMessages(conv)
+//  def lastMessage(conv: ConvId) = service.lastMessage(conv)
+//  def lastLocalMessage(conv: ConvId, tpe: Message.Type) = Await.result(service.messagesStorage.lastLocalMessage(conv, tpe), timeout)
+//
+//  def conversationResponse(convId: ConvId = ConvId(), remoteId: RConvId = RConvId()) = {
+//    ConversationResponse(ConversationData(convId, remoteId, None, selfUser.id, ConversationType.Group), Seq(ConversationMemberData(user1.id, convId), ConversationMemberData(user2.id, convId)))
+//  }
+//
+//  def createConversationEvent(remoteId: RConvId = RConvId()) = {
+//    val response = conversationResponse(ConvId(), remoteId)
+//    CreateConversationEvent(remoteId, new Date, selfUser.id, response)
+//  }
+//
+//  def getConv(id: ConvId) = Await.result(service.convsContent.convById(id), timeout)
+//  def getConv(id: RConvId) = Await.result(service.convsContent.convByRemoteId(id), timeout)
+//  def listConvs = Await.result(service.convsStorage.list, timeout)
+//
+//  def listActiveMembers(conv: ConvId) = Await.result(service.membersStorage.getActiveUsers(conv), timeout).toList
 
-  var service: MockZMessaging = _
-  var convSync = None: Option[ConvId]
-
-  def storage = service.db
-
-  before {
-    convSync = None
-
-    service = new MockZMessaging(selfUserId = selfUser.id) {
-      override lazy val sync = new EmptySyncService {
-        override def postConversation(id: ConvId, us: Seq[UserId], n: Option[String], t: Option[TeamId]) = {
-          convSync = Some(id)
-          super.postConversation(id, us, n, t)
-        }
-      }
-    }
-
-    service.insertUsers(Seq(selfUser, user1, user2, user3))
-  }
-
-  after {
-    ShadowLog.stream = null
-    awaitStorage()
-    Await.result(storage.close(), 10.seconds)
-    Robolectric.application.getDatabasePath(storage.dbHelper.getDatabaseName).delete()
-  }
-
-  implicit val timeout = 5.seconds
-  
-  def awaitStorage() = Await.result(storage { _ => }, 25.seconds) // wait for storage operations to complete
-
-  def listMessages(conv: ConvId) = service.listMessages(conv)
-  def lastMessage(conv: ConvId) = service.lastMessage(conv)
-  def lastLocalMessage(conv: ConvId, tpe: Message.Type) = Await.result(service.messagesStorage.lastLocalMessage(conv, tpe), timeout)
-
-  def conversationResponse(convId: ConvId = ConvId(), remoteId: RConvId = RConvId()) = {
-    ConversationResponse(ConversationData(convId, remoteId, None, selfUser.id, ConversationType.Group), Seq(ConversationMemberData(user1.id, convId), ConversationMemberData(user2.id, convId)))
-  }
-
-  def createConversationEvent(remoteId: RConvId = RConvId()) = {
-    val response = conversationResponse(ConvId(), remoteId)
-    CreateConversationEvent(remoteId, new Date, selfUser.id, response)
-  }
-
-  def getConv(id: ConvId) = Await.result(service.convsContent.convById(id), timeout)
-  def getConv(id: RConvId) = Await.result(service.convsContent.convByRemoteId(id), timeout)
-  def listConvs = Await.result(service.convsStorage.list, timeout)
-
-  def listActiveMembers(conv: ConvId) = Await.result(service.membersStorage.getActiveUsers(conv), timeout).toList
-
-  scenario("create new conversation for users") {
+  scenario("create new conversation for users with name") {
 //    val convId = ConvId()
 //    val conv = Await.result(service.convsUi.createGroupConversation(convId, Seq(user1.id, user2.id)), timeout)
 //
@@ -120,22 +134,22 @@ import scala.concurrent.duration._
   }
 
   scenario("create new conversation for event") {
-    val event = createConversationEvent()
-    service.dispatchEvent(event)
-    Thread.sleep(250)
-
-    val convOpt = getConv(event.convId)
-    convOpt should be('defined)
-    val conv = convOpt.get
-
-    conv.remoteId shouldEqual event.convId
-    conv.creator shouldEqual selfUser.id
-
-    listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
-
-    lastMessage(conv.id).value.msgType shouldEqual Message.Type.MEMBER_JOIN
-
-    listConvs should have size 1
+//    val event = createConversationEvent()
+//    service.dispatchEvent(event)
+//    Thread.sleep(250)
+//
+//    val convOpt = getConv(event.convId)
+//    convOpt should be('defined)
+//    val conv = convOpt.get
+//
+//    conv.remoteId shouldEqual event.convId
+//    conv.creator shouldEqual selfUser.id
+//
+//    listActiveMembers(conv.id).toSet shouldEqual Set(selfUser.id, user1.id, user2.id)
+//
+//    lastMessage(conv.id).value.msgType shouldEqual Message.Type.MEMBER_JOIN
+//
+//    listConvs should have size 1
   }
 
   scenario("update temp conversation on post response") {
@@ -269,4 +283,7 @@ import scala.concurrent.duration._
 //
 //    listConvs should have size 1
   }
+
+  def initService: ConversationsUiService =
+    new ConversationsUiServiceImpl(account, self, None, null, null, null, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
 }

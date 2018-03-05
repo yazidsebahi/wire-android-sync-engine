@@ -23,19 +23,18 @@ import com.waz.content._
 import com.waz.model.SearchQuery.Recommended
 import com.waz.model._
 import com.waz.service.conversation.{ConversationsService, ConversationsUiService}
-import com.waz.service.invitations.InvitationService
 import com.waz.service.teams.TeamsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
+import com.waz.utils.Managed
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.wrappers.DB
-import com.waz.utils.{BiRelation, Managed}
 import org.threeten.bp.Instant
 
 import scala.collection.breakOut
 import scala.collection.generic.CanBuild
 import scala.concurrent.Future
-import scala.language.higherKinds
+//import scala.language.higherKinds
 
 class UserSearchServiceSpec extends AndroidFreeSpec {
 
@@ -50,9 +49,8 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
   val sync              = mock[SyncServiceHandle]
   val messagesStorage   = mock[MessagesStorage]
   val convsUi           = mock[ConversationsUiService]
+  val convsStorage      = mock[ConversationStorage]
   val convs             = mock[ConversationsService]
-  val invitations       = mock[InvitationService]
-  val contacts          = mock[ContactsService]
   val timeouts          = new Timeouts
 
   lazy val users = Map(
@@ -141,7 +139,7 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
       (userService.acceptedOrBlockedUsers _).expects().returns(Signal.const(Map.empty[UserId, UserData]))
       (messagesStorage.countLaterThan _).expects(*, *).repeated(3).returning(Future.successful(1L))
 
-      val res = getService.search("", Set.empty, None).map(_.top.map(_.id).toSet)
+      val res = getService.search("").map(_.top.map(_.id).toSet)
 
       result(res.filter(_ == expected).head)
     }
@@ -173,7 +171,7 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
 
       (usersStorage.listSignal _).expects(*).never()
 
-      val res = getService.search("fr", Set.empty, None).map(_.local.map(_.id).toSet)
+      val res = getService.search("fr").map(_.local.map(_.id).toSet)
 
       result(res.filter(_ == expected).head)
     }
@@ -205,19 +203,14 @@ class UserSearchServiceSpec extends AndroidFreeSpec {
 
      (usersStorage.listSignal _).expects(expected.toVector).once().returning(Signal.const(expected.map(users).toVector))
 
-      val res = getService.search("ot", Set.empty, None).map(_.dir.map(_.id).toSet)
+      val res = getService.search("ot").map(_.dir.map(_.id).toSet)
 
       result(res.filter(_.nonEmpty).head)
     }
   }
 
   def getService = {
-
-    (invitations.invitedContacts _).expects().anyNumberOfTimes().returning(Signal.const(Set.empty[ContactId]))
-    (contacts.unifiedContacts _).expects().anyNumberOfTimes().returning(Signal.const(ContactsServiceImpl.EmptyContacts))
-    (contacts.contactsOnWire _).expects().anyNumberOfTimes().returning(Signal.const(BiRelation.empty))
-
-    new UserSearchService(selfId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsUi, convs, invitations, contacts)
+    new UserSearchService(selfId, queryCacheStorage, teamId, userService, usersStorage, teamsService, membersStorage, timeouts, sync, messagesStorage, convsStorage, convsUi, convs)
   }
 
 }

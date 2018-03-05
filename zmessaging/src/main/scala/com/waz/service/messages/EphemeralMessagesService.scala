@@ -30,7 +30,7 @@ import com.waz.service.assets.AssetService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.CancellableFuture
 import com.waz.utils._
-import com.waz.utils.crypto.SecureRandom
+import com.waz.utils.crypto.ZSecureRandom
 import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 
@@ -152,6 +152,6 @@ object EphemeralMessagesService {
 
   val randomChars = {
     val cs = ('a' to 'z') ++ ('A' to 'Z')
-    Iterator continually cs(SecureRandom.nextInt(cs.size))
+    Iterator continually cs(ZSecureRandom.nextInt(cs.size))
   }
 }

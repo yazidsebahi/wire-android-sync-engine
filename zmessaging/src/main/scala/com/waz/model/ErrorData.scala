@@ -44,8 +44,8 @@ object ErrorData {
   def apply(errType: ErrorType, resp: ErrorResponse, convId: ConvId): ErrorData =
     new ErrorData(Uid(), errType, convId = Some(convId), responseCode = resp.code, responseMessage = resp.message, responseLabel = resp.label)
 
-  def apply(errType: ErrorType, resp: ErrorResponse, convId: ConvId, users: Seq[UserId]): ErrorData =
-    new ErrorData(Uid(), errType, convId = Some(convId), users = users, responseCode = resp.code, responseMessage = resp.message, responseLabel = resp.label)
+  def apply(errType: ErrorType, resp: ErrorResponse, convId: ConvId, users: Set[UserId]): ErrorData =
+    new ErrorData(Uid(), errType, convId = Some(convId), users = users.toSeq, responseCode = resp.code, responseMessage = resp.message, responseLabel = resp.label)
 
   implicit object ErrorDataDao extends Dao[ErrorData, Uid] {
     val Id = uid('_id, "PRIMARY KEY")(_.id)

@@ -38,7 +38,6 @@ trait IntegrationsService {
   def onIntegrationSynced(pId: ProviderId, iId: IntegrationId, data: IntegrationData): Future[Unit]
 
   def addBotToConversation(cId: ConvId, pId: ProviderId, iId: IntegrationId): Future[Either[ErrorResponse, Unit]]
-  def createConversationWithBot(pId: ProviderId, iId: IntegrationId): Future[Either[ErrorResponse, ConvId]]
   def removeBotFromConversation(cId: ConvId, botId: UserId): Future[Either[ErrorResponse, Unit]]
 }
 
@@ -89,18 +88,6 @@ class IntegrationsServiceImpl(teamId:       Option[TeamId],
       case SyncResult.Failure(Some(error), _) => Left(error)
       case _ => Left(internalError("Unknown error"))
     }
-
-  override def createConversationWithBot(pId: ProviderId, iId: IntegrationId) =
-    for {
-      (conv, syncId) <- convsUi.createAndPostConversation(ConvId(), None, Seq.empty, teamId)
-      convRes        <- syncRequests.scheduler.await(syncId)
-      res <-
-        if (convRes.isSuccess) addBotToConversation(conv.id, pId, iId).map {
-          case Right(_)  => Right(conv.id)
-          case Left(err) => Left(err)
-        }
-        else Future.successful(Left(convRes.error.getOrElse(internalError(s"Failed to create conversation on backend: $conv"))))
-    } yield res
 
   override def removeBotFromConversation(cId: ConvId, botId: UserId) =
     (for {

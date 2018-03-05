@@ -41,8 +41,6 @@ trait TeamsService {
 
   val selfTeam: Signal[Option[TeamData]]
 
-  def isGuest(id: UserId): Signal[Boolean]
-
   def onTeamSynced(team: TeamData, members: Map[UserId, PermissionsMasks]): Future[Unit]
 
   def onMemberSynced(userId: UserId, permissions: PermissionsMasks): Future[Unit]
@@ -128,14 +126,6 @@ class TeamsServiceImpl(selfUser:           UserId,
     case Some(id) => new RefreshingSignal[Option[TeamData], Seq[TeamId]](
       CancellableFuture.lift(teamStorage.get(id)),
       teamStorage.onChanged.map(_.map(_.id))
-    )
-  }
-
-  override def isGuest(userId: UserId): Signal[Boolean] = teamId match {
-    case None => Signal.const(false)
-    case Some(tId) => new RefreshingSignal[Boolean, Seq[UserId]](
-      CancellableFuture.lift(userStorage.get(userId).map(!_.flatMap(_.teamId).contains(tId))),
-      userStorage.onChanged.map(_.map(_.id))
     )
   }
 

@@ -19,9 +19,10 @@ package com.waz.service.conversation
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model._
+import com.waz.model.{UserId, _}
 import com.waz.service.UserServiceImpl
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -47,12 +48,23 @@ trait ConversationsContentUpdater {
   def setConvActive(id: ConvId, active: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationArchived(id: ConvId, archived: Boolean): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
-  def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], name: Option[String] = None, hidden: Boolean = false, teamId: Option[TeamId] = None): Future[ConversationData]
   def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
+  def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]): Future[Option[(ConversationData, ConversationData)]]
+
+  def createConversationWithMembers(convId:     ConvId,
+                                    remoteId:   RConvId,
+                                    convType:   ConversationType,
+                                    creator:    UserId,
+                                    members:    Set[UserId],
+                                    name:       Option[String] = None,
+                                    hidden:     Boolean = false,
+                                    access:     Set[Access] = Set(Access.PRIVATE),
+                                    accessRole: AccessRole = AccessRole.PRIVATE): Future[ConversationData]
 }
 
 class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
+                                      teamId:          Option[TeamId],
                                       users:           UserServiceImpl,
                                       membersStorage:  MembersStorageImpl,
                                       messagesStorage: => MessagesStorageImpl,
@@ -137,25 +149,33 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
 
   override def setConversationHidden(id: ConvId, hidden: Boolean) = storage.update(id, _.copy(hidden = hidden))
 
-  override def createConversationWithMembers(convId: ConvId, remoteId: RConvId, convType: ConversationType, selfUserId: UserId, members: Seq[UserId], name: Option[String] = None, hidden: Boolean = false, teamId: Option[TeamId] = None) =
+  override def createConversationWithMembers(convId:     ConvId,
+                                             remoteId:   RConvId,
+                                             convType:   ConversationType,
+                                             creator:    UserId,
+                                             members:    Set[UserId],
+                                             name:       Option[String] = None,
+                                             hidden:     Boolean = false,
+                                             access:     Set[Access] = Set(Access.PRIVATE),
+                                             accessRole: AccessRole = AccessRole.PRIVATE) = {
     for {
-      user <- users.getUsers(members)
+      user <- users.getUsers(members.toSeq)
       conv <- storage.insert(
         ConversationData(
           convId,
           remoteId,
           name          = name,
-          creator       = selfUserId,
+          creator       = creator,
           convType      = convType,
           generatedName = NameUpdater.generatedName(convType)(user),
           hidden        = hidden,
           team          = teamId,
-          isManaged     = teamId.map(_ => false)))
-      _    <- addConversationMembers(convId, selfUserId, members)
+          isManaged     = teamId.map(_ => false),
+          access        = access,
+          accessRole    = Some(accessRole)))
+      _ <- membersStorage.add(convId, members + creator)
     } yield conv
-
-  def addConversationMembers(convId: ConvId, selfUserId: UserId, members: Seq[UserId]) =
-    membersStorage.add(convId, selfUserId +: members: _*)
+  }
 
   /**
    * Finds or creates local one-to-one conversation with given user and/or remoteId.
@@ -169,7 +189,7 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
       verbose(s"getOneToOneConversation($toUser, self: $selfUserId, remote: $remoteId, convType: $convType")
       val convId = ConvId(toUser.str)
 
-      def createConversation() = createConversationWithMembers(convId, remoteId.getOrElse(RConvId(toUser.str)), convType, selfUserId, Seq(toUser))
+      def createConversation() = createConversationWithMembers(convId, remoteId.getOrElse(RConvId(toUser.str)), convType, selfUserId, Set(toUser))
 
       storage.get(convId) flatMap { localConv =>
         if (remoteId.forall(r => localConv.exists(_.remoteId == r)))
@@ -219,4 +239,7 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
           retry()
     } (ec)
   }
+
+  override def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]) =
+    storage.update(id, conv => conv.copy(access = access, accessRole = accessRole))
 }

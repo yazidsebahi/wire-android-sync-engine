@@ -17,6 +17,9 @@
  */
 package com.waz.model
 
+import com.waz.api.IConversation.Access.{CODE, INVITE}
+import com.waz.api.IConversation.AccessRole._
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
 import com.waz.db.{Dao, Dao2}
@@ -24,7 +27,7 @@ import com.waz.model.ConversationData.{ConversationType, UnreadCount}
 import com.waz.service.SearchKey
 import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
-import org.json.JSONObject
+import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
 case class ConversationData(id:                   ConvId              = ConvId(),
@@ -50,7 +53,9 @@ case class ConversationData(id:                   ConvId              = ConvId()
                             incomingKnockMessage: Option[MessageId]   = None,
                             hidden:               Boolean             = false,
                             verified:             Verification        = Verification.UNKNOWN,
-                            ephemeral:            EphemeralExpiration = EphemeralExpiration.NONE) {
+                            ephemeral:            EphemeralExpiration = EphemeralExpiration.NONE,
+                            access:               Set[Access]         = Set.empty,
+                            accessRole:           Option[AccessRole]  = None) {
 
   def displayName = if (convType == ConversationType.Group) name.getOrElse(generatedName) else generatedName
 
@@ -80,10 +85,29 @@ case class ConversationData(id:                   ConvId              = ConvId()
       muteTime = d.muteTime,
       archived = d.archived,
       cleared = cleared max d.cleared,
-      searchKey = d.searchKey)
+      searchKey = d.searchKey,
+      access = d.access,
+      accessRole = d.accessRole)
 
     if (updated == this) None else Some(updated)
   }
+
+  def isTeamOnly: Boolean = accessRole match {
+    case Some(TEAM) if access.contains(Access.INVITE) => true
+    case _ => false
+  }
+
+  def isGuestRoom: Boolean = accessRole match {
+    case Some(NON_ACTIVATED) if access == Set(Access.INVITE, Access.CODE) => true
+    case _ => false
+  }
+
+  def isWirelessLegacy: Boolean = !(isTeamOnly || isGuestRoom)
+
+  def isUserAllowed(userData: UserData): Boolean =
+    !(userData.isGuest(team) && isTeamOnly)
+
+  def isMemberFromTeamGuest(teamId: Option[TeamId]): Boolean = team.isDefined && teamId != team
 }
 
 /**
@@ -127,6 +151,14 @@ object ConversationData {
     def values = Set(Unknown, Group, OneToOne, Self, WaitForConnection, Incoming)
   }
 
+  def getAccessAndRoleForGroupConv(teamOnly: Boolean, teamId: Option[TeamId]): (Set[Access], AccessRole) = {
+    teamId match {
+      case Some(_) if teamOnly => (Set(INVITE), TEAM)
+      case Some(_)             => (Set(INVITE, CODE), NON_ACTIVATED)
+      case _                   => (Set(INVITE), ACTIVATED)
+    }
+  }
+
   implicit lazy val Decoder: JsonDecoder[ConversationData] = new JsonDecoder[ConversationData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): ConversationData = ConversationData(
@@ -153,11 +185,14 @@ object ConversationData {
       incomingKnockMessage = decodeOptMessageId('incomingKnockMessage),
       hidden               = 'hidden,
       verified             = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
-      ephemeral            = EphemeralExpiration.getForMillis(decodeLong('ephemeral))
+      ephemeral            = EphemeralExpiration.getForMillis(decodeLong('ephemeral)),
+      access               = 'access,
+      accessRole           = 'accessRole
     )
   }
 
   implicit lazy val Encoder: JsonEncoder[ConversationData] = new JsonEncoder[ConversationData] {
+    import JsonEncoder._
     override def apply(c: ConversationData): JSONObject = JsonEncoder { o =>
       o.put("id", c.id.str)
       o.put("remoteId", c.remoteId.str)
@@ -184,41 +219,101 @@ object ConversationData {
       o.put("hidden", c.hidden)
       o.put("trusted", c.verified)
       o.put("ephemeral", c.ephemeral.milliseconds)
+      o.put("access", encodeAccess(c.access))
+      o.put("access_role", encodeAccessRoleOpt(c.accessRole))
     }
   }
 
   implicit object ConversationDataDao extends Dao[ConversationData, ConvId] {
-    val Id            = id[ConvId]('_id, "PRIMARY KEY").apply(_.id)
-    val RemoteId      = id[RConvId]('remote_id).apply(_.remoteId)
-    val Name          = opt(text('name))(_.name.filterNot(_.isEmpty))
-    val Creator       = id[UserId]('creator).apply(_.creator)
-    val ConvType      = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
-    val Team          = opt(id[TeamId]('team))(_.team)
-    val IsManaged     = opt(bool('is_managed))(_.isManaged)
-    val LastEventTime = timestamp('last_event_time)(_.lastEventTime)
-    val IsActive      = bool('is_active)(_.isActive)
-    val LastRead      = timestamp('last_read)(_.lastRead)
-    val Muted         = bool('muted)(_.muted)
-    val MutedTime     = timestamp('mute_time)(_.muteTime)
-    val Archived      = bool('archived)(_.archived)
-    val ArchivedTime  = timestamp('archive_time)(_.archiveTime)
-    val Cleared       = timestamp('cleared)(_.cleared)
-    val GeneratedName = text('generated_name)(_.generatedName)
-    val SKey          = opt(text[SearchKey]('search_key, _.asciiRepresentation, SearchKey.unsafeRestore))(_.searchKey)
-    val UnreadCount   = int('unread_count)(_.unreadCount.normal)
+    val Id               = id[ConvId]('_id, "PRIMARY KEY").apply(_.id)
+    val RemoteId         = id[RConvId]('remote_id).apply(_.remoteId)
+    val Name             = opt(text('name))(_.name.filterNot(_.isEmpty))
+    val Creator          = id[UserId]('creator).apply(_.creator)
+    val ConvType         = int[ConversationType]('conv_type, _.id, ConversationType(_))(_.convType)
+    val Team             = opt(id[TeamId]('team))(_.team)
+    val IsManaged        = opt(bool('is_managed))(_.isManaged)
+    val LastEventTime    = timestamp('last_event_time)(_.lastEventTime)
+    val IsActive         = bool('is_active)(_.isActive)
+    val LastRead         = timestamp('last_read)(_.lastRead)
+    val Muted            = bool('muted)(_.muted)
+    val MutedTime        = timestamp('mute_time)(_.muteTime)
+    val Archived         = bool('archived)(_.archived)
+    val ArchivedTime     = timestamp('archive_time)(_.archiveTime)
+    val Cleared          = timestamp('cleared)(_.cleared)
+    val GeneratedName    = text('generated_name)(_.generatedName)
+    val SKey             = opt(text[SearchKey]('search_key, _.asciiRepresentation, SearchKey.unsafeRestore))(_.searchKey)
+    val UnreadCount      = int('unread_count)(_.unreadCount.normal)
     val UnreadCallCount  = int('unread_call_count)(_.unreadCount.call)
     val UnreadPingCount  = int('unread_ping_count)(_.unreadCount.ping)
-    val FailedCount   = int('unsent_count)(_.failedCount)
-    val Hidden        = bool('hidden)(_.hidden)
-    val MissedCall    = opt(id[MessageId]('missed_call))(_.missedCallMessage)
-    val IncomingKnock = opt(id[MessageId]('incoming_knock))(_.incomingKnockMessage)
-    val Verified      = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
-    val Ephemeral     = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
+    val FailedCount      = int('unsent_count)(_.failedCount)
+    val Hidden           = bool('hidden)(_.hidden)
+    val MissedCall       = opt(id[MessageId]('missed_call))(_.missedCallMessage)
+    val IncomingKnock    = opt(id[MessageId]('incoming_knock))(_.incomingKnockMessage)
+    val Verified         = text[Verification]('verified, _.name, Verification.valueOf)(_.verified)
+    val Ephemeral        = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
+    val Access           = set[Access]('access, JsonEncoder.encodeAccess(_).toString(), v => JsonDecoder.array[Access](new JSONArray(v), (arr: JSONArray, i: Int) => IConversation.Access.valueOf(arr.getString(i).toUpperCase)).toSet)(_.access)
+    val AccessRole       = opt(text[IConversation.AccessRole]('access_role, JsonEncoder.encodeAccessRole, v => IConversation.AccessRole.valueOf(v.toUpperCase)))(_.accessRole)
 
     override val idCol = Id
-    override val table = Table("Conversations", Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, IsActive, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, UnreadCount, FailedCount, Hidden, MissedCall, IncomingKnock, Verified, Ephemeral, UnreadCallCount, UnreadPingCount)
+    override val table = Table(
+      "Conversations",
+      Id,
+      RemoteId,
+      Name,
+      Creator,
+      ConvType,
+      Team,
+      IsManaged,
+      LastEventTime,
+      IsActive,
+      LastRead,
+      Muted,
+      MutedTime,
+      Archived,
+      ArchivedTime,
+      Cleared,
+      GeneratedName,
+      SKey,
+      UnreadCount,
+      FailedCount,
+      Hidden,
+      MissedCall,
+      IncomingKnock,
+      Verified,
+      Ephemeral,
+      UnreadCallCount,
+      UnreadPingCount,
+      Access,
+      AccessRole)
 
-    override def apply(implicit cursor: DBCursor): ConversationData = ConversationData(Id, RemoteId, Name, Creator, ConvType, Team, IsManaged, LastEventTime, IsActive, LastRead, Muted, MutedTime, Archived, ArchivedTime, Cleared, GeneratedName, SKey, ConversationData.UnreadCount(UnreadCount, UnreadCallCount, UnreadPingCount), FailedCount, MissedCall, IncomingKnock, Hidden, Verified, Ephemeral)
+    override def apply(implicit cursor: DBCursor): ConversationData =
+      ConversationData(
+        Id,
+        RemoteId,
+        Name,
+        Creator,
+        ConvType,
+        Team,
+        IsManaged,
+        LastEventTime,
+        IsActive,
+        LastRead,
+        Muted,
+        MutedTime,
+        Archived,
+        ArchivedTime,
+        Cleared,
+        GeneratedName,
+        SKey,
+        ConversationData.UnreadCount(UnreadCount, UnreadCallCount, UnreadPingCount),
+        FailedCount,
+        MissedCall,
+        IncomingKnock,
+        Hidden,
+        Verified,
+        Ephemeral,
+        Access,
+        AccessRole)
 
     import com.waz.model.ConversationData.ConversationType._
 

@@ -18,6 +18,7 @@
 package com.waz.testutils
 
 import com.waz.api.EphemeralExpiration
+import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.{Availability, _}
 import com.waz.model.otr.ClientId
@@ -61,12 +62,11 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def postConversationMemberJoin(id: ConvId, members: Seq[UserId]) = sid
   override def postConversationMemberLeave(id: ConvId, member: UserId) = sid
   override def postConversationState(id: ConvId, s: ConversationState) = sid
-  override def postConversation(id: ConvId, u: Seq[UserId], n: Option[String], t: Option[TeamId]) = sid
+  override def postConversation(id: ConvId, users: Set[UserId], name: Option[String], team: Option[TeamId], access: Set[Access], accessRole: AccessRole) = sid
   override def postLastRead(id: ConvId, time: Instant) = sid
   override def postCleared(id: ConvId, time: Instant): Future[SyncId] = sid
   override def postAddressBook(ab: AddressBook) = sid
   override def postInvitation(i: Invitation) = sid
-  override def postTeamInvitations(invitations: Seq[TeamInvitation]) = sid
   override def postTypingState(id: ConvId, t: Boolean) = sid
   override def postOpenGraphData(conv: ConvId, msg: MessageId, time: Instant) = sid
   override def postReceipt(conv: ConvId, message: MessageId, user: UserId, tpe: ReceiptType) = sid
