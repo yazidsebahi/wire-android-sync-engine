@@ -239,9 +239,9 @@ class CallingEvent(partName:              String,
                    isGroup:               Boolean,
                    groupMemberCount:      Int,
                    withService:           Boolean,
-                   guestsAllowed:         Boolean,
                    uiActive:              Boolean,
                    incoming:              Boolean,
+                   guestsAllowed:         Option[Boolean]     = None,
                    callParticipantsCount: Option[Int]         = None,
                    setupTime:             Option[Duration]    = None,
                    callDuration:          Option[Duration]    = None,
@@ -252,11 +252,11 @@ class CallingEvent(partName:              String,
     o.put("conversation_type", if (isGroup) "group" else "one_to_one")
     o.put("conversation_participants", groupMemberCount)
     o.put("with_service", withService)
-    o.put("is_allow_guests", guestsAllowed)
 
     o.put("app_is_active", uiActive)
     o.put("direction", if (incoming) "incoming" else "outgoing")
 
+    guestsAllowed.foreach(v => o.put("is_allow_guests", v))
     callParticipantsCount.foreach(v => o.put("conversation_participants_in_call", v))
     setupTime.foreach(v => o.put("setup_time", v.getSeconds))
     callDuration.foreach(v => o.put("duration", v.getSeconds))

@@ -138,8 +138,11 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         isGroup  <- z.conversations.isGroupConversation(callInfo.convId)
         memCount <- z.membersStorage.activeMembers(callInfo.convId).map(_.size).head
         withService <- z.conversations.isWithService(callInfo.convId)
-        withGuests  <- z.convsStorage.get(callInfo.convId).collect { case Some(conv) => !conv.isTeamOnly }
-        uiActive    <- ZMessaging.currentGlobal.lifecycle.uiActive.head
+        withGuests  <-
+          if (isGroup)
+            z.convsStorage.get(callInfo.convId).collect { case Some(conv) => !conv.isTeamOnly }.map(Some(_))
+          else Future.successful(None)
+        uiActive <- ZMessaging.currentGlobal.lifecycle.uiActive.head
       } yield
         track(new CallingEvent(
           eventName,
@@ -147,9 +150,9 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
           isGroup,
           memCount,
           withService,
-          withGuests,
           uiActive,
           callInfo.caller != z.selfUserId,
+          withGuests,
           Option(callInfo.maxParticipants).filter(_ > 0),
           callInfo.estabTime.map(est => callInfo.joinedTime.getOrElse(est).until(est)),
           callInfo.endTime.map(end => callInfo.estabTime.getOrElse(end).until(end)),
