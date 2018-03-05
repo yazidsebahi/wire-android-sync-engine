@@ -321,7 +321,7 @@ class CallingService(val selfUserId:      UserId,
             case Some(call) =>
               verbose("Joining an ongoing background call")
               avs.answerCall(w, conv.remoteId, !vbr)
-              val active = call.updateState(SelfJoining)
+              val active = call.updateState(SelfJoining).copy(joinedTime = None, estabTime = None, endReason = None) // reset previous call state if exists
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
             case None =>
               verbose("No active call, starting new call")

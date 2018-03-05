@@ -238,11 +238,11 @@ class CallingEvent(partName:              String,
                    video:                 Boolean,
                    isGroup:               Boolean,
                    groupMemberCount:      Int,
-                   callParticipantsCount: Int,
                    withService:           Boolean,
                    guestsAllowed:         Boolean,
-                   uiActive:              Option[Boolean]     = None,
-                   incoming:              Option[Boolean]     = None,
+                   uiActive:              Boolean,
+                   incoming:              Boolean,
+                   callParticipantsCount: Option[Int]         = None,
                    setupTime:             Option[Duration]    = None,
                    callDuration:          Option[Duration]    = None,
                    endReason:             Option[EndedReason] = None) extends TrackingEvent {
@@ -251,13 +251,13 @@ class CallingEvent(partName:              String,
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("conversation_type", if (isGroup) "group" else "one_to_one")
     o.put("conversation_participants", groupMemberCount)
-    o.put("conversation_participants_in_call", callParticipantsCount)
     o.put("with_service", withService)
     o.put("is_allow_guests", guestsAllowed)
 
-    uiActive.foreach(v => o.put("app_is_active", v))
-    incoming.foreach(v => o.put("direction", if (v) "incoming" else "outgoing"))
+    o.put("app_is_active", uiActive)
+    o.put("direction", if (incoming) "incoming" else "outgoing")
 
+    callParticipantsCount.foreach(v => o.put("conversation_participants_in_call", v))
     setupTime.foreach(v => o.put("setup_time", v.getSeconds))
     callDuration.foreach(v => o.put("duration", v.getSeconds))
 
