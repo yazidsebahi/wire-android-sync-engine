@@ -17,8 +17,8 @@
  */
 package com.waz.sync.client
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.model.ConversationData.{ConversationType, Link}
 import com.waz.model._
@@ -26,7 +26,7 @@ import com.waz.sync.client.ConversationsClient.ConversationResponse.{Conversatio
 import com.waz.threading.Threading
 import com.waz.utils.JsonEncoder.{encodeAccess, encodeAccessRole}
 import com.waz.utils.{Json, JsonDecoder, JsonEncoder, returning}
-import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
+import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
 import com.waz.znet._
@@ -34,8 +34,8 @@ import org.json
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
-import scala.util.control.NonFatal
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 class ConversationsClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
@@ -154,7 +154,7 @@ object ConversationsClient {
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
-      val (creator, name, team, id, convType, lastEventTime, access, accessRole) = {
+      val (creator, name, team, id, convType, lastEventTime, access, accessRole, link) = {
         implicit val jsObj = js
         (
           decodeUserId('creator),
@@ -164,7 +164,8 @@ object ConversationsClient {
           ConversationType(decodeInt('type)),
           decodeISOInstant('last_event_time),
           decodeAccess('access),
-          decodeOptAccessRole('access_role)
+          decodeOptAccessRole('access_role),
+          decodeOptString('link).map(Link)
         )
       }
       val state = ConversationState.Decoder(self)
@@ -187,7 +188,8 @@ object ConversationsClient {
         state.archived.getOrElse(false),
         state.archiveTime.getOrElse(lastEventTime),
         access = access,
-        accessRole = accessRole
+        accessRole = accessRole,
+        link = link
       )
     }
 

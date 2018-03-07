@@ -194,6 +194,7 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
 
   def zmsHandler(zms: ZMessaging): PartialFunction[SyncRequest, Future[SyncResult]] = {
     case SyncConversation(convs)               => zms.conversationSync.syncConversations(convs.toSeq)
+    case SyncConversations                     => zms.conversationSync.syncConversations()
     case SyncUser(u)                           => zms.usersSync.syncUsers(u.toSeq: _*)
     case SyncSearchQuery(query)                => zms.usersearchSync.syncSearchQuery(query)
     case ExactMatchHandle(query)               => zms.usersearchSync.exactMatchHandle(query)
@@ -204,7 +205,6 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case DeletePushToken(token)                => zms.gcmSync.deleteGcmToken(token)
     case PostConnection(userId, name, message) => zms.connectionsSync.postConnection(userId, name, message)
     case PostConnectionStatus(userId, status)  => zms.connectionsSync.postConnectionStatus(userId, status)
-    case SyncConversations                     => zms.conversationSync.syncConversations()
     case SyncTeam                              => zms.teamsSync.syncTeam()
     case SyncTeamMember(userId)                => zms.teamsSync.syncMember(userId)
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()
