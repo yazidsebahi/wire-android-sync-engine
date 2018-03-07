@@ -127,6 +127,7 @@ case class MemberUpdateEvent(convId: RConvId, time: Date, from: UserId, state: C
 case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent
 
 case class ConversationAccessEvent(convId: RConvId, time: Date, from: UserId, access: Set[Access], accessRole: AccessRole) extends ConversationEvent
+case class ConversationCodeUpdateEvent(convId: RConvId, time: Date, from: UserId, link: ConversationData.Link) extends ConversationEvent
 
 sealed trait OtrEvent extends ConversationEvent {
   val sender: ClientId
@@ -262,6 +263,7 @@ object ConversationEvent {
         case "conversation.otr-error" => otrErrorEvent('convId, 'time, 'from)
         case "conversation.call-message" => CallMessageEvent('convId, 'time, 'from, 'sender, 'content)
         case "conversation.access-update" => ConversationAccessEvent('conversation, 'time, 'from, decodeAccess('access)(data.get), decodeAccessRole('access_role)(data.get))
+        case "conversation.code-update" if data.exists(_.has("uri")) => ConversationCodeUpdateEvent('conversation, 'time, 'from, ConversationData.Link(data.get.getString("uri"))) //TODO - is URI optional?
         case _ =>
           error(s"unhandled event: $js")
           UnknownConvEvent(js)

@@ -20,13 +20,13 @@ package com.waz.sync.client
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.IConversation.{Access, AccessRole}
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationType, Link}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
 import com.waz.utils.JsonEncoder.{encodeAccess, encodeAccessRole}
 import com.waz.utils.{Json, JsonDecoder, JsonEncoder, returning}
-import com.waz.znet.ContentEncoder.JsonContentEncoder
+import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient._
 import com.waz.znet._
@@ -81,6 +81,17 @@ class ConversationsClient(netClient: ZNetClient) {
     netClient.withErrorHandling("postMemberLeave", Request.Delete(s"$ConversationsPath/$conv/members/$user")) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberLeaveEvent), _) => Some(event)
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
+    }
+
+  def createLink(conv: RConvId): ErrorOrResponse[Link] =
+    netClient.withErrorHandling("createLink", Request.Post(s"$ConversationsPath/$conv/code", {})) {
+      case Response(HttpStatus(Status.Success, _), JsonObjectResponse(js), _) if js.has("uri") => Link(js.getString("uri"))
+      case Response(HttpStatus(Status.Created, _), JsonObjectResponse(js), _) if js.getJSONObject("data").has("uri") => Link(js.getJSONObject("data").getString("uri"))
+    }
+
+  def removeLink(conv: RConvId): ErrorOrResponse[Unit] =
+    netClient.withErrorHandling("removeLink", Request.Delete(s"$ConversationsPath/$conv/code")) {
+      case Response(SuccessHttpStatus(), _, _) => // nothing to return
     }
 
   def postAccessUpdate(conv: RConvId, access: Set[Access], accessRole: AccessRole): ErrorOrResponse[Unit] =
