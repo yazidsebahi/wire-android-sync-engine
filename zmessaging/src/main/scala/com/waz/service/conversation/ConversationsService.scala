@@ -59,6 +59,7 @@ trait ConversationsService {
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
   def createLink(convId: ConvId): ErrorOr[Link]
   def removeLink(convId: ConvId): ErrorOr[Unit]
+  def getLink(convId: ConvId): ErrorOr[Option[Link]]
 }
 
 class ConversationsServiceImpl(context:         Context,
@@ -351,9 +352,24 @@ class ConversationsServiceImpl(context:         Context,
   override def removeLink(convId: ConvId) =
     (for {
       Some(conv) <- content.convById(convId)
-      resp       <- client.removeLink(conv.remoteId)
+      resp       <- client.removeLink(conv.remoteId).future
       _ <- resp match {
         case Right(_) => convsStorage.update(convId, _.copy(link = None))
+        case _ => Future.successful({})
+      }
+    } yield resp)
+      .recover {
+        case NonFatal(e) =>
+          error("Failed to remove link", e)
+          Left(ErrorResponse.internalError("Unable to remove link for conversation"))
+      }
+
+  override def getLink(convId: ConvId) =
+    (for {
+      Some(conv) <- content.convById(convId)
+      resp       <- client.getLink(conv.remoteId).future
+      _ <- resp match {
+        case Right(l) => convsStorage.update(convId, _.copy(link = l))
         case _ => Future.successful({})
       }
     } yield resp)

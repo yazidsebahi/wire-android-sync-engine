@@ -94,6 +94,12 @@ class ConversationsClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), _, _) => // nothing to return
     }
 
+  def getLink(conv: RConvId): ErrorOrResponse[Option[Link]] =
+    netClient.withErrorHandling("getLink", Request.Get(s"$ConversationsPath/$conv/code")) {
+      case Response(SuccessHttpStatus(), JsonObjectResponse(js), _) if js.has("uri") => Option(Link(js.getString("uri")))
+      case Response(HttpStatus(Status.NotFound, "no-conversation-code"), _, _) => None
+    }
+
   def postAccessUpdate(conv: RConvId, access: Set[Access], accessRole: AccessRole): ErrorOrResponse[Unit] =
     netClient.withErrorHandling("postAccessUpdate",
       Request.Put(
