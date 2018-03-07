@@ -264,7 +264,7 @@ object ConversationEvent {
         case "conversation.otr-error" => otrErrorEvent('convId, 'time, 'from)
         case "conversation.call-message" => CallMessageEvent('convId, 'time, 'from, 'sender, 'content)
         case "conversation.access-update" => ConversationAccessEvent('conversation, 'time, 'from, decodeAccess('access)(data.get), decodeAccessRole('access_role)(data.get))
-        case "conversation.code-update" if data.exists(_.has("uri")) => ConversationCodeUpdateEvent('conversation, 'time, 'from, ConversationData.Link(data.get.getString("uri"))) //TODO - is URI optional?
+        case "conversation.code-update" => ConversationCodeUpdateEvent('conversation, 'time, 'from, ConversationData.Link(data.get.getString("uri")))
         case "conversation.code-delete" => ConversationCodeDeleteEvent('conversation, 'time, 'from)
         case _ =>
           error(s"unhandled event: $js")
