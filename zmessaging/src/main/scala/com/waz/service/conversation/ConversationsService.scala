@@ -59,7 +59,6 @@ trait ConversationsService {
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
   def createLink(convId: ConvId): ErrorOr[Link]
   def removeLink(convId: ConvId): ErrorOr[Unit]
-  def getLink(convId: ConvId): ErrorOr[Option[Link]]
 }
 
 class ConversationsServiceImpl(context:         Context,
@@ -89,10 +88,16 @@ class ConversationsServiceImpl(context:         Context,
   private val nameUpdater = wire[NameUpdater]
   nameUpdater.registerForUpdates()
 
-  //On conversation changed, update the state of the access roles as part of migration
+  //On conversation changed, update the state of the access roles as part of migration, then check for a link if necessary
   stats.selectedConversationId {
     case Some(convId) => convsStorage.get(convId).flatMap {
-      case Some(conv) if conv.accessRole.isEmpty => sync.syncConversations(Set(conv.id))
+      case Some(conv) if conv.accessRole.isEmpty =>
+        for {
+          syncId <- sync.syncConversations(Set(conv.id))
+          _      <- syncReqService.scheduler.await(syncId)
+          Some(updated) <- content.convById(conv.id)
+        } yield if (updated.access.contains(Access.CODE)) sync.syncConvLink(conv.id)
+
       case _ => Future.successful({})
     }
     case None => //
@@ -361,21 +366,6 @@ class ConversationsServiceImpl(context:         Context,
       resp       <- client.removeLink(conv.remoteId).future
       _ <- resp match {
         case Right(_) => convsStorage.update(convId, _.copy(link = None))
-        case _ => Future.successful({})
-      }
-    } yield resp)
-      .recover {
-        case NonFatal(e) =>
-          error("Failed to remove link", e)
-          Left(ErrorResponse.internalError("Unable to remove link for conversation"))
-      }
-
-  override def getLink(convId: ConvId) =
-    (for {
-      Some(conv) <- content.convById(convId)
-      resp       <- client.getLink(conv.remoteId).future
-      _ <- resp match {
-        case Right(l) => convsStorage.update(convId, _.copy(link = l))
         case _ => Future.successful({})
       }
     } yield resp)

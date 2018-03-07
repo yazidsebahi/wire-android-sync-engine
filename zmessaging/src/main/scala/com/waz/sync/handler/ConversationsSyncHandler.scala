@@ -24,7 +24,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
 import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.MessagesStorageImpl
+import com.waz.content.{ConversationStorage, MessagesStorageImpl}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
@@ -38,6 +38,7 @@ import com.waz.utils.events.EventContext
 import com.waz.utils._
 
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
 object ConversationsSyncHandler {
   val PostMembersLimit = 64
@@ -50,6 +51,7 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
                                convService:         ConversationsService,
                                convs:               ConversationsContentUpdaterImpl,
                                convEvents:          ConversationOrderEventsService,
+                               convStorage:         ConversationStorage,
                                errorsService:       ErrorsService,
                                assetService:        AssetService,
                                conversationsClient: ConversationsClient,
@@ -150,6 +152,22 @@ class ConversationsSyncHandler(assetSync:           AssetSyncHandler,
         warn(s"unexpected error: $error")
         Future.successful(SyncResult(error))
     }
+  }
+
+  def syncConvLink(convId: ConvId): Future[SyncResult] = {
+    (for {
+      Some(conv) <- convs.convById(convId)
+      resp <- conversationsClient.getLink(conv.remoteId).future
+      res <- resp match {
+        case Right(l) => convStorage.update(conv.id, _.copy(link = l)).map(_ => SyncResult.Success)
+        case Left(err) => Future.successful(SyncResult(err))
+      }
+    } yield res)
+      .recover {
+        case NonFatal(e) =>
+          error("Failed to update conversation link", e)
+          SyncResult.Failure(Some(ErrorResponse.internalError("Failed to update conversation link")), shouldRetry = false)
+      }
   }
 
   private def postConv(id: ConvId)(post: ConversationData => Future[Either[ErrorResponse, Option[ConversationEvent]]]): Future[SyncResult] =
