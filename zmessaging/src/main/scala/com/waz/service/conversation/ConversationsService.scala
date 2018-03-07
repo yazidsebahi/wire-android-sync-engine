@@ -184,6 +184,12 @@ class ConversationsServiceImpl(context:         Context,
     case ConversationAccessEvent(_, _, _, access, accessRole) =>
       content.updateAccessMode(conv.id, access, Some(accessRole))
 
+    case ConversationCodeUpdateEvent(_, _, _, l) =>
+      convsStorage.update(conv.id, _.copy(link = Some(l)))
+
+    case ConversationCodeDeleteEvent(_, _, _) =>
+      convsStorage.update(conv.id, _.copy(link = None))
+
     case _ => successful(())
   }
 
