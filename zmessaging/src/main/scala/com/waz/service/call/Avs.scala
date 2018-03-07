@@ -20,6 +20,7 @@ package com.waz.service.call
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.log.InternalLog
 import com.waz.model._
 import com.waz.model.otr.ClientId
 import com.waz.service.call.Avs.WCall
@@ -59,12 +60,13 @@ class AvsImpl() extends Avs {
     returning(Calling.wcall_init()) { res =>
       Calling.wcall_set_log_handler(new LogHandler {
         override def onLog(level: Int, msg: String, arg: WCall): Unit = {
+          import InternalLog._
           level match {
-            case LogLevelDebug => debug(msg)(AvsLogTag)
-            case LogLevelInfo  => info(msg)(AvsLogTag)
-            case LogLevelWarn  => warn(msg)(AvsLogTag)
-            case LogLevelError => error(msg)(AvsLogTag)
-            case _             => verbose(msg)(AvsLogTag)
+            case LogLevelDebug => debug(msg, AvsLogTag)
+            case LogLevelInfo  => info(msg, AvsLogTag)
+            case LogLevelWarn  => warn(msg, AvsLogTag)
+            case LogLevelError => error(msg, AvsLogTag)
+            case _             => verbose(msg, AvsLogTag)
           }
         }
       }, null)
