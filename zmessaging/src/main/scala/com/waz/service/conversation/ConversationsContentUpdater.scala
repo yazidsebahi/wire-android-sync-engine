@@ -241,5 +241,5 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
   }
 
   override def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]) =
-    storage.update(id, conv => conv.copy(access = access, accessRole = accessRole))
+    storage.update(id, conv => conv.copy(access = access, accessRole = accessRole, link = if (!access.contains(Access.CODE)) None else conv.link))
 }

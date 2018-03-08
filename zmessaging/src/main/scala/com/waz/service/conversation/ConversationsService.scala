@@ -22,9 +22,10 @@ import com.softwaremill.macwire._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ErrorType
+import com.waz.api.IConversation.Access
 import com.waz.api.impl.ErrorResponse
 import com.waz.content._
-import com.waz.model.ConversationData.{ConversationType, getAccessAndRoleForGroupConv}
+import com.waz.model.ConversationData.{ConversationType, Link, getAccessAndRoleForGroupConv}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
@@ -54,7 +55,10 @@ trait ConversationsService {
   def onMemberAddFailed(conv: ConvId, users: Set[UserId], error: Option[ErrorType], resp: ErrorResponse): Future[Unit]
   def isGroupConversation(convId: ConvId): Future[Boolean]
   def isWithService(convId: ConvId): Future[Boolean]
+
   def setToTeamOnly(convId: ConvId, teamOnly: Boolean): ErrorOr[Unit]
+  def createLink(convId: ConvId): ErrorOr[Link]
+  def removeLink(convId: ConvId): ErrorOr[Unit]
 }
 
 class ConversationsServiceImpl(context:         Context,
@@ -84,10 +88,16 @@ class ConversationsServiceImpl(context:         Context,
   private val nameUpdater = wire[NameUpdater]
   nameUpdater.registerForUpdates()
 
-  //On conversation changed, update the state of the access roles as part of migration
+  //On conversation changed, update the state of the access roles as part of migration, then check for a link if necessary
   stats.selectedConversationId {
     case Some(convId) => convsStorage.get(convId).flatMap {
-      case Some(conv) if conv.accessRole.isEmpty => sync.syncConversations(Set(conv.id))
+      case Some(conv) if conv.accessRole.isEmpty =>
+        for {
+          syncId <- sync.syncConversations(Set(conv.id))
+          _      <- syncReqService.scheduler.await(syncId)
+          Some(updated) <- content.convById(conv.id)
+        } yield if (updated.access.contains(Access.CODE)) sync.syncConvLink(conv.id)
+
       case _ => Future.successful({})
     }
     case None => //
@@ -178,6 +188,12 @@ class ConversationsServiceImpl(context:         Context,
 
     case ConversationAccessEvent(_, _, _, access, accessRole) =>
       content.updateAccessMode(conv.id, access, Some(accessRole))
+
+    case ConversationCodeUpdateEvent(_, _, _, l) =>
+      convsStorage.update(conv.id, _.copy(link = Some(l)))
+
+    case ConversationCodeDeleteEvent(_, _, _) =>
+      convsStorage.update(conv.id, _.copy(link = None))
 
     case _ => successful(())
   }
@@ -327,6 +343,37 @@ class ConversationsServiceImpl(context:         Context,
             Left(ErrorResponse.internalError("Unable to set team only mode on conversation"))
         }
     }
+
+  override def createLink(convId: ConvId) =
+    (for {
+      Some(conv) <- content.convById(convId)
+      if conv.access.contains(Access.CODE)
+      resp <- client.createLink(conv.remoteId).future
+      _ <- resp match {
+        case Right(l) => convsStorage.update(convId, _.copy(link = Some(l)))
+        case _ => Future.successful({})
+      }
+    } yield resp)
+      .recover {
+        case NonFatal(e) =>
+          error("Failed to create link", e)
+          Left(ErrorResponse.internalError("Unable to create link for conversation"))
+      }
+
+  override def removeLink(convId: ConvId) =
+    (for {
+      Some(conv) <- content.convById(convId)
+      resp       <- client.removeLink(conv.remoteId).future
+      _ <- resp match {
+        case Right(_) => convsStorage.update(convId, _.copy(link = None))
+        case _ => Future.successful({})
+      }
+    } yield resp)
+      .recover {
+        case NonFatal(e) =>
+          error("Failed to remove link", e)
+          Left(ErrorResponse.internalError("Unable to remove link for conversation"))
+      }
 }
 
 object ConversationsService {

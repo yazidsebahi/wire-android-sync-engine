@@ -29,6 +29,7 @@ public enum SyncCommand {
     SyncTeamMember("sync-team-member"),
     SyncConnections("sync-connections"),
     SyncConversation("sync-conv"),
+    SyncConvLink("sync-conv-link"),
     SyncSearchQuery("sync-search"),
     ExactMatchHandle("exact-match"),
     PostConv("post-conv"),
@@ -53,7 +54,6 @@ public enum SyncCommand {
     PostSelf("post-self"),
     PostAddressBook("post-addressbook"),
     PostInvitation("post-invitation"),
-    PostTeamInvitations("post-team-invitations"),
     SyncSelfClients("sync-clients"),   // sync user clients, register current client and update prekeys when needed
     SyncClients("sync-user-clients"),
     SyncClientLocation("sync-client-location"),
