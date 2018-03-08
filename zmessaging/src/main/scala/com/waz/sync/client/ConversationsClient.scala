@@ -17,10 +17,10 @@
  */
 package com.waz.sync.client
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.IConversation.{Access, AccessRole}
-import com.waz.model.ConversationData.ConversationType
+import com.waz.model.ConversationData.{ConversationType, Link}
 import com.waz.model._
 import com.waz.sync.client.ConversationsClient.ConversationResponse.{ConversationIdsResponse, ConversationsResult}
 import com.waz.threading.Threading
@@ -34,8 +34,8 @@ import org.json
 import org.json.{JSONArray, JSONObject}
 import org.threeten.bp.Instant
 
-import scala.util.control.NonFatal
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 
 class ConversationsClient(netClient: ZNetClient) {
   import Threading.Implicits.Background
@@ -81,6 +81,23 @@ class ConversationsClient(netClient: ZNetClient) {
     netClient.withErrorHandling("postMemberLeave", Request.Delete(s"$ConversationsPath/$conv/members/$user")) {
       case Response(SuccessHttpStatus(), EventsResponse(event: MemberLeaveEvent), _) => Some(event)
       case Response(HttpStatus(Status.NoResponse, _), EmptyResponse, _) => None
+    }
+
+  def createLink(conv: RConvId): ErrorOrResponse[Link] =
+    netClient.withErrorHandling("createLink", Request.Post(s"$ConversationsPath/$conv/code", {})) {
+      case Response(HttpStatus(Status.Success, _), JsonObjectResponse(js), _) if js.has("uri") => Link(js.getString("uri"))
+      case Response(HttpStatus(Status.Created, _), JsonObjectResponse(js), _) if js.getJSONObject("data").has("uri") => Link(js.getJSONObject("data").getString("uri"))
+    }
+
+  def removeLink(conv: RConvId): ErrorOrResponse[Unit] =
+    netClient.withErrorHandling("removeLink", Request.Delete(s"$ConversationsPath/$conv/code")) {
+      case Response(SuccessHttpStatus(), _, _) => // nothing to return
+    }
+
+  def getLink(conv: RConvId): ErrorOrResponse[Option[Link]] =
+    netClient.withErrorHandling("getLink", Request.Get(s"$ConversationsPath/$conv/code")) {
+      case Response(SuccessHttpStatus(), JsonObjectResponse(js), _) if js.has("uri") => Option(Link(js.getString("uri")))
+      case Response(HttpStatus(Status.NotFound, "no-conversation-code"), _, _) => None
     }
 
   def postAccessUpdate(conv: RConvId, access: Set[Access], accessRole: AccessRole): ErrorOrResponse[Unit] =
@@ -143,7 +160,7 @@ object ConversationsClient {
     }
 
     def conversationData(js: JSONObject, self: JSONObject) = {
-      val (creator, name, team, id, convType, lastEventTime, access, accessRole) = {
+      val (creator, name, team, id, convType, lastEventTime, access, accessRole, link) = {
         implicit val jsObj = js
         (
           decodeUserId('creator),
@@ -153,7 +170,8 @@ object ConversationsClient {
           ConversationType(decodeInt('type)),
           decodeISOInstant('last_event_time),
           decodeAccess('access),
-          decodeOptAccessRole('access_role)
+          decodeOptAccessRole('access_role),
+          decodeOptString('link).map(Link)
         )
       }
       val state = ConversationState.Decoder(self)
@@ -176,7 +194,8 @@ object ConversationsClient {
         state.archived.getOrElse(false),
         state.archiveTime.getOrElse(lastEventTime),
         access = access,
-        accessRole = accessRole
+        accessRole = accessRole,
+        link = link
       )
     }
 

@@ -23,7 +23,7 @@ import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.{EphemeralExpiration, IConversation, Verification}
 import com.waz.db.Col._
 import com.waz.db.{Dao, Dao2}
-import com.waz.model.ConversationData.{ConversationType, UnreadCount}
+import com.waz.model.ConversationData.{Link, ConversationType, UnreadCount}
 import com.waz.service.SearchKey
 import com.waz.utils.wrappers.{DB, DBCursor}
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
@@ -55,7 +55,8 @@ case class ConversationData(id:                   ConvId              = ConvId()
                             verified:             Verification        = Verification.UNKNOWN,
                             ephemeral:            EphemeralExpiration = EphemeralExpiration.NONE,
                             access:               Set[Access]         = Set.empty,
-                            accessRole:           Option[AccessRole]  = None) {
+                            accessRole:           Option[AccessRole]  = None,
+                            link:                 Option[Link]        = None) {
 
   def displayName = if (convType == ConversationType.Group) name.getOrElse(generatedName) else generatedName
 
@@ -159,6 +160,8 @@ object ConversationData {
     }
   }
 
+  case class Link(url: String)
+
   implicit lazy val Decoder: JsonDecoder[ConversationData] = new JsonDecoder[ConversationData] {
     import JsonDecoder._
     override def apply(implicit js: JSONObject): ConversationData = ConversationData(
@@ -187,7 +190,8 @@ object ConversationData {
       verified             = decodeOptString('verified).fold(Verification.UNKNOWN)(Verification.valueOf),
       ephemeral            = EphemeralExpiration.getForMillis(decodeLong('ephemeral)),
       access               = 'access,
-      accessRole           = 'accessRole
+      accessRole           = 'accessRole,
+      link                 = decodeOptString('link).map(Link)
     )
   }
 
@@ -221,6 +225,7 @@ object ConversationData {
       o.put("ephemeral", c.ephemeral.milliseconds)
       o.put("access", encodeAccess(c.access))
       o.put("access_role", encodeAccessRoleOpt(c.accessRole))
+      c.link.foreach(l => o.put("link", l.url))
     }
   }
 
@@ -253,6 +258,7 @@ object ConversationData {
     val Ephemeral        = long[EphemeralExpiration]('ephemeral, _.milliseconds, EphemeralExpiration.getForMillis)(_.ephemeral)
     val Access           = set[Access]('access, JsonEncoder.encodeAccess(_).toString(), v => JsonDecoder.array[Access](new JSONArray(v), (arr: JSONArray, i: Int) => IConversation.Access.valueOf(arr.getString(i).toUpperCase)).toSet)(_.access)
     val AccessRole       = opt(text[IConversation.AccessRole]('access_role, JsonEncoder.encodeAccessRole, v => IConversation.AccessRole.valueOf(v.toUpperCase)))(_.accessRole)
+    val Link             = opt(text[Link]('link, _.url, v => ConversationData.Link(v)))(_.link)
 
     override val idCol = Id
     override val table = Table(
@@ -284,7 +290,8 @@ object ConversationData {
       UnreadCallCount,
       UnreadPingCount,
       Access,
-      AccessRole)
+      AccessRole,
+      Link)
 
     override def apply(implicit cursor: DBCursor): ConversationData =
       ConversationData(
@@ -313,7 +320,8 @@ object ConversationData {
         Verified,
         Ephemeral,
         Access,
-        AccessRole)
+        AccessRole,
+        Link)
 
     import com.waz.model.ConversationData.ConversationType._
 

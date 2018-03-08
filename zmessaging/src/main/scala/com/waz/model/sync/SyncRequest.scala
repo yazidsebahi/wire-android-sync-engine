@@ -191,6 +191,8 @@ object SyncRequest {
     override def merge(req: SyncRequest) = mergeHelper[PostAssetStatus](req)(Merged(_))
   }
 
+  case class SyncConvLink(convId: ConvId) extends RequestForConversation(Cmd.SyncConvLink)
+
   case class PostClientLabel(id: ClientId, label: String) extends BaseRequest(Cmd.PostClientLabel) {
     override val mergeKey = (cmd, id)
   }
@@ -338,6 +340,7 @@ object SyncRequest {
         SyncCommand.fromName(cmd) match {
           case Cmd.SyncUser              => SyncUser(users)
           case Cmd.SyncConversation      => SyncConversation(decodeConvIdSeq('convs).toSet)
+          case Cmd.SyncConvLink          => SyncConvLink('conv)
           case Cmd.SyncSearchQuery       => SyncSearchQuery(SearchQuery.fromCacheKey(decodeString('queryCacheKey)))
           case Cmd.SyncIntegrations      => SyncIntegrations(decodeString('startWith))
           case Cmd.SyncIntegration       => SyncIntegration(decodeId[ProviderId]('providerId), decodeId[IntegrationId]('integrationId))
@@ -412,6 +415,7 @@ object SyncRequest {
       req match {
         case SyncUser(users)                  => o.put("users", arrString(users.toSeq map (_.str)))
         case SyncConversation(convs)          => o.put("convs", arrString(convs.toSeq map (_.str)))
+        case SyncConvLink(conv)               => o.put("conv", conv.str)
         case SyncSearchQuery(queryCacheKey)   => o.put("queryCacheKey", queryCacheKey.cacheKey)
         case SyncIntegrations(startWith)      => o.put("startWith", startWith)
         case SyncIntegration(pId, iId)        =>
