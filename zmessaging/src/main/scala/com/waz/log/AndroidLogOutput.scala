@@ -17,6 +17,7 @@
  */
 package com.waz.log
 
+import android.util.Log
 import com.waz.ZLog.LogTag
 
 import scala.concurrent.Future
@@ -25,14 +26,16 @@ class AndroidLogOutput extends LogOutput {
 
   override val id = AndroidLogOutput.id
 
-  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit = level match {
-    case InternalLog.Error   => ex.fold(android.util.Log.e(tag, str))(e => android.util.Log.e(tag, str, e))
-    case InternalLog.Warn    => ex.fold(android.util.Log.w(tag, str))(e => android.util.Log.w(tag, str, e))
-    case InternalLog.Info    => android.util.Log.i(tag, str)
-    case InternalLog.Debug   => android.util.Log.d(tag, str)
-    case InternalLog.Verbose => android.util.Log.v(tag, str)
-    case _ =>
-  }
+  import com.waz.log.InternalLog.LogLevel._
+  override def log(str: String, level: InternalLog.LogLevel, tag: LogTag, ex: Option[Throwable] = None): Unit =
+    level match {
+      case Error   => ex.fold(Log.e(tag, str))(e => Log.e(tag, str, e))
+      case Warn    => ex.fold(Log.w(tag, str))(e => Log.w(tag, str, e))
+      case Info    => Log.i(tag, str)
+      case Debug   => Log.d(tag, str)
+      case Verbose => Log.v(tag, str)
+      case _ =>
+    }
 
   override def close(): Future[Unit] = Future.successful {}
   override def flush(): Future[Unit] = Future.successful {}

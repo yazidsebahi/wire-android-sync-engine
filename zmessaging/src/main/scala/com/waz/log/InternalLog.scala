@@ -27,11 +27,14 @@ import scala.collection.mutable
 
 object InternalLog {
   sealed trait LogLevel
-  case object Error   extends LogLevel { override def toString = "E" }
-  case object Warn    extends LogLevel { override def toString = "W" }
-  case object Info    extends LogLevel { override def toString = "I" }
-  case object Debug   extends LogLevel { override def toString = "D" }
-  case object Verbose extends LogLevel { override def toString = "V" }
+  object LogLevel {
+    case object Error   extends LogLevel { override def toString = "E" }
+    case object Warn    extends LogLevel { override def toString = "W" }
+    case object Info    extends LogLevel { override def toString = "I" }
+    case object Debug   extends LogLevel { override def toString = "D" }
+    case object Verbose extends LogLevel { override def toString = "V" }
+  }
+
 
   private val outputs = mutable.HashMap[String, LogOutput]()
 
@@ -63,6 +66,7 @@ object InternalLog {
       add(new ProductionBufferedOutput(basePath))
     }
 
+  import LogLevel._
   def error(msg: String, cause: Throwable, tag: LogTag): Unit = log(msg, cause, Error, tag)
   def error(msg: String, tag: LogTag): Unit                   = log(msg, Error, tag)
   def warn(msg: String, cause: Throwable, tag: LogTag): Unit  = log(msg, cause, Warn, tag)

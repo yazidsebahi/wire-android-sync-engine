@@ -19,6 +19,7 @@ package com.waz.log
 
 import java.io.{BufferedWriter, File, FileWriter, IOException}
 
+import android.util.Log
 import com.waz.ZLog.LogTag
 import com.waz.log.BufferedLogOutput.ProductionLogTags
 import com.waz.log.InternalLog.{LogLevel, dateTag, stackTrace}
