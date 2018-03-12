@@ -18,10 +18,12 @@
 package com.waz.service.conversation
 
 import com.waz.api.IConversation.{Access, AccessRole}
-import com.waz.content.{ConversationStorage, MembersStorage}
+import com.waz.content.{ConversationStorage, MembersStorage, UsersStorage}
 import com.waz.model.ConversationData.ConversationType
-import com.waz.model.ConversationData.ConversationType.Group
+import com.waz.model.ConversationData.ConversationType._
+import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.{ConversationMemberData, _}
+import com.waz.service.SearchKey
 import com.waz.service.messages.MessagesService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
@@ -33,6 +35,7 @@ class TeamConversationSpec extends AndroidFreeSpec {
   val account      = AccountId()
   val self         = UserId()
   val team         = Some(TeamId("team"))
+  val userStorage  = mock[UsersStorage]
   val members      = mock[MembersStorage]
   val convsContent = mock[ConversationsContentUpdater]
   val convsStorage = mock[ConversationStorage]
@@ -42,51 +45,82 @@ class TeamConversationSpec extends AndroidFreeSpec {
   feature("Creating team conversations") {
 
     scenario("Create 1:1 conversation within a team with existing 1:1 conversation between the two members should return existing conversation") {
-      val otherUser = UserId("otherUser")
+      val otherUserId = UserId("otherUser")
+      val otherUser = UserData(otherUserId, team, "other", searchKey = SearchKey.simple("other"))
 
       val existingConv = ConversationData(creator = self, convType = Group, team = team)
 
-      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(otherUser, existingConv.id)
+      (userStorage.get _).expects(otherUserId).once().returning(Future.successful(Some(otherUser)))
+
+      (members.getByUsers _).expects(Set(otherUserId)).once().returning(Future.successful(IndexedSeq(
+        ConversationMemberData(otherUserId, existingConv.id)
       )))
 
       (members.getByConvs _).expects(Set(existingConv.id)).once().returning(Future.successful(IndexedSeq(
         ConversationMemberData(self,      existingConv.id),
-        ConversationMemberData(otherUser, existingConv.id)
+        ConversationMemberData(otherUserId, existingConv.id)
       )))
 
       (convsStorage.getAll _).expects(Seq(existingConv.id)).once().returning(Future.successful(Seq(Some(existingConv))))
 
-      result(initService.getOrCreateOneToOneConversation(otherUser)) shouldEqual existingConv
+      result(initService.getOrCreateOneToOneConversation(otherUserId)) shouldEqual existingConv
     }
 
     scenario("Existing 1:1 conversation between two team members with NAME should not be returned") {
-      val otherUser = UserId("otherUser")
+      val otherUserId = UserId("otherUser")
+      val otherUser = UserData(otherUserId, team, "other", searchKey = SearchKey.simple("other"))
+
       val name = Some("Conv Name")
       val existingConv = ConversationData(creator = self, name = name, convType = Group, team = team)
 
-      (members.getByUsers _).expects(Set(otherUser)).once().returning(Future.successful(IndexedSeq(
-        ConversationMemberData(otherUser, existingConv.id)
+      (userStorage.get _).expects(otherUserId).once().returning(Future.successful(Some(otherUser)))
+
+      (members.getByUsers _).expects(Set(otherUserId)).once().returning(Future.successful(IndexedSeq(
+        ConversationMemberData(otherUserId, existingConv.id)
       )))
 
       (members.getByConvs _).expects(Set(existingConv.id)).once().returning(Future.successful(IndexedSeq(
         ConversationMemberData(self,      existingConv.id),
-        ConversationMemberData(otherUser, existingConv.id)
+        ConversationMemberData(otherUserId, existingConv.id)
       )))
 
       (convsStorage.getAll _).expects(Seq(existingConv.id)).once().returning(Future.successful(Seq(Some(existingConv))))
-      (convsContent.createConversationWithMembers _).expects(*, *, Group, self, Set(otherUser), None, false, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().onCall {
+      (convsContent.createConversationWithMembers _).expects(*, *, Group, self, Set(otherUserId), None, false, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().onCall {
         (conv: ConvId, r: RConvId, tpe: ConversationType, cr: UserId, us: Set[UserId], n: Option[String], hid: Boolean, ac: Set[Access], ar: AccessRole) =>
           Future.successful(ConversationData(conv, r, n, cr, tpe, team, hidden = hid, access = ac, accessRole = Some(ar)))
       }
-      (messages.addConversationStartMessage _).expects(*, self, Set(otherUser), None).once().returning(Future.successful(null))
-      (sync.postConversation _).expects(*, Set(otherUser), None, team, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().returning(Future.successful(null))
+      (messages.addConversationStartMessage _).expects(*, self, Set(otherUserId), None).once().returning(Future.successful(null))
+      (sync.postConversation _).expects(*, Set(otherUserId), None, team, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().returning(Future.successful(null))
 
-      val conv = result(initService.getOrCreateOneToOneConversation(otherUser))
+      val conv = result(initService.getOrCreateOneToOneConversation(otherUserId))
       conv shouldNot equal(existingConv)
     }
   }
 
+  feature("Conversations with guests") {
+
+    //TODO under what circumstances is the user connection status "Ignored"? What happens if you're just unconnected with that person?
+    scenario("Create 1:1 conversation with a non-team member should create a real 1:1 conversation") {
+      val otherUserId = UserId("otherUser")
+      val otherUser = UserData(otherUserId, Some(TeamId("different_team")), "other", searchKey = SearchKey.simple("other"), connection = ConnectionStatus.Ignored)
+
+      val expectedConv = ConversationData(ConvId("otherUser"), creator = self, convType = OneToOne, team = None)
+
+      (userStorage.get _).expects(otherUserId).twice().returning(Future.successful(Some(otherUser)))
+
+      (convsContent.convById _).expects(ConvId("otherUser")).returning(Future.successful(None))
+      (convsContent.createConversationWithMembers _).expects(ConvId("otherUser"), *, Incoming, otherUserId, Set(self), None, true, Set(Access.PRIVATE), AccessRole.PRIVATE).once().onCall {
+        (conv: ConvId, r: RConvId, tpe: ConversationType, cr: UserId, us: Set[UserId], n: Option[String], hid: Boolean, ac: Set[Access], ar: AccessRole) =>
+          Future.successful(ConversationData(conv, r, n, cr, tpe, team, hidden = hid, access = ac, accessRole = Some(ar)))
+      }
+
+      (messages.addMemberJoinMessage _).expects(ConvId("otherUser"), otherUserId, Set(self), true).once().returning(Future.successful(null))
+
+      val conv = result(initService.getOrCreateOneToOneConversation(otherUserId))
+      conv.id shouldEqual ConvId("otherUser")
+    }
+  }
+
   def initService: ConversationsUiService =
-    new ConversationsUiServiceImpl(account, self, team, null, null, null, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
+    new ConversationsUiServiceImpl(account, self, team, null, null, userStorage, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
 }
