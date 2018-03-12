@@ -324,27 +324,10 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       Future successful None
   }
 
-  override def getOrCreateOneToOneConversation(other: UserId) =
-    teamId match {
-      case Some(tId) =>
-        verbose(s"Checking for 1:1 conversation with user: $other")
-        (for {
-          allConvs   <- this.members.getByUsers(Set(other)).map(_.map(_.convId))
-          allMembers <- this.members.getByConvs(allConvs.toSet).map(_.map(m => m.convId -> m.userId))
-          onlyUs     = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, selfId) => c}
-          data       <- convStorage.getAll(onlyUs).map(_.flatten)
-          _          = verbose(s"Found ${data.size} convs with other user: $other")
-        } yield data.filter(c => c.team.contains(tId) && c.name.isEmpty)).flatMap { convs =>
-          if (convs.isEmpty) {
-            verbose(s"No conversation with user $other found, creating new team 1:1 conversation (type == Group)")
-            createAndPostConversation(ConvId(), None, Set(other)).map(_._1)
-          } else {
-            if (convs.size > 1) warn(s"Found ${convs.size} available team conversations with user: $other, returning first conversation found")
-            Future.successful(convs.head)
-          }
-        }
+  override def getOrCreateOneToOneConversation(other: UserId) = {
 
-      case None => convsContent.convById(ConvId(other.str)) flatMap {
+    def createReal1to1() =
+      convsContent.convById(ConvId(other.str)) flatMap {
         case Some(conv) => Future.successful(conv)
         case _ => usersStorage.get(other).flatMap {
           case Some(u) if u.connection == ConnectionStatus.Ignored =>
@@ -361,7 +344,35 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
             } yield conv
         }
       }
+
+    def createFake1To1(tId: TeamId) = {
+      verbose(s"Checking for 1:1 conversation with user: $other")
+      (for {
+        allConvs <- this.members.getByUsers(Set(other)).map(_.map(_.convId))
+        allMembers <- this.members.getByConvs(allConvs.toSet).map(_.map(m => m.convId -> m.userId))
+        onlyUs = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, selfId) => c }
+        data <- convStorage.getAll(onlyUs).map(_.flatten)
+        _ = verbose(s"Found ${data.size} convs with other user: $other")
+      } yield data.filter(c => c.team.contains(tId) && c.name.isEmpty)).flatMap { convs =>
+        if (convs.isEmpty) {
+          verbose(s"No conversation with user $other found, creating new team 1:1 conversation (type == Group)")
+          createAndPostConversation(ConvId(), None, Set(other)).map(_._1)
+        } else {
+          if (convs.size > 1) warn(s"Found ${convs.size} available team conversations with user: $other, returning first conversation found")
+          Future.successful(convs.head)
+        }
+      }
     }
+
+    teamId match {
+      case Some(tId) =>
+        for {
+          user <- usersStorage.get(other)
+          conv <- if (user.exists(_.isGuest(tId))) createReal1to1() else createFake1To1(tId)
+        } yield conv
+      case None => createReal1to1()
+    }
+  }
 
   override def createGroupConversation(name: Option[String] = None, members: Set[UserId] = Set.empty, teamOnly: Boolean = false) =
     createAndPostConversation(ConvId(), name, members, teamOnly)
