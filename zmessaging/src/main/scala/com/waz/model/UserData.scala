@@ -50,7 +50,7 @@ case class UserData(
                      verified:              Verification          = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
                      deleted:               Boolean               = false,
                      availability:          Availability          = Availability.None,
-                     handle:                Option[Handle],
+                     handle:                Option[Handle]        = None,
                      providerId:            Option[ProviderId]    = None,
                      integrationId:         Option[IntegrationId] = None
                    ) {
@@ -127,6 +127,8 @@ case class UserData(
         connectionMessage = message.orElse(this.connectionMessage))
     }
   }
+
+  def isGuest(ourTeamId: TeamId): Boolean = isGuest(Some(ourTeamId))
 
   def isGuest(ourTeamId: Option[TeamId]): Boolean = ourTeamId.isDefined && teamId != ourTeamId
 }
