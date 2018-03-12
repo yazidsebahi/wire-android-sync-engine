@@ -346,14 +346,17 @@ class ConversationsServiceImpl(context:         Context,
 
   override def createLink(convId: ConvId) =
     (for {
-      Some(conv) <- content.convById(convId)
-      if conv.access.contains(Access.CODE)
-      resp <- client.createLink(conv.remoteId).future
-      _ <- resp match {
+      Some(conv) <- content.convById(convId) if conv.isGuestRoom || conv.isWirelessLegacy
+      modeResp   <- if (conv.isWirelessLegacy) setToTeamOnly(convId, teamOnly = false) else Future.successful(Right({})) //upgrade legacy convs
+      linkResp   <- modeResp match {
+        case Right(_) => client.createLink(conv.remoteId).future
+        case Left(err) => Future.successful(Left(err))
+      }
+      _ <- linkResp match {
         case Right(l) => convsStorage.update(convId, _.copy(link = Some(l)))
         case _ => Future.successful({})
       }
-    } yield resp)
+    } yield linkResp)
       .recover {
         case NonFatal(e) =>
           error("Failed to create link", e)
