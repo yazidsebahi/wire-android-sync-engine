@@ -43,9 +43,15 @@ trait ConnectionService {
   def syncConversationInitiallyAfterCreation(convId: RConvId, selfUserId: UserId, userId: UserId): Future[SyncId]
 }
 
-class ConnectionServiceImpl(push: PushService, convs: ConversationsContentUpdater, members: MembersStorage,
-                            messages: MessagesService, messagesStorage: MessagesStorage, users: UserService, usersStorage: UsersStorage,
-                            sync: SyncServiceHandle) extends ConnectionService {
+class ConnectionServiceImpl(selfUserId:      UserId,
+                            push:            PushService,
+                            convs:           ConversationsContentUpdater,
+                            members:         MembersStorage,
+                            messages:        MessagesService,
+                            messagesStorage: MessagesStorage,
+                            users:           UserService,
+                            usersStorage:    UsersStorage,
+                            sync:            SyncServiceHandle) extends ConnectionService {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -89,10 +95,8 @@ class ConnectionServiceImpl(push: PushService, convs: ConversationsContentUpdate
   } flatMap { case (users, fromSync) =>
     val toSync = users filter { case (user, _) => user.connection == ConnectionStatus.Accepted || user.connection == ConnectionStatus.PendingFromOther || user.connection == ConnectionStatus.PendingFromUser }
     sync.syncUsersIfNotEmpty(toSync.map(_._1.id)(breakOut)) flatMap { _ =>
-      withSelfUserFuture { selfUser =>
-        RichFuture.processSequential(users.grouped(16).toSeq) { us =>
-          Future.traverse(us){ case (user, time) => updateConversationForConnection(user, selfUser, fromSync = fromSync(user.id), time) }
-        }
+      RichFuture.processSequential(users.grouped(16).toSeq) { us =>
+        Future.traverse(us){ case (user, time) => updateConversationForConnection(user, selfUserId, fromSync = fromSync(user.id), time) }
       }
     }
   }
@@ -143,22 +147,20 @@ class ConnectionServiceImpl(push: PushService, convs: ConversationsContentUpdate
       }
     }
 
-    withSelfUserFuture { selfUserId =>
-      connectIfUnconnected() flatMap {
-        case Some(_) =>
-          convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.WaitForConnection) flatMap { conv =>
-            verbose(s"connectToUser, conv: $conv")
-            convStorage.update(conv.id, _.copy(convType = ConversationType.WaitForConnection, hidden = false)) flatMap { _ =>
-              addConnectRequestMessage(conv.id, selfUserId, userId, message, name) map { _ => Some(conv) }
-            }
+    connectIfUnconnected().flatMap {
+      case Some(_) =>
+        convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.WaitForConnection) flatMap { conv =>
+          verbose(s"connectToUser, conv: $conv")
+          convStorage.update(conv.id, _.copy(convType = ConversationType.WaitForConnection, hidden = false)) flatMap { _ =>
+            addConnectRequestMessage(conv.id, selfUserId, userId, message, name) map { _ => Some(conv) }
           }
-        case None => //already connected
-          convs.convById(ConvId(userId.str))
-      }
+        }
+      case None => //already connected
+        convs.convById(ConvId(userId.str))
     }
   }
 
-  def acceptConnection(userId: UserId): Future[ConversationData] = withSelfUserFuture { selfUserId =>
+  def acceptConnection(userId: UserId): Future[ConversationData] =
     updateConnectionStatus(userId, ConnectionStatus.Accepted) map {
       case Some(_) =>
         sync.postConnectionStatus(userId, ConnectionStatus.Accepted) map { syncId =>
@@ -174,44 +176,35 @@ class ConnectionServiceImpl(push: PushService, convs: ConversationsContentUpdate
         }
       }
     }
-  }
 
-  def ignoreConnection(userId: UserId): Future[Option[UserData]] = {
-    withSelfUserFuture { selfUserId =>
-      updateConnectionStatus(userId, ConnectionStatus.Ignored) flatMap { user =>
-        user.foreach { _ => sync.postConnectionStatus(userId, ConnectionStatus.Ignored) }
-        convs.hideIncomingConversation(userId) map { _ => user }
-      }
-    }
-  }
+  def ignoreConnection(userId: UserId): Future[Option[UserData]] =
+    for {
+      user <- updateConnectionStatus(userId, ConnectionStatus.Ignored)
+      _    <- user.fold(Future.successful({}))(_ => sync.postConnectionStatus(userId, ConnectionStatus.Ignored).map(_ => {}))
+      _    <- convs.hideIncomingConversation(userId)
+    } yield user
 
   def blockConnection(userId: UserId): Future[Option[UserData]] = {
-    withSelfUserFuture { selfUserId =>
-      convs.setConversationHidden(ConvId(userId.str), hidden = true) flatMap { _ =>
-        updateConnectionStatus(userId, ConnectionStatus.Blocked) map { user =>
-          user foreach { _ => sync.postConnectionStatus(userId, ConnectionStatus.Blocked) }
-          user
-        }
-      }
-    }
+    for {
+      _    <- convs.setConversationHidden(ConvId(userId.str), hidden = true)
+      user <- updateConnectionStatus(userId, ConnectionStatus.Blocked)
+      _    <- user.fold(Future.successful({}))(_ => sync.postConnectionStatus(userId, ConnectionStatus.Blocked).map(_ => {}))
+    } yield user
   }
 
-  def unblockConnection(userId: UserId): Future[ConversationData] = {
-    withSelfUserFuture { selfUserId =>
-      updateConnectionStatus(userId, ConnectionStatus.Accepted) map { user =>
-        user foreach { _ =>
-          sync.postConnectionStatus(userId, ConnectionStatus.Accepted) map { syncId =>
-            sync.syncConversations(Set(ConvId(userId.str)), Some(syncId)) // sync conversation after syncing connection state (conv is locked on backend while connection is blocked) TODO: we could use some better api for that
-          }
-        }
-        user
-      } flatMap { _ =>
-        convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne) flatMap { conv =>
-          convs.updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) map { _.fold(conv)(_._2) } // TODO: what about messages
-        }
+  def unblockConnection(userId: UserId): Future[ConversationData] =
+    for {
+      user <- updateConnectionStatus(userId, ConnectionStatus.Accepted)
+      _    <- user.fold(Future.successful({})) { _ =>
+        for {
+          syncId <- sync.postConnectionStatus(userId, ConnectionStatus.Accepted)
+          _      <- sync.syncConversations(Set(ConvId(userId.str)), Some(syncId)) // sync conversation after syncing connection state (conv is locked on backend while connection is blocked) TODO: we could use some better api for that
+        } yield {}
       }
-    }
-  }
+      conv    <- convs.getOneToOneConversation(userId, selfUserId, convType = ConversationType.OneToOne)
+      updated <- convs.updateConversation(conv.id, Some(ConversationType.OneToOne), hidden = Some(false)) map { _.fold(conv)(_._2) } // TODO: what about messages
+    } yield updated
+
 
   def cancelConnection(userId: UserId): Future[Option[UserData]] = {
     updateUserData(userId, { user =>

@@ -40,13 +40,11 @@ import scala.collection.breakOut
 import scala.concurrent.{Awaitable, Future}
 
 trait UserService {
-  def selfUserId: UserId
   def getSelfUserId: Future[Option[UserId]]
   def getSelfUser: Future[Option[UserData]]
   def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
   def getOrCreateUser(id: UserId): Future[UserData]
   def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
-  def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
   def getUsers(ids: Seq[UserId]): Future[Seq[UserData]]
   def getUser(id: UserId): Future[Option[UserData]]
@@ -58,16 +56,16 @@ trait UserService {
   def processAvailability(availability: Map[UserId, Availability]): Future[Any]
 }
 
-class UserServiceImpl(override val selfUserId: UserId,
-                      account:        AccountId,
-                      accounts:       AccountsService,
-                      usersStorage:   UsersStorage,
-                      userPrefs:      UserPreferences,
-                      push:           PushService,
-                      assets:         AssetService,
-                      usersClient:    UsersClient,
-                      sync:           SyncServiceHandle,
-                      assetsStorage:  AssetsStorage) extends UserService {
+class UserServiceImpl(selfUserId:    UserId,
+                      account:       AccountId,
+                      accounts:      AccountsService,
+                      usersStorage:  UsersStorage,
+                      userPrefs:     UserPreferences,
+                      push:          PushService,
+                      assets:        AssetService,
+                      usersClient:   UsersClient,
+                      sync:          SyncServiceHandle,
+                      assetsStorage: AssetsStorage) extends UserService {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -107,12 +105,6 @@ class UserServiceImpl(override val selfUserId: UserId,
     )
 
   private lazy val acceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
-
-  def withSelfUser[A](f: UserId => CancellableFuture[A]) = f(selfUserId)
-
-  def withSelfUserFuture[A](f: UserId => Future[A]) = f(selfUserId)
-
-  def selfUserOrFail: Future[UserId] = withSelfUserFuture(Future(_))
 
   def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
     sync.syncUsers(id)

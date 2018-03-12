@@ -51,7 +51,8 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 import scala.concurrent.Future.successful
 
-class MessagesSyncHandler(context:    Context,
+class MessagesSyncHandler(selfUserId: UserId,
+                          context:    Context,
                           service:    MessagesServiceImpl,
                           msgContent: MessagesContentUpdater,
                           convEvents: ConversationOrderEventsService,
@@ -78,7 +79,7 @@ class MessagesSyncHandler(context:    Context,
     convs.convById(convId) flatMap {
       case Some(conv) =>
         val msg = GenericMessage(Uid(), Proto.MsgDeleted(conv.remoteId, msgId))
-        otrSync.postOtrMessage(ConvId(users.selfUserId.str), RConvId(users.selfUserId.str), msg) map {_.fold(e => SyncResult(e), _ => SyncResult.Success)}
+        otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) map {_.fold(e => SyncResult(e), _ => SyncResult.Success)}
       case None =>
         successful(SyncResult(internalError("conversation not found")))
     }
@@ -102,7 +103,7 @@ class MessagesSyncHandler(context:    Context,
       case Some(conv) =>
         val (msg, recipients) = tpe match {
           case ReceiptType.Delivery         => (GenericMessage(msgId.uid, Proto.Receipt(msgId)), Set(userId))
-          case ReceiptType.EphemeralExpired => (GenericMessage(msgId.uid, Proto.MsgRecall(msgId)), Set(users.selfUserId, userId))
+          case ReceiptType.EphemeralExpired => (GenericMessage(msgId.uid, Proto.MsgRecall(msgId)), Set(selfUserId, userId))
         }
 
         otrSync.postOtrMessage(conv.id, conv.remoteId, msg, Some(recipients), nativePush = false) map {
@@ -299,7 +300,7 @@ class MessagesSyncHandler(context:    Context,
       // ephemeral msgs should not be sent to self devices,
       // to handle that properly we need special backend parameters to exclude self user devices (don't report missing)
       // FIXME: for now we just send it to active conv members, this can lead to 'lost' messages in case of races
-      members.getActiveUsers(conv.id).map { ms => Some(ms.toSet - users.selfUserId) }
+      members.getActiveUsers(conv.id).map { ms => Some(ms.toSet - selfUserId) }
     } else
       Future successful Some(Set(UserId(conv.id.str))) // send only to other users' devices
 

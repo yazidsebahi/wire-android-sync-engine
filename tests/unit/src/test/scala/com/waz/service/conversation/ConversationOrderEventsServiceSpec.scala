@@ -100,8 +100,6 @@ class ConversationOrderEventsServiceSpec extends AndroidFreeSpec {
     val conv = ConversationData(ConvId(), rConvId, Some("name"), UserId(), ConversationType.Group, lastEventTime = Instant.MIN)
     var updatedConv = conv.copy()
 
-    (users.selfUserId _).expects().anyNumberOfTimes().returning(selfUserId)
-    (users.withSelfUserFuture[Unit] _).expects(*).anyNumberOfTimes().onCall{ (f: UserId => Future[Unit]) => f(selfUserId) }
     (storage.getByRemoteIds _).expects(*).anyNumberOfTimes().returning(Future.successful(Seq(convId)))
 
     (convs.processConvWithRemoteId[Unit] (_: RConvId, _: Boolean, _: Int)(_: ConversationData => Future[Unit])(_:ZLog.LogTag, _:ExecutionContext)).expects(*, *, *, *, *, *).onCall {
@@ -116,7 +114,7 @@ class ConversationOrderEventsServiceSpec extends AndroidFreeSpec {
 
     lazy val scheduler: EventScheduler = new EventScheduler(Stage(Sequential)(service.conversationOrderEventsStage))
     lazy val pipeline  = new EventPipelineImpl(Vector.empty, scheduler.enqueue)
-    lazy val service = new ConversationOrderEventsService(convs, storage, messages, users, sync, pipeline)
+    lazy val service = new ConversationOrderEventsService(selfUserId, convs, storage, messages, users, sync, pipeline)
 
     val events = Seq(
       MemberJoinEvent(rConvId, new Date(1), UserId(), Seq(selfUserId)),
