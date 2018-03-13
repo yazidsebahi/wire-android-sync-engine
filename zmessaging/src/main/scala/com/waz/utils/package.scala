@@ -19,7 +19,7 @@ package com.waz
 
 import java.security.MessageDigest
 import java.util.Date
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.{TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicReference
 
 import android.util.Base64
@@ -188,6 +188,7 @@ package object utils {
     def min(b: Date) = if (a.toEpochMilli < b.getTime) a else b
     def >=(b: bp.Instant) = !a.isBefore(b)
     def <=(b: bp.Instant) = !a.isAfter(b)
+    def remainingUntil(b: bp.Instant): FiniteDuration = if (a isBefore b) FiniteDuration(b.toEpochMilli - a.toEpochMilli, TimeUnit.MILLISECONDS) else Duration.Zero
   }
 
   implicit lazy val InstantIsOrdered: Ordering[Instant] = Ordering.ordered[Instant]
