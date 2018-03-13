@@ -19,24 +19,27 @@ package com.waz.service
 
 import java.util.Date
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
 import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.UserService._
+import com.waz.service.ZMessaging.clock
 import com.waz.service.assets.AssetService
+import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.UsersClient
-import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils._
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
+import com.waz.utils.{RichInstant, _}
 
 import scala.collection.breakOut
+import scala.concurrent.duration._
 import scala.concurrent.{Awaitable, Future}
 
 trait UserService {
@@ -271,4 +274,54 @@ class UserServiceImpl(selfUserId:    UserId,
 
 object UserService {
   val defaultUserName: String = ""
+}
+
+/**
+  * Whenever the selected conversation changes, this small service checks to see which users of that conversation are a
+  * wireless guest user. It then starts a countdown timer for the remaining duration of the life of the user, and at the
+  * end of that timer, fires a sync request to trigger a BE check
+  */
+class ExpiredUsersService(convState: ConversationsListStateService,
+                          push:      PushService,
+                          members:   MembersStorage,
+                          users:     UsersStorage,
+                          sync:      SyncServiceHandle)(implicit ev: AccountContext) {
+
+  private implicit val ec = new SerialDispatchQueue(name = "ExpiringUsers")
+
+  private var timers = Map[UserId, CancellableFuture[Unit]]()
+
+  //if a given user is removed from all conversations, drop the timer
+  members.onDeleted(_.foreach { m =>
+    members.getByUsers(Set(m._1)).map(_.isEmpty).map {
+      case true =>
+        timers.get(m._1).foreach(_.cancel())
+        timers -= m._1
+      case _ =>
+    }
+  })
+
+  convState.selectedConversationId {
+    case Some(id) =>
+      for {
+        beDrift <- push.beDrift.head
+        ms      <- members.getActiveUsers(id)
+        ws      <- users.getAll(ms).map(_.flatten.filter(_.expiresAt.isDefined).toSet)
+      } yield {
+
+        val woTimer = ws.filter(u => (ws.map(_.id) -- timers.keySet).contains(u.id))
+        woTimer.foreach { u =>
+          Future {
+            val delay = (clock.instant() + beDrift + 10.seconds).remainingUntil(u.expiresAt.get)
+            timers += u.id -> CancellableFuture.delay(delay).map { _ =>
+              sync.syncUsers(u.id)
+              timers -= u.id
+            }
+            timers(u.id).onCancelled(verbose(s"Cancelled for user: ${u.id}"))
+          }
+        }
+      }
+
+    case None =>
+  }
 }
