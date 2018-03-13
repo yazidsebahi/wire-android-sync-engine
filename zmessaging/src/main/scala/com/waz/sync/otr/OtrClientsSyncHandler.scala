@@ -64,8 +64,6 @@ class OtrClientsSyncHandlerImpl(context: Context,
 
   private lazy val sessions = cryptoBox.sessions
 
-  private lazy val geocoder = new Geocoder(context, Locales.currentLocale)
-
   def syncSelfClients(): Future[SyncResult] = Serialized.future("sync-self-clients", this) { // serialized to avoid races with registration
     verbose(s"syncSelfClients")
     syncClients(userId)
@@ -195,6 +193,7 @@ class OtrClientsSyncHandlerImpl(context: Context,
     import scala.collection.JavaConverters._
 
     def loadName(lat: Double, lon: Double) = Future {
+      val geocoder = new Geocoder(context, Locales.currentLocale)
       LoggedTry.local(geocoder.getFromLocation(lat, lon, 1).asScala).toOption.flatMap(_.headOption).flatMap { add =>
         Option(Seq(Option(add.getLocality), Option(add.getCountryCode)).flatten.mkString(", ")).filter(_.nonEmpty)
       }

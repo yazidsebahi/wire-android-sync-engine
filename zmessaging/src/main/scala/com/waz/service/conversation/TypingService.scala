@@ -21,7 +21,7 @@ import java.util.Date
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.content.{ConversationStorageImpl, GlobalPreferences}
+import com.waz.content.{ConversationStorage, GlobalPreferences}
 import com.waz.content.GlobalPreferences.BackendDrift
 import com.waz.model._
 import com.waz.service.AccountsService.InForeground
@@ -34,7 +34,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class TypingService(accountId:     AccountId,
-                    conversations: ConversationStorageImpl,
+                    conversations: ConversationStorage,
                     timeouts:      Timeouts,
                     accounts:      AccountsService,
                     sync:          SyncServiceHandle,

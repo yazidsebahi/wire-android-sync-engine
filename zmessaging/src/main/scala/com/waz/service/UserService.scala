@@ -26,6 +26,7 @@ import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
+import com.waz.service.EventScheduler.Stage
 import com.waz.service.UserService._
 import com.waz.service.ZMessaging.clock
 import com.waz.service.assets.AssetService
@@ -43,6 +44,12 @@ import scala.concurrent.duration._
 import scala.concurrent.{Awaitable, Future}
 
 trait UserService {
+  def userUpdateEventsStage: Stage.Atomic
+  def userDeleteEventsStage: Stage.Atomic
+
+  def selfUser: Signal[UserData]
+  def selfUserId: UserId
+
   def getSelfUserId: Future[Option[UserId]]
   def getSelfUser: Future[Option[UserData]]
   def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
@@ -55,11 +62,22 @@ trait UserService {
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
   def acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
   def updateAvailability(availability: Availability): Future[Option[UserData]]
-
   def processAvailability(availability: Map[UserId, Availability]): Future[Any]
+
+  def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]]
+  def syncNotExistingOrExpired(users: Seq[UserId]): Future[Option[SyncId]]
+
+  def deleteAccount(): Future[SyncId]
+  def userSignal(id: UserId): Signal[UserData]
+  def syncSelfNow: Future[Option[UserData]]
+
+  // called from ui to update user
+  def updateSelf(name: Option[String] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, handle: Option[Handle] = None): Future[Option[UserData]]
+  def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Option[UserData]]
+  def clearSelfPicture(): Future[Option[UserData]]
 }
 
-class UserServiceImpl(selfUserId:    UserId,
+class UserServiceImpl(val selfUserId:    UserId,
                       account:       AccountId,
                       accounts:      AccountsService,
                       usersStorage:  UsersStorage,
@@ -82,12 +100,12 @@ class UserServiceImpl(selfUserId:    UserId,
   }
 
   lazy val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
-  val userUpdateEventsStage = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
+  val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
       _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
       _ <- removeIdentityFromSyncedUsers(e.filter(_.removeIdentity).map(_.user)(breakOut))
     } yield {}
   )
-  val userDeleteEventsStage = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
+  val userDeleteEventsStage: Stage.Atomic = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
 
   //Update user data for other accounts
   //TODO remove this and move the necessary user data up to the account storage

@@ -23,7 +23,9 @@ import com.waz.model._
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
+import scala.concurrent.Future
 
 trait TeamsStorage extends CachedStorage[TeamId, TeamData]
+
 class TeamsStorageImpl(context: Context, storage: Database)
   extends CachedStorageImpl[TeamId, TeamData](new TrimmingLruCache(context, Fixed(1024)), storage)(TeamDataDoa, "TeamStorage_Cached") with TeamsStorage

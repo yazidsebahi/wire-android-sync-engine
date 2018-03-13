@@ -23,7 +23,7 @@ import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
-import com.waz.content.{AssetsStorage, ConversationStorageImpl, MessagesStorageImpl}
+import com.waz.content._
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
@@ -40,8 +40,8 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
-                           messages:       MessagesStorageImpl,
+class OpenGraphSyncHandler(convs:          ConversationStorage,
+                           messages:       MessagesStorage,
                            otrService:     OtrServiceImpl,
                            assetSync:      AssetSyncHandler,
                            assetsStorage:  AssetsStorage,

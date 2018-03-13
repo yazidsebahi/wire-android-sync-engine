@@ -23,7 +23,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.UiLifeCycle
 import com.waz.service.conversation.ConversationsListStateService
-import com.waz.service.push.{GlobalNotificationsService, NotificationService, PushService}
+import com.waz.service.push.{GlobalNotificationsService, GlobalNotificationsServiceImpl, NotificationService, PushService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.{EventStream, Signal}
@@ -50,7 +50,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
   val push      = mock[PushService]
   val convsStats = mock[ConversationsListStateService]
   val members   = mock[MembersStorage]
-  val globalNots = new GlobalNotificationsService
+  val globalNots: GlobalNotificationsService = new GlobalNotificationsServiceImpl
 
 
   val inForeground = Signal(false)

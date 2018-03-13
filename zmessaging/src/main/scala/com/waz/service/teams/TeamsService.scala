@@ -24,6 +24,7 @@ import com.waz.content._
 import com.waz.model.AccountData.PermissionsMasks
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model._
+import com.waz.service.EventScheduler.Stage
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
@@ -36,6 +37,8 @@ import scala.concurrent.Future
 
 //TODO - return Signals of the search results for UI??
 trait TeamsService {
+
+  def eventsProcessingStage: Stage.Atomic
 
   def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false): Signal[Set[UserData]]
 
@@ -63,7 +66,7 @@ class TeamsServiceImpl(selfUser:           UserId,
 
   private implicit val dispatcher = SerialDispatchQueue()
 
-  val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
+  override val eventsProcessingStage: Stage.Atomic = EventScheduler.Stage[TeamEvent] { (_, events) =>
     verbose(s"Handling events: $events")
     import TeamEvent._
 

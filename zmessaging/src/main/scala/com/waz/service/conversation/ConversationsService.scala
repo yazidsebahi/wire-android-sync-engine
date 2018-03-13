@@ -17,7 +17,6 @@
  */
 package com.waz.service.conversation
 
-import android.content.Context
 import com.softwaremill.macwire._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -28,7 +27,7 @@ import com.waz.content._
 import com.waz.model.ConversationData.{ConversationType, Link, getAccessAndRoleForGroupConv}
 import com.waz.model._
 import com.waz.service._
-import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
+import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.service.push.PushService
 import com.waz.service.tracking.{GuestsAllowedToggled, TrackingService}
 import com.waz.sync.client.ConversationsClient
@@ -61,18 +60,17 @@ trait ConversationsService {
   def removeLink(convId: ConvId): ErrorOr[Unit]
 }
 
-class ConversationsServiceImpl(context:         Context,
-                               teamId:          Option[TeamId],
+class ConversationsServiceImpl(teamId:          Option[TeamId],
                                selfUserId:      UserId,
                                push:            PushService,
-                               users:           UserServiceImpl,
-                               usersStorage:    UsersStorageImpl,
-                               membersStorage:  MembersStorageImpl,
-                               convsStorage:    ConversationStorageImpl,
+                               users:           UserService,
+                               usersStorage:    UsersStorage,
+                               membersStorage:  MembersStorage,
+                               convsStorage:    ConversationStorage,
                                val content:     ConversationsContentUpdater,
                                sync:            SyncServiceHandle,
                                errors:          ErrorsService,
-                               messages:        MessagesServiceImpl,
+                               messages:        MessagesService,
                                msgContent:      MessagesContentUpdater,
                                userPrefs:       UserPreferences,
                                requests:        SyncRequestService,

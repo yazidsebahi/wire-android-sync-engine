@@ -27,6 +27,7 @@ import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.{TestGlobalPreferences, TestUserPreferences}
 import com.waz.threading.CancellableFuture
 import com.waz.utils.events.{EventStream, Signal}
+import com.waz.utils.returning
 import com.waz.znet.AuthenticationManager.{Cookie, Token}
 import com.waz.znet.{LoginClient, Response}
 import org.scalatest.Inside
@@ -35,7 +36,6 @@ import scala.concurrent.Future
 
 class AccountsServiceSpec extends AndroidFreeSpec with Inside {
 
-  private val globalModule = mock[GlobalModule]
   private val storage      = mock[AccountsStorage]
   private val phoneNumbers = mock[PhoneNumberService]
   private val regClient    = mock[RegistrationClient]
@@ -467,7 +467,31 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     }
   }
 
+  scenario("Getting the active account should access the storage") {
+    val accountId = AccountId()
+
+    prefs.setValue(GlobalPreferences.CurrentAccountPref, Some(accountId))
+
+    val service = getAccountService
+
+    var account = AccountData(
+      id              = accountId,
+      pendingTeamName = Some("team_name"),
+      name            = Some("account_name"),
+      pendingEmail    = Some(EmailAddress("test@test.com")),
+      password        = Some("password"),
+      code            = Some(ConfirmationCode("123456"))
+    )
+
+    (storage.get _).expects(accountId).atLeastOnce().returning(Future.successful(Some(account)))
+
+    result(service.getActiveAccount) shouldEqual Some(account)
+  }
+
   def getAccountService: AccountsServiceImpl = {
+
+    val globalModule = mock[GlobalModule]
+
     (globalModule.accountsStorage _).expects().anyNumberOfTimes.returning(storage)
     (globalModule.trackingService _).expects().anyNumberOfTimes.returning(tracking)
     (globalModule.phoneNumbers _).expects().anyNumberOfTimes.returning(phoneNumbers)
@@ -476,7 +500,9 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
     (globalModule.prefs _).expects().anyNumberOfTimes.returning(prefs)
     (globalModule.factory _).expects().anyNumberOfTimes.returning(new ZMessagingFactory(globalModule) {
       override def baseStorage(accountId: AccountId) = new StorageModule(null, accountId, "", prefs) {
-        override lazy val userPrefs = new TestUserPreferences
+        override lazy val userPrefs = returning(new TestUserPreferences) {
+          _.setValue(GlobalPreferences.CurrentAccountPref, Some(accountId))
+        }
       }
     })
     (globalModule.context _).expects().anyNumberOfTimes().returning(null)

@@ -66,13 +66,13 @@ class ContactsServiceImpl(context:        Context,
                           accountStorage: AccountsStorage,
                           accounts:       AccountsService,
                           userPrefs:      UserPreferences,
-                          users:          UserServiceImpl,
-                          usersStorage:   UsersStorageImpl,
+                          users:          UserService,
+                          usersStorage:   UsersStorage,
                           timeouts:       Timeouts,
                           phoneNumbers:   PhoneNumberService,
                           storage:        ZmsDatabase,
                           sync:           SyncServiceHandle,
-                          convs:          ConversationStorageImpl,
+                          convs:          ConversationStorage,
                           permissions:    PermissionsService)
   extends ContactsService {
 

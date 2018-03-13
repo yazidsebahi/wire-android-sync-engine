@@ -44,13 +44,19 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class GlobalNotificationsService {
+trait GlobalNotificationsService {
+  //To be set by the UI
+  val notificationsSourceVisible = Signal(Map[AccountId, Set[ConvId]]())
+
+  def groupedNotifications: Signal[Map[AccountId, (Boolean, Seq[NotificationInfo])]]
+
+  def markAsDisplayed(accountId: AccountId, nots: Seq[NotId]): Future[Any]
+}
+
+class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
 
   import ZLog.ImplicitTag.implicitLogTag
   import com.waz.threading.Threading.Implicits.Background
-
-  //To be set by the UI
-  val notificationsSourceVisible = Signal(Map[AccountId, Set[ConvId]]())
 
   lazy val groupedNotifications: Signal[Map[AccountId, (Boolean, Seq[NotificationInfo])]] = //Boolean = shouldBeSilent
     Option(ZMessaging.currentAccounts) match {
@@ -149,9 +155,9 @@ class NotificationService(context:         Context,
 
   val notificationEventsStage = EventScheduler.Stage[Event]({ (c, events) =>
     add(events collect {
-      case ev @ UserConnectionEvent(_, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) if ev.hasLocalTime =>
+      case ev @ UserConnectionEvent(_, _, userId, msg, ConnectionStatus.PendingFromOther, time, name) =>
         NotificationData(NotId(CONNECT_REQUEST, userId), msg.getOrElse(""), ConvId(userId.str), userId, CONNECT_REQUEST, time.instant, userName = name)
-      case ev @ UserConnectionEvent(_, _, userId, _, ConnectionStatus.Accepted, time, name) if ev.hasLocalTime =>
+      case ev @ UserConnectionEvent(_, _, userId, _, ConnectionStatus.Accepted, time, name) =>
         NotificationData(NotId(CONNECT_ACCEPTED, userId), "", ConvId(userId.str), userId, CONNECT_ACCEPTED, userName = name)
       case ContactJoinEvent(userId, _) =>
         verbose("ContactJoinEvent")

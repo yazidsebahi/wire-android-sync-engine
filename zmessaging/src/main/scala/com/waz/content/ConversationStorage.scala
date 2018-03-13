@@ -34,6 +34,10 @@ import scala.collection.{GenMap, GenSet, GenTraversableOnce, mutable}
 import scala.concurrent.Future
 
 trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
+  def convsSignal: Signal[ConversationsSet]
+
+  def conversations: IndexedSeq[ConversationData]
+
   val convAdded: EventStream[ConversationData]
   val convDeleted: EventStream[ConversationData]
   val convUpdated: EventStream[(ConversationData, ConversationData)]
@@ -42,8 +46,12 @@ trait ConversationStorage extends CachedStorage[ConvId, ConversationData] {
   def search(prefix: SearchKey, self: UserId, handleOnly: Boolean, teamId: Option[TeamId] = None): Future[Vector[ConversationData]]
   def findByTeams(teams: Set[TeamId]): Future[Set[ConversationData]]
   def getByRemoteIds(remoteId: Traversable[RConvId]): Future[Seq[ConvId]]
+  def getByRemoteId(remoteId: RConvId): Future[Option[ConversationData]]
 
   def getAllConvs: Future[IndexedSeq[ConversationData]]
+  def updateLocalId(oldId: ConvId, newId: ConvId): Future[Option[ConversationData]]
+
+  def apply[A](f: (GenMap[ConvId, ConversationData], GenMap[RConvId, ConvId]) => A): Future[A]
 }
 
 class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[ConvId, ConversationData](new UnlimitedLruCache(), storage)(ConversationDataDao, "ConversationStorage_Cached") with ConversationStorage {
@@ -52,9 +60,10 @@ class ConversationStorageImpl(storage: ZmsDatabase) extends CachedStorageImpl[Co
 
   private val remoteMap         = new mutable.HashMap[RConvId, ConvId]()
   private val conversationsById = new mutable.HashMap[ConvId, ConversationData]()
-  def conversations             = conversationsById.values.toIndexedSeq
 
-  val convsSignal = Signal[ConversationsSet]()
+  override val convsSignal      = Signal[ConversationsSet]()
+
+  def conversations             = conversationsById.values.toIndexedSeq
 
   val convAdded = EventStream[ConversationData]()
   val convDeleted = EventStream[ConversationData]()

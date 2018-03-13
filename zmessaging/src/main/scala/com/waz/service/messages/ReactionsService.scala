@@ -21,7 +21,7 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.{Likes, ReactionsStorageImpl}
 import com.waz.model._
-import com.waz.service.UserServiceImpl
+import com.waz.service.UserService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
 import com.waz.utils._
@@ -30,7 +30,7 @@ import org.threeten.bp.Instant.EPOCH
 
 import scala.concurrent.Future
 
-class ReactionsService(storage: ReactionsStorageImpl, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserServiceImpl, selfUserId: UserId) {
+class ReactionsService(storage: ReactionsStorageImpl, messages: MessagesContentUpdater, sync: SyncServiceHandle, users: UserService, selfUserId: UserId) {
   import Threading.Implicits.Background
 
   def like(conv: ConvId, msg: MessageId): Future[Likes] = addReaction(conv, msg, Liking.Action.Like)

@@ -21,10 +21,10 @@ import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Message
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.{ConversationStorageImpl, MessagesStorageImpl}
+import com.waz.content.{ConversationStorage, MessagesStorage}
 import com.waz.model.GenericContent.Cleared
 import com.waz.model._
-import com.waz.service.UserServiceImpl
+import com.waz.service.UserService
 import com.waz.service.conversation.ConversationsContentUpdaterImpl
 import com.waz.sync.SyncResult
 import com.waz.sync.otr.OtrSyncHandler
@@ -33,12 +33,13 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 
 class ClearedSyncHandler(selfUserId:   UserId,
-                         convs:        ConversationStorageImpl,
+                         convs:        ConversationStorage,
                          convsContent: ConversationsContentUpdaterImpl,
-                         users:        UserServiceImpl,
-                         msgs:         MessagesStorageImpl,
+                         users:        UserService,
+                         msgs:         MessagesStorage,
                          convSync:     ConversationsSyncHandler,
                          otrSync:      OtrSyncHandler) {
+
   import com.waz.threading.Threading.Implicits.Background
 
   // Returns actual timestamp to use for clear.
