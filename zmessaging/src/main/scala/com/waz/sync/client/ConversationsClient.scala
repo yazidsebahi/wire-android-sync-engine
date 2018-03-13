@@ -84,13 +84,13 @@ class ConversationsClient(netClient: ZNetClient) {
     }
 
   def createLink(conv: RConvId): ErrorOrResponse[Link] =
-    netClient.withErrorHandling("createLink", Request.Post(s"$ConversationsPath/$conv/code", {})) {
+    netClient.withErrorHandling("createLink", Request.Post(s"$ConversationsPath/$conv/code", {}, timeout = 3.seconds)) {
       case Response(HttpStatus(Status.Success, _), JsonObjectResponse(js), _) if js.has("uri") => Link(js.getString("uri"))
       case Response(HttpStatus(Status.Created, _), JsonObjectResponse(js), _) if js.getJSONObject("data").has("uri") => Link(js.getJSONObject("data").getString("uri"))
     }
 
   def removeLink(conv: RConvId): ErrorOrResponse[Unit] =
-    netClient.withErrorHandling("removeLink", Request.Delete(s"$ConversationsPath/$conv/code")) {
+    netClient.withErrorHandling("removeLink", Request.Delete(s"$ConversationsPath/$conv/code", timeout = 3.seconds)) {
       case Response(SuccessHttpStatus(), _, _) => // nothing to return
     }
 
