@@ -66,7 +66,7 @@ import scala.concurrent.duration._
       test.typingSync = Some(id)
       super.postTypingState(id, typing)
     }
-  })
+  }, null)
 
   before {
     typingSync = None
