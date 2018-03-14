@@ -42,7 +42,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
   import AndroidFreeSpec._
 
-  val clock = TestClock()
+  val clock = AndroidFreeSpec.clock
 
   val account1Id  = AccountId("account1")
   val accounts    = mock[AccountsService]
@@ -142,6 +142,8 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 }
 
 object AndroidFreeSpec {
+
+  val clock = TestClock()
 
   val DefaultTimeout = 5.seconds
   @volatile private var swallowedFailure = Option.empty[exceptions.TestFailedException]
