@@ -126,9 +126,9 @@ case class MemberUpdateEvent(convId: RConvId, time: Date, from: UserId, state: C
 
 case class ConnectRequestEvent(convId: RConvId, time: Date, from: UserId, message: String, recipient: UserId, name: String, email: Option[String]) extends MessageEvent with ConversationStateEvent
 
-case class ConversationAccessEvent(convId: RConvId, time: Date, from: UserId, access: Set[Access], accessRole: AccessRole) extends ConversationEvent
-case class ConversationCodeUpdateEvent(convId: RConvId, time: Date, from: UserId, link: ConversationData.Link) extends ConversationEvent
-case class ConversationCodeDeleteEvent(convId: RConvId, time: Date, from: UserId) extends ConversationEvent
+case class ConversationAccessEvent(convId: RConvId, time: Date, from: UserId, access: Set[Access], accessRole: AccessRole) extends ConversationStateEvent
+case class ConversationCodeUpdateEvent(convId: RConvId, time: Date, from: UserId, link: ConversationData.Link) extends ConversationStateEvent
+case class ConversationCodeDeleteEvent(convId: RConvId, time: Date, from: UserId) extends ConversationStateEvent
 
 sealed trait OtrEvent extends ConversationEvent {
   val sender: ClientId
