@@ -50,7 +50,7 @@ trait ConversationsContentUpdater {
   def updateConversationCleared(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateLastEvent(id: ConvId, time: Instant): Future[Option[(ConversationData, ConversationData)]]
   def updateConversationState(id: ConvId, state: ConversationState): Future[Option[(ConversationData, ConversationData)]]
-  def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]): Future[Option[(ConversationData, ConversationData)]]
+  def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole], link: Option[ConversationData.Link] = None): Future[Option[(ConversationData, ConversationData)]]
 
   def createConversationWithMembers(convId:     ConvId,
                                     remoteId:   RConvId,
@@ -240,6 +240,6 @@ class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
     } (ec)
   }
 
-  override def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole]) =
-    storage.update(id, conv => conv.copy(access = access, accessRole = accessRole, link = if (!access.contains(Access.CODE)) None else conv.link))
+  override def updateAccessMode(id: ConvId, access: Set[Access], accessRole: Option[AccessRole], link: Option[ConversationData.Link] = None) =
+    storage.update(id, conv => conv.copy(access = access, accessRole = accessRole, link = if (!access.contains(Access.CODE)) None else link.orElse(conv.link)))
 }

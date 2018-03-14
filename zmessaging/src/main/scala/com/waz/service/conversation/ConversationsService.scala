@@ -334,7 +334,7 @@ class ConversationsServiceImpl(context:         Context,
               case Right(_) => Future.successful(Right {})
               case Left(err) =>
                 //set mode back on request failed
-                content.updateAccessMode(convId, old.access, old.accessRole).map(_ => Left(err))
+                content.updateAccessMode(convId, old.access, old.accessRole, old.link).map(_ => Left(err))
             }
             else Future.successful(Right {})
         } yield resp).recover {
