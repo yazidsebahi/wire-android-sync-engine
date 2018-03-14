@@ -21,7 +21,8 @@ import java.util.Date
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.content.ConversationStorageImpl
+import com.waz.content.{ConversationStorageImpl, GlobalPreferences}
+import com.waz.content.GlobalPreferences.BackendDrift
 import com.waz.model._
 import com.waz.service.AccountsService.InForeground
 import com.waz.service._
@@ -29,7 +30,6 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.RichFuture.processSequential
 import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream}
-
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
@@ -37,11 +37,13 @@ class TypingService(accountId:     AccountId,
                     conversations: ConversationStorageImpl,
                     timeouts:      Timeouts,
                     accounts:      AccountsService,
-                    sync:          SyncServiceHandle) {
+                    sync:          SyncServiceHandle,
+                    prefs:         GlobalPreferences) {
   import timeouts.typing._
 
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "TypingService")
+  private val beDriftPref = prefs.preference(BackendDrift)
 
   private var typing: ConvId Map IndexedSeq[TypingUser] = Map().withDefaultValue(Vector.empty)
 
@@ -52,7 +54,7 @@ class TypingService(accountId:     AccountId,
 
   val onTypingChanged = EventStream[(ConvId, IndexedSeq[TypingUser])]()
 
-  val typingEventStage = EventScheduler.Stage[TypingEvent]((c, es) => processSequential(es filter isRecent)(handleTypingEvent))
+  val typingEventStage = EventScheduler.Stage[TypingEvent]((c, es) => processSequential(es)(handleTypingEvent))
 
   accounts.accountState(accountId).on(dispatcher) {
     case InForeground => // fine
@@ -61,14 +63,20 @@ class TypingService(accountId:     AccountId,
 
   def typingUsers(conv: ConvId) = new AggregatingSignal[IndexedSeq[TypingUser], IndexedSeq[UserId]](onTypingChanged.filter(_._1 == conv).map(_._2), Future { typing(conv).map(_.id) }, { (_, updated) => updated.map(_.id) })
 
-  def handleTypingEvent(e: TypingEvent): Future[Unit] = conversations.getByRemoteId(e.convId) map {
-    case Some(conv) => setUserTyping(conv.id, e.from, e.time, e.isTyping)
-    case None => warn(s"Conversation ${e.convId} not found, ignoring.")
-  }
+  def handleTypingEvent(e: TypingEvent): Future[Unit] =
+    isRecent(e).flatMap {
+      case true =>
+        conversations.getByRemoteId(e.convId) map {
+          case Some(conv) => setUserTyping(conv.id, e.from, e.time, e.isTyping)
+          case None => warn(s"Conversation ${e.convId} not found, ignoring.")
+        }
+      case _ => Future.successful(())
+    }
+
 
   def selfChangedInput(conv: ConvId): Future[Unit] = Future {
     stopTypingTimeout.cancel()
-    selfIsTyping = Some((conv, System.currentTimeMillis))
+    selfIsTyping = Some((conv, ZMessaging.clock.millis))
     if (refreshIsTyping.isCompleted) postIsTyping(conv)
     stopTypingTimeout = CancellableFuture.delayed(stopTimeout) { stopTyping(conv) }
   }
@@ -111,7 +119,7 @@ class TypingService(accountId:     AccountId,
       typing += conv -> current.filterNot(user == _.id)
       onTypingChanged ! (conv -> typing(conv))
     } else if (isTyping) {
-      val cleanUp = CancellableFuture.delayed(receiverTimeout - (System.currentTimeMillis - time.getTime).millis) {
+      val cleanUp = CancellableFuture.delayed(receiverTimeout - (ZMessaging.clock.millis - time.getTime).millis) {
         setUserTyping(conv, user, new Date, isTyping = false)
       }
       val idx = current.indexWhere(_.id == user)
@@ -124,7 +132,10 @@ class TypingService(accountId:     AccountId,
     }
   }
 
-  def isRecent(event: TypingEvent): Boolean = System.currentTimeMillis - event.localTime.getTime < receiverTimeout.toMillis
+  def isRecent(event: TypingEvent): Future[Boolean] = beDriftPref.apply().map { beDrift =>
+    val now = ZMessaging.clock.instant().plus(beDrift).toEpochMilli
+    now - event.time.getTime < receiverTimeout.toMillis
+  }
 }
 
 case class TypingUser(id: UserId, time: Date, cleanUp: CancellableFuture[Unit])
