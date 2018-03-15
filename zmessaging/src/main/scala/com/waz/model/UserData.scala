@@ -79,7 +79,8 @@ case class UserData(id:                    UserId,
       case _ => handle
     },
     providerId = user.service.map(_.provider),
-    integrationId = user.service.map(_.id)
+    integrationId = user.service.map(_.id),
+    expiresAt = user.expiresAt
   )
 
   def updated(user: UserSearchEntry): UserData = copy(
