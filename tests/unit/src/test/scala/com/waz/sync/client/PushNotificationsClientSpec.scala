@@ -19,7 +19,7 @@ package com.waz.sync.client
 
 import com.waz.model.otr.ClientId
 import com.waz.specs.AndroidFreeSpec
-import com.waz.sync.client.PushNotificationsClient.LoadNotificationsResponse
+import com.waz.sync.client.PushNotificationsClient.{LoadNotificationsResponse, NotificationsResponseEncoded}
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonDecoder
 import com.waz.znet.ZNetClient.ErrorOrResponse
@@ -32,7 +32,6 @@ import scala.io.Source
 class PushNotificationsClientSpec extends AndroidFreeSpec {
 
   import com.waz.sync.client.PushNotificationsClient.PagedNotificationsResponse
-  import com.waz.sync.client.PushNotificationsClient.NotificationsResponse
 
   feature("Deserializing push notifications") {
 
@@ -61,7 +60,7 @@ class PushNotificationsClientSpec extends AndroidFreeSpec {
     scenario("parse notifications response 2") {
       val json = new JSONObject(Notification2)
       JsonObjectResponse(json) match {
-        case NotificationsResponse(_) =>
+        case NotificationsResponseEncoded(_) =>
         case _ => fail(s"notifications parsing failed for: $json")
       }
     }
@@ -81,7 +80,7 @@ class PushNotificationsClientSpec extends AndroidFreeSpec {
 
   private def mockRequest(path: String, result: LoadNotificationsResponse) =
     (znet.chainedWithErrorHandling(_: String, _: Request[Unit])(_: PartialFunction[Response, ErrorOrResponse[LoadNotificationsResponse]])(_: ExecutionContext))
-    .expects(PushNotificationsClient.RequestTag, Request.Get(path), *, *)
+    .expects(PushNotificationsClient.NotifsRequestTag, Request.Get(path), *, *)
     .returning(CancellableFuture.successful(Right(result)))
 
   feature("Load notifications") {
