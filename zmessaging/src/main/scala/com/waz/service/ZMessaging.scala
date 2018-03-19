@@ -247,6 +247,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val openGraphSync                              = wire[OpenGraphSyncHandler]
   lazy val handlesSync                                = wire[HandlesSyncHandler]
   lazy val integrationsSync: IntegrationsSyncHandler  = wire[IntegrationsSyncHandlerImpl]
+  lazy val expiringUsers                              = wire[ExpiredUsersService]
 
   lazy val eventPipeline: EventPipeline = new EventPipelineImpl(Vector(), eventScheduler.enqueue)
 
@@ -283,6 +284,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   {
     conversations
     users
+    expiringUsers
     gsmService
 
     push // connect on start
