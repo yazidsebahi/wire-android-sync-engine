@@ -312,7 +312,7 @@ class ExpiredUsersService(convState: ConversationsListStateService,
     push.beDrift.head.map { drift =>
       val woTimer = wireless.filter(u => (wireless.map(_.id) -- timers.keySet).contains(u.id))
       woTimer.foreach { u =>
-        val delay = (clock.instant() + drift + 10.seconds).remainingUntil(u.expiresAt.get)
+        val delay = (clock.instant() + drift).remainingUntil(u.expiresAt.get + 10.seconds)
         verbose(s"Creating timer to remove user: ${u.id}:${u.name} in $delay")
         timers += u.id -> CancellableFuture.delay(delay).map { _ =>
           verbose(s"Wireless user ${u.id}:${u.name} is expired, informing BE")

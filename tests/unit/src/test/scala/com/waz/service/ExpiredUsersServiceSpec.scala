@@ -49,12 +49,14 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
 
     currentConv ! Some(conv)
 
+    clock + 10.seconds
+
     val wirelessId = UserId("wirelessUser")
 
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
       UserData("user2").copy(id = UserId("user2")),
-      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() + 10200.millis))
+      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() - 10.seconds + 200.millis))
     )
 
     (members.activeMembers _).expects(conv).once().returning(Signal.const(convUsers.map(_.id)))
@@ -84,7 +86,7 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
       UserData("user2").copy(id = UserId("user2")),
-      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() + 10200.millis))
+      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() - 10.seconds + 200.millis))
     )
 
     val activeMembers = Signal(convUsers.map(_.id))
@@ -116,7 +118,7 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
 
     currentConv ! Some(conv)
 
-    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() + 10200.millis))
+    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() - 10.seconds + 200.millis))
 
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
@@ -151,7 +153,7 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
 
     currentConv ! Some(conv)
 
-    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() + 10200.millis))
+    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() - 10.seconds + 200.millis))
 
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
