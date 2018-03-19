@@ -35,7 +35,7 @@ import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.UsersClient
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
-import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
+import com.waz.utils.events._
 import com.waz.utils.{RichInstant, _}
 
 import scala.collection.breakOut
@@ -295,33 +295,34 @@ class ExpiredUsersService(convState: ConversationsListStateService,
   members.onDeleted(_.foreach { m =>
     members.getByUsers(Set(m._1)).map(_.isEmpty).map {
       case true =>
-        timers.get(m._1).foreach(_.cancel())
+        timers.get(m._1).foreach { t =>
+          verbose(s"Cancelled timer for user: ${m._1}")
+          t.cancel()
+        }
         timers -= m._1
       case _ =>
     }
   })
 
-  convState.selectedConversationId {
-    case Some(id) =>
-      for {
-        beDrift <- push.beDrift.head
-        ms      <- members.getActiveUsers(id)
-        ws      <- users.getAll(ms).map(_.flatten.filter(_.expiresAt.isDefined).toSet)
-      } yield {
-
-        val woTimer = ws.filter(u => (ws.map(_.id) -- timers.keySet).contains(u.id))
-        woTimer.foreach { u =>
-          Future {
-            val delay = (clock.instant() + beDrift + 10.seconds).remainingUntil(u.expiresAt.get)
-            timers += u.id -> CancellableFuture.delay(delay).map { _ =>
-              sync.syncUsers(u.id)
-              timers -= u.id
-            }
-            timers(u.id).onCancelled(verbose(s"Cancelled for user: ${u.id}"))
-          }
+  for {
+    Some(conv) <- convState.selectedConversationId
+    members    <- members.activeMembers(conv)
+  } {
+    for {
+      wireless <- users.getAll(members).map(_.flatten.filter(_.expiresAt.isDefined).toSet)
+      drift    <- push.beDrift.head
+    } {
+      if (wireless.isEmpty) verbose("No wireless users in conv") else verbose(s"${wireless.size} wireless users in conv")
+      val woTimer = wireless.filter(u => (wireless.map(_.id) -- timers.keySet).contains(u.id))
+      woTimer.foreach { u =>
+        val delay = (clock.instant() + drift + 10.seconds).remainingUntil(u.expiresAt.get)
+        verbose(s"Creating timer to remove user: ${u.id}:${u.name} in $delay")
+        timers += u.id -> CancellableFuture.delay(delay).map { _ =>
+          verbose(s"Wireless user ${u.id}:${u.name} is expired, informing BE")
+          sync.syncUsers(u.id)
+          timers -= u.id
         }
       }
-
-    case None =>
+    }
   }
 }
