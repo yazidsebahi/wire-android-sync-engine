@@ -43,6 +43,7 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
   val onDeleted = EventStream[Seq[(UserId, ConvId)]]
   val currentConv = Signal(Option.empty[ConvId])
 
+  //All user expiry times have an extra 10 seconds to factor in the buffer we leave in the service
   scenario("Start timer for user soon to expire") {
     val conv = ConvId("conv")
 
@@ -53,13 +54,12 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
       UserData("user2").copy(id = UserId("user2")),
-      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() + 10500.millis))
+      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() + 10200.millis))
     )
 
     (members.activeMembers _).expects(conv).once().returning(Signal.const(convUsers.map(_.id)))
-    (users.getAll _).expects(*).once().onCall { (ids: Traversable[UserId]) =>
-      if (ids.toSet != convUsers.map(_.id)) fail("Unexpected user ids")
-      Future.successful(convUsers.toSeq.map(Some(_)))
+    (users.signal _).expects(*).anyNumberOfTimes().onCall { id: UserId =>
+      Signal.const(convUsers.find(_.id == id).get)
     }
 
     getService //trigger creation of service
@@ -84,7 +84,7 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
       UserData("user2").copy(id = UserId("user2")),
-      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() + 10500.millis))
+      UserData("wireless").copy(id = wirelessId, expiresAt = Some(clock.instant() + 10200.millis))
     )
 
     val activeMembers = Signal(convUsers.map(_.id))
@@ -92,9 +92,8 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
     (members.activeMembers _).expects(conv).once().returning {
       activeMembers
     }
-
-    (users.getAll _).expects(*).twice().onCall { (ids: Traversable[UserId]) =>
-      Future.successful(convUsers.filter(u => ids.exists(_ == u.id)).toSeq.map(Some(_)))
+    (users.signal _).expects(*).anyNumberOfTimes().onCall { id: UserId =>
+      Signal.const(convUsers.find(_.id == id).get)
     }
 
     (members.getByUsers _).expects(Set(wirelessId)).once().returning(Future.successful(IndexedSeq.empty))
@@ -117,7 +116,7 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
 
     currentConv ! Some(conv)
 
-    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() + 10500.millis))
+    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() + 10200.millis))
 
     val convUsers = Set(
       UserData("user1").copy(id = UserId("user1")),
@@ -127,12 +126,8 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
     val activeMembers = Signal(convUsers.map(_.id))
 
     (members.activeMembers _).expects(conv).once().returning(activeMembers)
-    (users.getAll _).expects(*).twice().onCall { (ids: Traversable[UserId]) =>
-
-      val users = if (ids.toSet.contains(wirelessUser.id)) convUsers + wirelessUser else convUsers
-      val resp = users.toSeq.map(Some(_))
-
-      Future.successful(resp)
+    (users.signal _).expects(*).anyNumberOfTimes().onCall { id: UserId =>
+      Signal.const((convUsers + wirelessUser).find(_.id == id).get)
     }
 
     getService //trigger creation of service
@@ -147,6 +142,43 @@ class ExpiredUsersServiceSpec extends AndroidFreeSpec {
       finished ! {}
       Future.successful(SyncId())
     }
+
+    result(finished.next)
+  }
+
+  scenario("Wireless member data updates after we've already checked the conversation") {
+    val conv = ConvId("conv")
+
+    currentConv ! Some(conv)
+
+    val wirelessUser = UserData("wireless").copy(id = UserId("wirelessUser"), expiresAt = Some(clock.instant() + 10200.millis))
+
+    val convUsers = Set(
+      UserData("user1").copy(id = UserId("user1")),
+      UserData("user2").copy(id = UserId("user2"))
+    )
+
+    val wirelessUserSignal = Signal[UserData]()
+
+    (members.activeMembers _).expects(conv).once().returning(Signal.const(convUsers.map(_.id) + wirelessUser.id))
+    (users.signal _).expects(*).anyNumberOfTimes().onCall { id: UserId =>
+      if (id == wirelessUser.id) wirelessUserSignal else Signal.const(convUsers.find(_.id == id).get)
+    }
+
+    getService //trigger creation of service
+
+    println("Wireless user gets synced")
+    wirelessUserSignal ! wirelessUser
+
+    awaitAllTasks
+
+    val finished = EventStream[Unit]()
+    (sync.syncUsers _).expects(*).once().onCall { (us: Seq[UserId]) =>
+      if (!us.contains(wirelessUser.id)) fail("Called sync for wrong user")
+      finished ! {}
+      Future.successful(SyncId())
+    }
+
 
     result(finished.next)
   }

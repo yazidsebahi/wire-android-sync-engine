@@ -307,12 +307,9 @@ class ExpiredUsersService(convState: ConversationsListStateService,
   for {
     Some(conv) <- convState.selectedConversationId
     members    <- members.activeMembers(conv)
+    wireless   <- Signal.sequence(members.map(users.signal).toSeq:_*).map(_.toSet.filter(_.expiresAt.isDefined))
   } {
-    for {
-      wireless <- users.getAll(members).map(_.flatten.filter(_.expiresAt.isDefined).toSet)
-      drift    <- push.beDrift.head
-    } {
-      if (wireless.isEmpty) verbose("No wireless users in conv") else verbose(s"${wireless.size} wireless users in conv")
+    push.beDrift.head.map { drift =>
       val woTimer = wireless.filter(u => (wireless.map(_.id) -- timers.keySet).contains(u.id))
       woTimer.foreach { u =>
         val delay = (clock.instant() + drift + 10.seconds).remainingUntil(u.expiresAt.get)
