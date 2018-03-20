@@ -84,7 +84,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  private val firstTimePref = prefs.preference(FirstTimeWithTeams)
+  protected val firstTimePref = prefs.preference(FirstTimeWithTeams)
 
   val activeAccountPref = prefs.preference(CurrentAccountPref)
 
@@ -237,7 +237,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
 
   //TODO can be removed after a while
-  private val flushOtherCredentials = {
+  protected val flushOtherCredentials = {
     firstTimePref().flatMap {
       case false => Future.successful({})
       case true  =>

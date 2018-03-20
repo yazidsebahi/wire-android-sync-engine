@@ -27,7 +27,7 @@ import com.waz.client.{RegistrationClient, RegistrationClientImpl}
 import com.waz.content._
 import com.waz.permissions.PermissionsService
 import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
-import com.waz.service.call.{Avs, AvsImpl, DefaultFlowManagerService, GlobalCallingService}
+import com.waz.service.call._
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
 import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
@@ -83,7 +83,7 @@ trait GlobalModule {
   def factory:              ZMessagingFactory
   def lifecycle:            UiLifeCycle
 
-  def flowmanager:          DefaultFlowManagerService
+  def flowmanager:          FlowManagerService
   def mediaManager:         MediaManagerService
 
   def trackingService:      TrackingService
@@ -148,8 +148,8 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
 
   lazy val factory                                               = new ZMessagingFactory(this)
 
-  lazy val flowmanager:         DefaultFlowManagerService        = wire[DefaultFlowManagerService]
-  lazy val mediaManager                                          = wire[DefaultMediaManagerService]
+  lazy val flowmanager:         FlowManagerService               = wire[DefaultFlowManagerService]
+  lazy val mediaManager:        MediaManagerService              = wire[DefaultMediaManagerService]
 
   private lazy val trackingZmsProvider: TrackingService.ZmsProvider = TrackingService.defaultZmsProvider
   lazy val trackingService:     TrackingService                  = wire[TrackingServiceImpl]

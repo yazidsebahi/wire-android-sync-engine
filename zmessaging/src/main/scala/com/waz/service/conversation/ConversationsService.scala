@@ -217,7 +217,10 @@ class ConversationsServiceImpl(context:         Context,
         messages.addDeviceStartMessages(created, selfUserId) map (_ => all)
       }
     }
-  }.map(_.foldLeft(Vector.empty[ConversationData])(_ ++ _))
+  }.map { vs =>
+    verbose(s"updated conversations: ${vs.flatten}")
+    vs.foldLeft(Vector.empty[ConversationData])(_ ++ _)
+  }
 
   private def updateConversations(selfUserId: UserId, convs: Seq[ConversationResponse]): Future[(Seq[ConversationData], Seq[ConversationData])] = {
 

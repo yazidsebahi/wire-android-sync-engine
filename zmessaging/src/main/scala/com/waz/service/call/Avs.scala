@@ -74,6 +74,11 @@ class AvsImpl() extends Avs {
     }
   }.map(_ => {})
 
+  available.onFailure {
+    case e: Throwable =>
+      error("Failed to initialise AVS - calling will not work", e)
+  }
+
   override def registerAccount(cs: CallingService) = available.flatMap { _ =>
     verbose(s"Initialising calling for: ${cs.selfUserId} and current client: ${cs.clientId}")
 
