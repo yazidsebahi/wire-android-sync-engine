@@ -62,7 +62,7 @@ object PushNotificationsClient {
 
   val NotificationsPath = "/notifications"
   val NotificationsLastPath = "/notifications/last"
-  val PageSize = 1000
+  val PageSize = 500
 
   def notificationsPath(since: Option[Uid], client: ClientId, pageSize: Int) = {
     val args = Seq("since" -> since, "client" -> Some(client), "size" -> Some(pageSize)) collect { case (key, Some(v)) => key -> v }
