@@ -20,9 +20,9 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.UsersStorageImpl
+import com.waz.content.UsersStorage
 import com.waz.model._
-import com.waz.service.UserServiceImpl
+import com.waz.service.{UserService, UserServiceImpl}
 import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.SyncResult
@@ -34,8 +34,8 @@ import com.waz.utils.events.EventContext
 import scala.concurrent.Future
 
 class UsersSyncHandler(assetSync: AssetSyncHandler,
-                       userService: UserServiceImpl,
-                       usersStorage: UsersStorageImpl,
+                       userService: UserService,
+                       usersStorage: UsersStorage,
                        assets: AssetService,
                        usersClient: UsersClient,
                        imageGenerator: ImageAssetGenerator,
@@ -102,7 +102,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler,
 
 
   def syncConnectedUsers(): Future[SyncResult] = {
-    usersStorage.contactNameParts.future flatMap { cs =>
+    usersStorage.getContactNameParts.future flatMap { cs =>
       usersClient.loadUsers(cs.keys.toSeq)
     } flatMap {
       case Right(users) => userService.updateSyncedUsers(users).map {_ => SyncResult.Success }

@@ -36,7 +36,7 @@ import com.waz.service.media._
 import com.waz.service.messages._
 import com.waz.service.otr._
 import com.waz.service.push._
-import com.waz.service.teams.TeamsServiceImpl
+import com.waz.service.teams.{TeamsService, TeamsServiceImpl}
 import com.waz.sync.client._
 import com.waz.sync.handler._
 import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
@@ -75,18 +75,18 @@ class ZMessagingFactory(global: GlobalModule) {
 }
 
 class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
-  lazy val db                                     = new ZmsDatabase(accountId, context, dbPrefix)
-  lazy val userPrefs                              = UserPreferences.apply(context, db, globalPreferences)
-  lazy val usersStorage                           = wire[UsersStorageImpl]
-  lazy val otrClientsStorage: OtrClientsStorage   = wire[OtrClientsStorageImpl]
-  lazy val membersStorage                         = wire[MembersStorageImpl]
-  lazy val assetsStorage                          = wire[AssetsStorageImpl]
-  lazy val reactionsStorage                       = wire[ReactionsStorageImpl]
-  lazy val notifStorage                           = wire[NotificationStorageImpl]
-  lazy val convsStorage                           = wire[ConversationStorageImpl]
-  lazy val msgDeletions:      MsgDeletionStorage  = wire[MsgDeletionStorageImpl]
-  lazy val searchQueryCache: SearchQueryCacheStorage = wire[SearchQueryCacheStorageImpl]
-  lazy val msgEdits:          EditHistoryStorage  = wire[EditHistoryStorageImpl]
+  lazy val db                                         = new ZmsDatabase(accountId, context, dbPrefix)
+  lazy val userPrefs                                  = UserPreferences.apply(context, db, globalPreferences)
+  lazy val usersStorage:      UsersStorage        = wire[UsersStorageImpl]
+  lazy val otrClientsStorage: OtrClientsStorage       = wire[OtrClientsStorageImpl]
+  lazy val membersStorage                             = wire[MembersStorageImpl]
+  lazy val assetsStorage :    AssetsStorage           = wire[AssetsStorageImpl]
+  lazy val reactionsStorage                           = wire[ReactionsStorageImpl]
+  lazy val notifStorage:      NotificationStorage     = wire[NotificationStorageImpl]
+  lazy val convsStorage:      ConversationStorage     = wire[ConversationStorageImpl]
+  lazy val msgDeletions:      MsgDeletionStorage      = wire[MsgDeletionStorageImpl]
+  lazy val searchQueryCache:  SearchQueryCacheStorage = wire[SearchQueryCacheStorageImpl]
+  lazy val msgEdits:          EditHistoryStorage      = wire[EditHistoryStorageImpl]
 }
 
 
@@ -156,7 +156,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def msgEdits          = storage.msgEdits
   def searchQueryCache  = storage.searchQueryCache
 
-  lazy val messagesStorage: MessagesStorageImpl = wire[MessagesStorageImpl]
+  lazy val messagesStorage: MessagesStorage = wire[MessagesStorageImpl]
   lazy val msgAndLikes: MessageAndLikesStorageImpl = wire[MessageAndLikesStorageImpl]
   lazy val messagesIndexStorage: MessageIndexStorage = wire[MessageIndexStorage]
   lazy val eventStorage: PushNotificationEventsStorage = wire[PushNotificationEventsStorageImpl]
@@ -198,13 +198,13 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val assetGenerator                             = wire[ImageAssetGenerator]
   lazy val assetMetaData                              = wire[com.waz.service.assets.MetaDataService]
   lazy val assets: AssetService                       = wire[AssetServiceImpl]
-  lazy val users: UserServiceImpl                     = wire[UserServiceImpl]
+  lazy val users: UserService                         = wire[UserServiceImpl]
   lazy val conversations: ConversationsService        = wire[ConversationsServiceImpl]
   lazy val convsNotifier                              = wire[ConversationsNotifier]
   lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
   lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
-  lazy val convsStats                                 = wire[ConversationsListStateServiceImpl]
-  lazy val teams: TeamsServiceImpl                    = wire[TeamsServiceImpl]
+  lazy val convsStats: ConversationsListStateService  = wire[ConversationsListStateServiceImpl]
+  lazy val teams: TeamsService                        = wire[TeamsServiceImpl]
   lazy val integrations: IntegrationsService          = wire[IntegrationsServiceImpl]
   lazy val messages: MessagesServiceImpl              = wire[MessagesServiceImpl]
   lazy val verificationUpdater                        = wire[VerificationStateUpdater]

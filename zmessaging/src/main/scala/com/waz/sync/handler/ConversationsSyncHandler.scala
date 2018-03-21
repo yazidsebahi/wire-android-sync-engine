@@ -24,12 +24,12 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
 import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.{ConversationStorage, MessagesStorageImpl}
+import com.waz.content.{ConversationStorage, MessagesStorage}
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdaterImpl, ConversationsService}
-import com.waz.service.messages.MessagesServiceImpl
+import com.waz.service.messages.MessagesService
 import com.waz.sync.SyncResult
 import com.waz.sync.client.ConversationsClient
 import com.waz.sync.client.ConversationsClient.ConversationResponse.ConversationsResult
@@ -45,10 +45,9 @@ object ConversationsSyncHandler {
 }
 
 class ConversationsSyncHandler(selfUserId:          UserId,
-                               assetSync:           AssetSyncHandler,
-                               userService:         UserServiceImpl,
-                               messagesStorage:     MessagesStorageImpl,
-                               messagesService:     MessagesServiceImpl,
+                               userService:         UserService,
+                               messagesStorage:     MessagesStorage,
+                               messagesService:     MessagesService,
                                convService:         ConversationsService,
                                convs:               ConversationsContentUpdaterImpl,
                                convEvents:          ConversationOrderEventsService,

@@ -24,7 +24,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.{EphemeralExpiration, Message}
 import com.waz.cache.CacheService
-import com.waz.content.{GlobalPreferences, MembersStorage, MessagesStorageImpl}
+import com.waz.content.{GlobalPreferences, MembersStorage, MessagesStorage}
 import com.waz.model.AssetData.{ProcessingTaskKey, UploadTaskKey}
 import com.waz.model.AssetStatus.{Syncable, UploadCancelled, UploadFailed}
 import com.waz.model.ConversationData.ConversationType
@@ -33,7 +33,7 @@ import com.waz.model._
 import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdater}
-import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
+import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
 import com.waz.service.otr.OtrServiceImpl
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{MetaDataService, _}
@@ -53,21 +53,21 @@ import scala.concurrent.Future.successful
 
 class MessagesSyncHandler(selfUserId: UserId,
                           context:    Context,
-                          service:    MessagesServiceImpl,
+                          service:    MessagesService,
                           msgContent: MessagesContentUpdater,
                           convEvents: ConversationOrderEventsService,
                           client:     MessagesClient,
                           otr:        OtrServiceImpl,
                           otrSync:    OtrSyncHandler,
                           convs:      ConversationsContentUpdater,
-                          storage:    MessagesStorageImpl,
+                          storage:    MessagesStorage,
                           assetSync:  AssetSyncHandler,
                           network:    DefaultNetworkModeService,
                           metadata:   MetaDataService,
                           prefs:      GlobalPreferences,
                           sync:       SyncServiceHandle,
                           assets:     AssetService,
-                          users:      UserServiceImpl,
+                          users:      UserService,
                           cache:      CacheService,
                           members:    MembersStorage,
                           tracking:   TrackingService,

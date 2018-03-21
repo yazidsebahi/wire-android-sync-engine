@@ -23,7 +23,7 @@ import com.waz.api.IConversation.{Access, AccessRole}
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{UserId, _}
-import com.waz.service.UserServiceImpl
+import com.waz.service.UserService
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
@@ -63,11 +63,11 @@ trait ConversationsContentUpdater {
                                     accessRole: AccessRole = AccessRole.PRIVATE): Future[ConversationData]
 }
 
-class ConversationsContentUpdaterImpl(val storage:     ConversationStorageImpl,
+class ConversationsContentUpdaterImpl(val storage:     ConversationStorage,
                                       teamId:          Option[TeamId],
-                                      users:           UserServiceImpl,
-                                      membersStorage:  MembersStorageImpl,
-                                      messagesStorage: => MessagesStorageImpl,
+                                      users:           UserService,
+                                      membersStorage:  MembersStorage,
+                                      messagesStorage: => MessagesStorage,
                                       tracking:        TrackingService) extends ConversationsContentUpdater {
   import com.waz.utils.events.EventContext.Implicits.global
 

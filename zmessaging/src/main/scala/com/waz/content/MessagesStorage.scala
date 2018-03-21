@@ -44,6 +44,7 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   //def for tests
   def messageAdded:    EventStream[Seq[MessageData]]
   def messageUpdated:  EventStream[Seq[(MessageData, MessageData)]]
+  def messageChanged:  EventStream[Seq[MessageData]]
   def onMessageSent:   SourceStream[MessageData]
   def onMessageFailed: SourceStream[(MessageData, ErrorResponse)]
 
@@ -56,6 +57,9 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def getMessage(id: MessageId):    Future[Option[MessageData]]
   def getMessages(ids: MessageId*): Future[Seq[Option[MessageData]]]
 
+  def msgsIndex(conv: ConvId): Future[ConvMessagesIndex]
+  def msgsFilteredIndex(conv: ConvId, messageFilter: MessageFilter): Future[ConvMessagesIndex]
+
   def findLocalFrom(conv: ConvId, time: Instant): Future[IndexedSeq[MessageData]]
 
   //System message events no longer have IDs, so we need to search by type, timestamp and sender
@@ -65,6 +69,12 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def getLastSentMessage(conv: ConvId): Future[Option[MessageData]]
   def lastLocalMessage(conv: ConvId, tpe: Message.Type): Future[Option[MessageData]]
   def countLaterThan(conv: ConvId, time: Instant): Future[Long]
+
+  def findMessagesFrom(conv: ConvId, time: Instant): Future[IndexedSeq[MessageData]]
+
+  def clear(convId: ConvId, clearTime: Instant): Future[Unit]
+
+  def lastMessageFromSelfAndFromOther(conv: ConvId): Signal[(Option[MessageData], Option[MessageData])]
 }
 
 class MessagesStorageImpl(context: Context,
@@ -281,7 +291,7 @@ trait MessageAndLikesStorage {
   def sortedLikes(likes: Likes, selfUserId: UserId): (IndexedSeq[UserId], Boolean)
 }
 
-class MessageAndLikesStorageImpl(selfUserId: UserId, messages: MessagesStorageImpl, likings: ReactionsStorageImpl) extends MessageAndLikesStorage {
+class MessageAndLikesStorageImpl(selfUserId: UserId, messages: MessagesStorage, likings: ReactionsStorageImpl) extends MessageAndLikesStorage {
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 

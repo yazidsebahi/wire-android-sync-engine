@@ -20,7 +20,7 @@ package com.waz.service.conversation
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.content.ContentChange.{Added, Removed, Updated}
-import com.waz.content.{ContentChange, ConversationStorageImpl}
+import com.waz.content.{ContentChange, ConversationStorage}
 import com.waz.model.{ConvId, ConversationData}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.threading.SerialDispatchQueue
@@ -30,7 +30,7 @@ import com.waz.utils.events._
 import scala.concurrent.Future
 
 
-class ConversationsNotifier(convs: ConversationStorageImpl, service: ConversationsService) {
+class ConversationsNotifier(convs: ConversationStorage, service: ConversationsService) {
   import ConversationsNotifier._
   import com.waz.utils.events.EventContext.Implicits.global
 
@@ -51,7 +51,7 @@ object ConversationsNotifier {
   val ConversationListOrdering = Ordering.by((c : ConversationData) => (c.convType == ConversationType.Self, c.lastEventTime)).reverse
   val ArchivedListOrdering = Ordering.by((c: ConversationData) => c.lastEventTime).reverse
 
-  class ConversationEventsEventStream(convs: ConversationStorageImpl, filter: ConversationData => Boolean) extends events.EventStream[ContentChange[ConvId, _ <: ConversationData]] {
+  class ConversationEventsEventStream(convs: ConversationStorage, filter: ConversationData => Boolean) extends events.EventStream[ContentChange[ConvId, _ <: ConversationData]] {
 
     import com.waz.utils.events.EventContext.Implicits.global
     @volatile var observers = Seq.empty[Subscription]
@@ -71,7 +71,7 @@ object ConversationsNotifier {
       observers foreach { _.destroy() }
   }
 
-  class SelfConversationSignal(convs: ConversationStorageImpl, getSelf: => Future[Option[ConversationData]]) extends Signal[Option[ConversationData]] {
+  class SelfConversationSignal(convs: ConversationStorage, getSelf: => Future[Option[ConversationData]]) extends Signal[Option[ConversationData]] {
 
     import com.waz.utils.events.EventContext.Implicits.global
 

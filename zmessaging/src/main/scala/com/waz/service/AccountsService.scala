@@ -77,7 +77,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   private[waz] val accountMap = new mutable.HashMap[AccountId, AccountManager]()
 
-  lazy val context  = global.context
   val prefs         = global.prefs
   val storage       = global.accountsStorage
   val phoneNumbers  = global.phoneNumbers

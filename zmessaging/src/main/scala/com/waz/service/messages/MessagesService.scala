@@ -57,6 +57,7 @@ trait MessagesService {
   def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
   def addMemberLeaveMessage(convId: ConvId, selfUserId: UserId, user: UserId): Future[Any]
   def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String, needsSyncing: Boolean = true): Future[Option[MessageData]]
+  def addHistoryLostMessages(cs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
 
   def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
   def addOtrVerifiedMessage(convId: ConvId): Future[Option[MessageData]]
@@ -67,6 +68,11 @@ trait MessagesService {
 
   def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = now(clock), state: Message.Status = Message.Status.PENDING): Future[Option[MessageData]]
   def applyMessageEdit(convId: ConvId, userId: UserId, time: Instant, gm: GenericMessage): Future[Option[MessageData]]
+
+  def removeLocalMemberJoinMessage(convId: ConvId, users: Set[UserId]): Future[Any]
+
+  def messageSent(convId: ConvId, msg: MessageData): Future[Option[MessageData]]
+  def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse): Future[Option[MessageData]]
 }
 
 class MessagesServiceImpl(selfUserId: UserId,
@@ -261,7 +267,7 @@ class MessagesServiceImpl(selfUserId: UserId,
     }
   }
 
-  def removeLocalMemberJoinMessage(convId: ConvId, users: Set[UserId]) = {
+  def removeLocalMemberJoinMessage(convId: ConvId, users: Set[UserId]): Future[Any] = {
     storage.lastLocalMessage(convId, Message.Type.MEMBER_JOIN) flatMap {
       case Some(msg) =>
         val members = msg.members -- users
@@ -317,7 +323,7 @@ class MessagesServiceImpl(selfUserId: UserId,
       case _ => successful(None)
     }
 
-  def messageSent(convId: ConvId, msg: MessageData) = {
+  def messageSent(convId: ConvId, msg: MessageData): Future[Option[MessageData]] = {
     updater.updateMessage(msg.id) { m => m.copy(state = Message.Status.SENT, expiryTime = m.ephemeral.expiryFromNow()) } andThen {
       case Success(Some(m)) => storage.onMessageSent ! m
     }
@@ -337,7 +343,7 @@ class MessagesServiceImpl(selfUserId: UserId,
   override def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
     updater.addMessage(MessageData(MessageId(), convId, Message.Type.SUCCESSFUL_CALL, from, time = time, duration = duration))
 
-  def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
+  def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse): Future[Option[MessageData]] =
     updateMessageState(convId, msg.id, Message.Status.FAILED) andThen {
       case Success(Some(m)) => storage.onMessageFailed ! (m, error)
     }

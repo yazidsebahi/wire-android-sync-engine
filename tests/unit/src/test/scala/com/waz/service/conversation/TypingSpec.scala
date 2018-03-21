@@ -23,7 +23,7 @@ import com.waz._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.{StorageModule, Timeouts, UiLifeCycle, UiLifeCycleImpl}
-import com.waz.testutils.EmptySyncService
+import com.waz.testutils.{EmptySyncService, TestGlobalPreferences}
 import com.waz.testutils.Matchers._
 import com.waz.utils.events.EventContext
 import org.scalatest.matchers.Matcher

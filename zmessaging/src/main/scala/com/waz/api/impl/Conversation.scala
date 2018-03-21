@@ -20,7 +20,7 @@ package com.waz.api.impl
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.conversation.BaseConversation
-import com.waz.content.UsersStorageImpl
+import com.waz.content.UsersStorage
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.{ConvId, ConversationData, UserId}
 import com.waz.threading.Threading
@@ -67,7 +67,7 @@ object Conversation {
     override def toUpdateMap(values: Seq[ConversationData]) = values.map(c => c.id -> c)(collection.breakOut)
   }
 
-  def isOtto(conv: ConversationData, users: UsersStorageImpl): Future[Boolean] =
+  def isOtto(conv: ConversationData, users: UsersStorage): Future[Boolean] =
     if (conv.convType == ConversationType.OneToOne) users.get(UserId(conv.id.str)).map(_.exists(_.isWireBot))(Threading.Background)
     else successful(false)
 }

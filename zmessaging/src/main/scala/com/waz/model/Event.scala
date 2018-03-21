@@ -54,8 +54,6 @@ sealed trait Event {
     this
   }
 
-  def hasLocalTime: Boolean = localTime != UnknownDateTime
-
   def maybeLocalTime: Option[Instant] = if (localTime == UnknownDateTime) None else Some(localTime.instant)
 }
 
