@@ -67,7 +67,6 @@ class MessagesSyncHandler(selfUserId: UserId,
                           prefs:      GlobalPreferences,
                           sync:       SyncServiceHandle,
                           assets:     AssetService,
-                          users:      UserService,
                           cache:      CacheService,
                           members:    MembersStorage,
                           tracking:   TrackingService,
@@ -108,7 +107,7 @@ class MessagesSyncHandler(selfUserId: UserId,
 
         otrSync.postOtrMessage(conv.id, conv.remoteId, msg, Some(recipients), nativePush = false) map {
           case Left(e) => SyncResult(e)
-          case Right(time) => SyncResult.Success
+          case Right(_) => SyncResult.Success
         }
       case None =>
         successful(SyncResult(internalError("conversation not found")))
@@ -149,7 +148,7 @@ class MessagesSyncHandler(selfUserId: UserId,
         tracking.exception(new Exception("postMessage failed, couldn't find conversation for msg"), "postMessage failed, couldn't find conversation for msg")
         service.messageDeliveryFailed(msg.convId, msg, internalError("conversation not found")) map (_ => SyncResult.aborted())
 
-      case (msg, conv) =>
+      case _ =>
         tracking.exception(new Exception("postMessage failed, couldn't find a message nor conversation"), "postMessage failed, couldn't find a message nor conversation")
         successful(SyncResult.aborted())
     }
@@ -255,24 +254,29 @@ class MessagesSyncHandler(selfUserId: UserId,
           convLock.release()
           //send preview
           CancellableFuture.lift(asset.previewId.map(assets.getAssetData).getOrElse(Future successful None)).flatMap {
-            case Some(prev) => assetSync.uploadAssetData(prev.id).flatMap {
-              case Right(Some(updated)) =>
-                postAssetMessage(asset, Some(updated)).map {
-                  case (Right(_)) => Right(Some(updated))
-                  case (Left(err)) => Left(err)
+            case Some(prev) =>
+              service.retentionPolicy(conv).flatMap { retention =>
+                assetSync.uploadAssetData(prev.id, retention = retention).flatMap {
+                  case Right(Some(updated)) =>
+                    postAssetMessage(asset, Some(updated)).map {
+                      case (Right(_)) => Right(Some(updated))
+                      case (Left(err)) => Left(err)
+                    }
+                  case Right(None) => CancellableFuture successful Right(None)
+                  case Left(err) => CancellableFuture successful Left(err)
                 }
-              case Right(None) => CancellableFuture successful Right(None)
-              case Left(err) => CancellableFuture successful Left(err)
-            }
+              }
             case None => CancellableFuture successful Right(None)
           }.flatMap { //send asset
             case Right(prev) =>
-              assetSync.uploadAssetData(asset.id).flatMap {
-                case Right(Some(updated)) => postAssetMessage(updated, prev).map(_.fold(Left(_), _ => Right(origTime)))
-                case Right(None) => CancellableFuture successful Right(Instant.EPOCH) //TODO Dean: what's a good default
-                case Left(err) if err.message.contains(AssetSyncHandler.AssetTooLarge) =>
-                  CancellableFuture.lift(errors.addAssetTooLargeError(conv.id, msg.id).map {_ => Left(err)})
-                case Left(err) => CancellableFuture successful Left(err)
+              service.retentionPolicy(conv).flatMap { retention =>
+                assetSync.uploadAssetData(asset.id, retention = retention).flatMap {
+                  case Right(Some(updated)) => postAssetMessage(updated, prev).map(_.fold(Left(_), _ => Right(origTime)))
+                  case Right(None) => CancellableFuture successful Right(Instant.EPOCH) //TODO Dean: what's a good default
+                  case Left(err) if err.message.contains(AssetSyncHandler.AssetTooLarge) =>
+                    CancellableFuture.lift(errors.addAssetTooLargeError(conv.id, msg.id).map { _ => Left(err) })
+                  case Left(err) => CancellableFuture successful Left(err)
+                }
               }
             case Left(err) => CancellableFuture successful Left(err)
           }

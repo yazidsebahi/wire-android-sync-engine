@@ -21,7 +21,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message}
-import com.waz.content.{EditHistoryStorage, MessagesStorage}
+import com.waz.content.{EditHistoryStorage, MembersStorage, MessagesStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
 import com.waz.model.{MessageId, _}
@@ -30,10 +30,11 @@ import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.VerificationStateUpdater.{ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.AssetClient.Retention
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{EventContext, Signal}
 import org.threeten.bp.Instant.now
 import org.threeten.bp.{Duration, Instant}
 
@@ -73,6 +74,7 @@ trait MessagesService {
 
   def messageSent(convId: ConvId, msg: MessageData): Future[Option[MessageData]]
   def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse): Future[Option[MessageData]]
+  def retentionPolicy(convData: ConversationData): CancellableFuture[Retention]
 }
 
 class MessagesServiceImpl(selfUserId: UserId,
@@ -81,6 +83,9 @@ class MessagesServiceImpl(selfUserId: UserId,
                           edits:      EditHistoryStorage,
                           convs:      ConversationsContentUpdater,
                           network:    NetworkModeService,
+                          teamId:     Option[TeamId],
+                          members:    MembersStorage,
+                          users:      UserService,
                           sync:       SyncServiceHandle) extends MessagesService {
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -358,4 +363,22 @@ class MessagesServiceImpl(selfUserId: UserId,
         if (msg.state == Status.FAILED) msg.copy(state = Status.FAILED_READ)
         else msg
       }
+
+  override def retentionPolicy(convData: ConversationData): CancellableFuture[Retention] = {
+    def checkConv(convId: ConvId) =
+      members
+        .activeMembers(convId)
+        .flatMap(p => Signal.sequence(p.map(users.userSignal).toSeq: _*)
+          .map(_.exists(_.teamId.isDefined)))
+
+    val result = if (teamId.isDefined || convData.team.isDefined) {
+      checkConv(convData.id).map {
+        case true => Retention.EternalInfrequentAccess
+        case false => Retention.Expiring
+      }
+    } else {
+      Signal.const(Retention.Expiring)
+    }
+    CancellableFuture.lift(result.head)
+  }
 }

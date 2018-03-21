@@ -43,6 +43,7 @@ case class UserInfo(id:           UserId,
                     handle:       Option[Handle]          = None,
                     privateMode:  Option[Boolean]         = None,
                     service:      Option[Service]         = None,
+                    teamId:       Option[TeamId]          = None,
                     expiresAt:    Option[Instant]         = None
                    ) {
   //TODO Dean - this will actually prevent deleting profile pictures, since the empty seq will be mapped to a None,
@@ -116,7 +117,7 @@ object UserInfo {
       UserInfo(
         id, 'name, accentId, 'email, 'phone, Some(pic), decodeOptString('tracking_id) map (TrackingId(_)),
         deleted = 'deleted, handle = 'handle, privateMode = privateMode, service = decodeOptService('service),
-        decodeOptISOInstant('expires_at))
+        'team, decodeOptISOInstant('expires_at))
     }
   }
 

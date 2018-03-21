@@ -80,7 +80,8 @@ case class UserData(id:                    UserId,
     },
     providerId = user.service.map(_.provider),
     integrationId = user.service.map(_.id),
-    expiresAt = user.expiresAt
+    expiresAt = user.expiresAt,
+    teamId = user.teamId.orElse(teamId)
   )
 
   def updated(user: UserSearchEntry): UserData = copy(

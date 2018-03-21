@@ -26,7 +26,6 @@ import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
 import scala.collection._
-import scala.concurrent.Future
 
 trait NotificationStorage extends CachedStorage[NotId, NotificationData] {
   def notifications: Signal[Map[NotId, NotificationData]]
