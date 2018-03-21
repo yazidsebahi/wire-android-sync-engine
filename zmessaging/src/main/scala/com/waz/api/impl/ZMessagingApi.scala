@@ -84,26 +84,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     createCount -= 1
   }
 
-  override def onInit(listener: api.InitListener): Unit = accounts.getActiveAccount onComplete {
-    case Success(accountData) =>
-      debug(s"initFuture completed, loggedUser: $accountData")
-      // FIXME: this ensures that self is loaded, but it's pretty ugly
-      ui.users.selfUser.update(accountData)
-      ui.convs.convsList // force convs list loading
-      debug(s"Time needed for startup: ${(System.nanoTime - startTime) / 1000 / 1000f} ms" )
-      listener.onInitialized(ui.users.selfUser)
-    case res =>
-      error(s"initFuture failed: $res")
-  }
-
   override def getSelf: Self = ui.users.selfUser
-
-  override def logout() = ui.currentAccount.head flatMap {
-    case Some(acc) =>
-      verbose(s"logout $acc")
-      acc.logout(flushCredentials = true)
-    case None => Future.successful(())
-  }
 
   override def getConversations = ui.convs.convsList
 

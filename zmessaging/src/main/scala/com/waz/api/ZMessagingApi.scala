@@ -37,10 +37,6 @@ trait ZMessagingApi {
 
   def onDestroy(): Unit
 
-  def onInit(callback: InitListener): Unit
-
-  def logout(): Unit
-
   def getSelf: Self
 
   def getConversations: ConversationsList
