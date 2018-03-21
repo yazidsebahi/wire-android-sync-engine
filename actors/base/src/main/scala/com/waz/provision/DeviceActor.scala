@@ -26,8 +26,8 @@ import android.content.Context
 import android.view.View
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.LogTag
-import com.waz.api.{impl, _}
 import com.waz.api.impl.DoNothingAndProceed
+import com.waz.api.{impl, _}
 import com.waz.content.{Database, GlobalDatabase, GlobalPreferences}
 import com.waz.log.{InternalLog, LogOutput}
 import com.waz.media.manager.context.IntensityLevel
@@ -37,11 +37,9 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.ClientId
 import com.waz.model.{ConvId, Liking, RConvId, MessageContent => _, _}
 import com.waz.provision.DeviceActor.responseTimeout
-import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.service.AccountManager.ClientRegistrationState.Registered
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
-import com.waz.service.otr.CryptoBoxService
 import com.waz.testutils.Implicits._
 import com.waz.threading.{DispatchQueueStats, _}
 import com.waz.ui.UiModule
@@ -120,16 +118,16 @@ class DeviceActor(val deviceName: String,
 
     override lazy val flowmanager = new FlowManagerService {
       override def flowManager = None
-      override def getVideoCaptureDevices = Future.successful(Vector())
-      override def setVideoCaptureDevice(id: RConvId, deviceId: String) = Future.successful(())
-      override def setVideoPreview(view: View) = Future.successful(())
-      override def setVideoView(id: RConvId, partId: Option[UserId], view: View) = Future.successful(())
-      override val cameraFailedSig = Signal[Boolean](false)
-    }
 
-    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(global) {
-      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, accountManager: AccountManager, storage: StorageModule, cryptoBox: CryptoBoxService): ZMessaging =
-        new ZMessaging(teamId, clientId, accountManager, storage, cryptoBox)
+      override def getVideoCaptureDevices = Future.successful(Vector())
+
+      override def setVideoCaptureDevice(id: RConvId, deviceId: String) = Future.successful(())
+
+      override def setVideoPreview(view: View) = Future.successful(())
+
+      override def setVideoView(id: RConvId, partId: Option[UserId], view: View) = Future.successful(())
+
+      override val cameraFailedSig = Signal[Boolean](false)
     }
 
     override lazy val mediaManager = new MediaManagerService {
