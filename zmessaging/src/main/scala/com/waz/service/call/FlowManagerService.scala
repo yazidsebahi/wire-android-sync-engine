@@ -26,6 +26,7 @@ import com.waz.content.GlobalPreferences
 import com.waz.content.GlobalPreferences._
 import com.waz.model._
 import com.waz.service._
+import com.waz.service.call.FlowManagerService.VideoCaptureDevice
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events._
@@ -36,6 +37,12 @@ import scala.util.Try
 
 trait FlowManagerService {
   def flowManager: Option[FlowManager]
+  def getVideoCaptureDevices: Future[Vector[VideoCaptureDevice]]
+  def setVideoCaptureDevice(id: RConvId, deviceId: String): Future[Unit]
+  def setVideoPreview(view: View): Future[Unit]
+  def setVideoView(id: RConvId, partId: Option[UserId], view: View): Future[Unit]
+
+  val cameraFailedSig: Signal[Boolean]
 }
 
 class DefaultFlowManagerService(context:      Context,
@@ -48,7 +55,7 @@ class DefaultFlowManagerService(context:      Context,
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "FlowManagerService")
 
-  val cameraFailedSig = Signal[Boolean]
+  override val cameraFailedSig = Signal[Boolean]()
 
   network.networkMode {  _ =>
     doWithFlowManager(_.networkChanged())

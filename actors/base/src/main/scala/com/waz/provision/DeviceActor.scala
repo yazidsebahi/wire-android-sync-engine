@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
+import android.view.View
 import com.waz.ZLog.LogTag
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api._
@@ -37,6 +38,7 @@ import com.waz.model.{ConvId, Liking, RConvId, MessageContent => _, _}
 import com.waz.provision.DeviceActor.responseTimeout
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
+import com.waz.service.call.FlowManagerService.VideoCaptureDevice
 import com.waz.testutils.Implicits._
 import com.waz.threading._
 import com.waz.ui.UiModule
@@ -115,6 +117,16 @@ class DeviceActor(val deviceName: String,
 
     override lazy val flowmanager = new FlowManagerService {
       override def flowManager = None
+
+      override def getVideoCaptureDevices = Future.successful(Vector())
+
+      override def setVideoCaptureDevice(id: RConvId, deviceId: String) = Future.successful(())
+
+      override def setVideoPreview(view: View) = Future.successful(())
+
+      override def setVideoView(id: RConvId, partId: Option[UserId], view: View) = Future.successful(())
+
+      override val cameraFailedSig = Signal[Boolean](false)
     }
 
     override lazy val mediaManager = new MediaManagerService {
