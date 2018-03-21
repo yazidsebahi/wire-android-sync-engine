@@ -90,6 +90,7 @@ class UserSearchService(selfUserId:           UserId,
         !excluded.contains(user.id) &&
           selfUserId != user.id &&
           !user.isWireBot &&
+          user.expiresAt.isEmpty &&
           ((SearchKey(filter).isAtTheStartOfAnyWordIn(user.searchKey) && !isHandle) || user.handle.exists(_.startsWithQuery(filter)) || user.email.exists(e => filter.trim.equalsIgnoreCase(e.str))) &&
           (showBlockedUsers || (user.connection != ConnectionStatus.Blocked))
       }.toIndexedSeq

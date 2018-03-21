@@ -29,31 +29,31 @@ import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.utils._
 import com.waz.utils.wrappers.{DB, DBCursor}
 import org.json.JSONObject
+import org.threeten.bp.Instant
 
-case class UserData(
-                     id:                    UserId,
-                     teamId:                Option[TeamId]        = None,
-                     name:                  String,
-                     email:                 Option[EmailAddress]  = None,
-                     phone:                 Option[PhoneNumber]   = None,
-                     trackingId:            Option[TrackingId]    = None,
-                     picture:               Option[AssetId]       = None,
-                     accent:                Int                   = 0, // accent color id
-                     searchKey:             SearchKey,
-                     connection:            ConnectionStatus      = ConnectionStatus.Unconnected,
-                     connectionLastUpdated: Date                  = new Date(0), // server side timestamp of last connection update
-                     connectionMessage:     Option[String]        = None, // incoming connection request message
-                     conversation:          Option[RConvId]       = None, // remote conversation id with this contact (one-to-one)
-                     relation:              Relation              = Relation.Other, //unused - remove in future migration
-                     syncTimestamp:         Long                  = 0,
-                     displayName:           String                = "",
-                     verified:              Verification          = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
-                     deleted:               Boolean               = false,
-                     availability:          Availability          = Availability.None,
-                     handle:                Option[Handle]        = None,
-                     providerId:            Option[ProviderId]    = None,
-                     integrationId:         Option[IntegrationId] = None
-                   ) {
+case class UserData(id:                    UserId,
+                    teamId:                Option[TeamId]        = None,
+                    name:                  String,
+                    email:                 Option[EmailAddress]  = None,
+                    phone:                 Option[PhoneNumber]   = None,
+                    trackingId:            Option[TrackingId]    = None,
+                    picture:               Option[AssetId]       = None,
+                    accent:                Int                   = 0, // accent color id
+                    searchKey:             SearchKey,
+                    connection:            ConnectionStatus      = ConnectionStatus.Unconnected,
+                    connectionLastUpdated: Date                  = new Date(0), // server side timestamp of last connection update
+                    connectionMessage:     Option[String]        = None, // incoming connection request message
+                    conversation:          Option[RConvId]       = None, // remote conversation id with this contact (one-to-one)
+                    relation:              Relation              = Relation.Other, //unused - remove in future migration
+                    syncTimestamp:         Long                  = 0,
+                    displayName:           String                = "",
+                    verified:              Verification          = Verification.UNKNOWN, // user is verified if he has any otr client, and all his clients are verified
+                    deleted:               Boolean               = false,
+                    availability:          Availability          = Availability.None,
+                    handle:                Option[Handle]        = None,
+                    providerId:            Option[ProviderId]    = None,
+                    integrationId:         Option[IntegrationId] = None,
+                    expiresAt:             Option[Instant]       = None) {
 
   def isConnected = ConnectionStatus.isConnected(connection)
   def hasEmailOrPhone = email.isDefined || phone.isDefined
@@ -79,7 +79,8 @@ case class UserData(
       case _ => handle
     },
     providerId = user.service.map(_.provider),
-    integrationId = user.service.map(_.id)
+    integrationId = user.service.map(_.id),
+    expiresAt = user.expiresAt
   )
 
   def updated(user: UserSearchEntry): UserData = copy(
@@ -158,7 +159,7 @@ object UserData {
   }
 
   // used for testing only
-  def apply(name: String): UserData = UserData(UserId(), None, name, None, None, searchKey = SearchKey.simple(name), handle = None)
+  def apply(name: String): UserData = UserData(UserId(), name = name, searchKey = SearchKey.simple(name))
 
   def apply(id: UserId, name: String): UserData = UserData(id, None, name, None, None, searchKey = SearchKey(name), handle = None)
 
@@ -186,7 +187,9 @@ object UserData {
       conversation = decodeOptRConvId('rconvId), relation = Relation.withId('relation),
       syncTimestamp = decodeLong('syncTimestamp), 'displayName, Verification.valueOf('verified), deleted = 'deleted,
       availability = Availability(decodeInt('activityStatus)), handle = decodeOptHandle('handle),
-      providerId = decodeOptId[ProviderId]('providerId), integrationId = decodeOptId[IntegrationId]('integrationId) )
+      providerId = decodeOptId[ProviderId]('providerId), integrationId = decodeOptId[IntegrationId]('integrationId),
+      expiresAt = decodeOptISOInstant('expires_at)
+    )
   }
 
   implicit lazy val Encoder: JsonEncoder[UserData] = new JsonEncoder[UserData] {
@@ -212,6 +215,7 @@ object UserData {
       v.handle foreach(u => o.put("handle", u.string))
       v.providerId.foreach { pId => o.put("providerId", pId.str) }
       v.integrationId.foreach { iId => o.put("integrationId", iId.str) }
+      v.expiresAt.foreach(v => o.put("expires_at", v))
     }
   }
 
@@ -238,16 +242,17 @@ object UserData {
     val Handle = opt(handle('handle))(_.handle)
     val ProviderId = opt(id[ProviderId]('provider_id))(_.providerId)
     val IntegrationId = opt(id[IntegrationId]('integration_id))(_.integrationId)
+    val ExpiresAt = opt(timestamp('expires_at))(_.expiresAt)
 
     override val idCol = Id
     override val table = Table(
       "Users", Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage,
-      Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle, ProviderId, IntegrationId
+      Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle, ProviderId, IntegrationId, ExpiresAt
     )
 
     override def apply(implicit cursor: DBCursor): UserData = new UserData(
       Id, TeamId, Name, Email, Phone, TrackingId, Picture, Accent, SKey, Conn, ConnTime, ConnMessage,
-      Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle, ProviderId, IntegrationId
+      Conversation, Rel, Timestamp, DisplayName, Verified, Deleted, AvailabilityStatus, Handle, ProviderId, IntegrationId, ExpiresAt
     )
 
     override def onCreate(db: DB): Unit = {

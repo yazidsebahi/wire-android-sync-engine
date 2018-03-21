@@ -34,6 +34,7 @@ import scala.util.control.NonFatal
 
 trait PushNotificationsClient {
   def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse]
+  def loadLastNotification(clientId: ClientId): ErrorOrResponse[LoadNotificationsResponse]
 }
 
 class PushNotificationsClientImpl(netClient: ZNetClient, pageSize: Int = PushNotificationsClient.PageSize) extends PushNotificationsClient {
@@ -41,16 +42,27 @@ class PushNotificationsClientImpl(netClient: ZNetClient, pageSize: Int = PushNot
   import Threading.Implicits.Background
 
   override def loadNotifications(since: Option[Uid], client: ClientId): ErrorOrResponse[LoadNotificationsResponse] =
-    netClient.chainedWithErrorHandling(RequestTag, Request.Get(notificationsPath(since, client, pageSize))) {
+    netClient.chainedWithErrorHandling(NotifsRequestTag, Request.Get(notificationsPath(since, client, pageSize))) {
       case Response(status, PagedNotificationsResponse((notifications, hasMore, time)), _) if status.isSuccess =>
         CancellableFuture.successful(Right(LoadNotificationsResponse(notifications, hasMore, time)))
     }
+
+  override def loadLastNotification(clientId: ClientId) = {
+    netClient.chainedWithErrorHandling(LastNotifRequetTag, Request.Get(Request.query(NotificationsLastPath, "client" -> clientId))) {
+      case Response(status, NotificationsResponseEncoded(nots), _) if status.isSuccess =>
+        CancellableFuture.successful(Right(LoadNotificationsResponse(Vector(nots), hasMore = false, None)))
+    }
+  }
 }
 
 object PushNotificationsClient {
-  val RequestTag = "loadNotifications"
+
+  val NotifsRequestTag = "loadNotifications"
+  val LastNotifRequetTag = "loadLastNotifications"
+
   val NotificationsPath = "/notifications"
-  val PageSize = 1000
+  val NotificationsLastPath = "/notifications/last"
+  val PageSize = 500
 
   def notificationsPath(since: Option[Uid], client: ClientId, pageSize: Int) = {
     val args = Seq("since" -> since, "client" -> Some(client), "size" -> Some(pageSize)) collect { case (key, Some(v)) => key -> v }
@@ -71,18 +83,6 @@ object PushNotificationsClient {
     } catch {
       case NonFatal(e) =>
         warn(s"couldn't parse paged push notifications from response: $response", e)
-        None
-    }
-  }
-
-  object NotificationsResponse {
-    def unapplySeq(response: ResponseContent): Option[Seq[PushNotification]] = try response match {
-      case JsonObjectResponse(js) => Some(Vector(implicitly[JsonDecoder[PushNotification]].apply(js)))
-      case JsonArrayResponse(js) => Some(arrayColl[PushNotification, Vector](js))
-      case _ => None
-    } catch {
-      case NonFatal(e) =>
-        warn(s"couldn't parse push notification(s) from response: $response", e)
         None
     }
   }

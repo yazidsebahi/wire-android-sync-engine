@@ -235,12 +235,12 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       case None => None
     }
 
-  override def setConversationName(id: ConvId, name: String): Future[Option[ConversationData]] = users.withSelfUserFuture { selfUserId =>
+  override def setConversationName(id: ConvId, name: String): Future[Option[ConversationData]] = {
     verbose(s"setConversationName($id, $name)")
     convsContent.updateConversationName(id, name) flatMap {
       case Some((_, conv)) if conv.name.contains(name) =>
         sync.postConversationName(id, conv.name.getOrElse(""))
-        messages.addRenameConversationMessage(id, selfUserId, name) map (_ => Some(conv))
+        messages.addRenameConversationMessage(id, selfId, name) map (_ => Some(conv))
       case conv =>
         warn(s"Conversation name could not be changed for: $id, conv: $conv")
         CancellableFuture.successful(None)
@@ -284,10 +284,8 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   override def leaveConversation(conv: ConvId): Future[Option[ConversationData]] = {
     verbose(s"leaveConversation($conv)")
     for {
-      updated <- convsContent.setConvActive(conv, active = false)
-      _ <- users.withSelfUserFuture {
-        removeConversationMember(conv, _)
-      }
+      updated  <- convsContent.setConvActive(conv, active = false)
+      _        <- removeConversationMember(conv, selfId)
       archived <- convsContent.updateConversationArchived(conv, archived = true)
     } yield archived.map(_._2).orElse(updated.map(_._2))
   }

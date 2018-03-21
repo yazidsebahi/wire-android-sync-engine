@@ -29,8 +29,8 @@ import org.json
 import org.json.{JSONArray, JSONObject}
 
 import scala.util.Try
-
 import com.waz.model.UserInfo.Service
+import org.threeten.bp.Instant
 
 case class UserInfo(id:           UserId,
                     name:         Option[String]          = None,
@@ -42,7 +42,8 @@ case class UserInfo(id:           UserId,
                     deleted:      Boolean                 = false,
                     handle:       Option[Handle]          = None,
                     privateMode:  Option[Boolean]         = None,
-                    service:      Option[Service]         = None
+                    service:      Option[Service]         = None,
+                    expiresAt:    Option[Instant]         = None
                    ) {
   //TODO Dean - this will actually prevent deleting profile pictures, since the empty seq will be mapped to a None,
   //And so in UserData, the current picture will be used instead...
@@ -114,7 +115,8 @@ object UserInfo {
       val privateMode = decodeOptBoolean('privateMode)
       UserInfo(
         id, 'name, accentId, 'email, 'phone, Some(pic), decodeOptString('tracking_id) map (TrackingId(_)),
-        deleted = 'deleted, handle = 'handle, privateMode = privateMode, service = decodeOptService('service))
+        deleted = 'deleted, handle = 'handle, privateMode = privateMode, service = decodeOptService('service),
+        decodeOptISOInstant('expires_at))
     }
   }
 
@@ -150,7 +152,6 @@ object UserInfo {
       info.accentId.foreach(o.put("accent_id", _))
       info.trackingId.foreach(id => o.put("tracking_id", id.str))
       info.picture.foreach(ps => o.put("assets", encodeAsset(ps)))
-      info.service.foreach( s => o.put("service", encodeService(s)))
     }
   }
 
@@ -159,7 +160,6 @@ object UserInfo {
       info.name.foreach(o.put("name", _))
       info.accentId.foreach(o.put("accent_id", _))
       info.picture.foreach(ps => o.put("assets", encodeAsset(ps)))
-      info.service.foreach( s => o.put("service", encodeService(s)))
     }
   }
 }

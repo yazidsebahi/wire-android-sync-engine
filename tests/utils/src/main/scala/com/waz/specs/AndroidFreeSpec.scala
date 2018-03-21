@@ -142,6 +142,7 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 }
 
 object AndroidFreeSpec {
+
   val clock = TestClock()
 
   val DefaultTimeout = 5.seconds

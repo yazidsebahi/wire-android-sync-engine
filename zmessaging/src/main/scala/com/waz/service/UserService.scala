@@ -19,34 +19,35 @@ package com.waz.service
 
 import java.util.Date
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
 import com.waz.content.UserPreferences.LastSlowSyncTimeKey
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.UserService._
+import com.waz.service.ZMessaging.clock
 import com.waz.service.assets.AssetService
+import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.UsersClient
-import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils._
-import com.waz.utils.events.{AggregatingSignal, EventContext, Signal}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.utils.events._
+import com.waz.utils.{RichInstant, _}
 
 import scala.collection.breakOut
+import scala.concurrent.duration._
 import scala.concurrent.{Awaitable, Future}
 
 trait UserService {
-  def selfUserId: UserId
   def getSelfUserId: Future[Option[UserId]]
   def getSelfUser: Future[Option[UserData]]
   def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
   def getOrCreateUser(id: UserId): Future[UserData]
   def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
-  def withSelfUserFuture[A](f: UserId => Future[A]): Future[A]
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
   def getUsers(ids: Seq[UserId]): Future[Seq[UserData]]
   def getUser(id: UserId): Future[Option[UserData]]
@@ -58,16 +59,16 @@ trait UserService {
   def processAvailability(availability: Map[UserId, Availability]): Future[Any]
 }
 
-class UserServiceImpl(override val selfUserId: UserId,
-                      account:        AccountId,
-                      accounts:       AccountsService,
-                      usersStorage:   UsersStorage,
-                      userPrefs:      UserPreferences,
-                      push:           PushService,
-                      assets:         AssetService,
-                      usersClient:    UsersClient,
-                      sync:           SyncServiceHandle,
-                      assetsStorage:  AssetsStorage) extends UserService {
+class UserServiceImpl(selfUserId:    UserId,
+                      account:       AccountId,
+                      accounts:      AccountsService,
+                      usersStorage:  UsersStorage,
+                      userPrefs:     UserPreferences,
+                      push:          PushService,
+                      assets:        AssetService,
+                      usersClient:   UsersClient,
+                      sync:          SyncServiceHandle,
+                      assetsStorage: AssetsStorage) extends UserService {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -107,12 +108,6 @@ class UserServiceImpl(override val selfUserId: UserId,
     )
 
   private lazy val acceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
-
-  def withSelfUser[A](f: UserId => CancellableFuture[A]) = f(selfUserId)
-
-  def withSelfUserFuture[A](f: UserId => Future[A]) = f(selfUserId)
-
-  def selfUserOrFail: Future[UserId] = withSelfUserFuture(Future(_))
 
   def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
     sync.syncUsers(id)
@@ -279,4 +274,52 @@ class UserServiceImpl(override val selfUserId: UserId,
 
 object UserService {
   val defaultUserName: String = ""
+}
+
+/**
+  * Whenever the selected conversation changes, this small service checks to see which users of that conversation are a
+  * wireless guest user. It then starts a countdown timer for the remaining duration of the life of the user, and at the
+  * end of that timer, fires a sync request to trigger a BE check
+  */
+class ExpiredUsersService(convState: ConversationsListStateService,
+                          push:      PushService,
+                          members:   MembersStorage,
+                          users:     UsersStorage,
+                          sync:      SyncServiceHandle)(implicit ev: AccountContext) {
+
+  private implicit val ec = new SerialDispatchQueue(name = "ExpiringUsers")
+
+  private var timers = Map[UserId, CancellableFuture[Unit]]()
+
+  //if a given user is removed from all conversations, drop the timer
+  members.onDeleted(_.foreach { m =>
+    members.getByUsers(Set(m._1)).map(_.isEmpty).map {
+      case true =>
+        timers.get(m._1).foreach { t =>
+          verbose(s"Cancelled timer for user: ${m._1}")
+          t.cancel()
+        }
+        timers -= m._1
+      case _ =>
+    }
+  })
+
+  for {
+    Some(conv) <- convState.selectedConversationId
+    members    <- members.activeMembers(conv)
+    wireless   <- Signal.sequence(members.map(users.signal).toSeq:_*).map(_.toSet.filter(_.expiresAt.isDefined))
+  } {
+    push.beDrift.head.map { drift =>
+      val woTimer = wireless.filter(u => (wireless.map(_.id) -- timers.keySet).contains(u.id))
+      woTimer.foreach { u =>
+        val delay = (clock.instant() + drift).remainingUntil(u.expiresAt.get + 10.seconds)
+        verbose(s"Creating timer to remove user: ${u.id}:${u.name} in $delay")
+        timers += u.id -> CancellableFuture.delay(delay).map { _ =>
+          verbose(s"Wireless user ${u.id}:${u.name} is expired, informing BE")
+          sync.syncUsers(u.id)
+          timers -= u.id
+        }
+      }
+    }
+  }
 }

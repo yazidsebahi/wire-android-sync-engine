@@ -29,6 +29,7 @@ public enum SyncCommand {
     SyncTeamMember("sync-team-member"),
     SyncConnections("sync-connections"),
     SyncConversation("sync-conv"),
+    SyncConvLink("sync-conv-link"),
     SyncSearchQuery("sync-search"),
     ExactMatchHandle("exact-match"),
     PostConv("post-conv"),

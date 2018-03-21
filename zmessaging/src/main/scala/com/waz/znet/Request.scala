@@ -104,8 +104,9 @@ object Request {
                                 data: Option[A] = None,
                                 baseUri: Option[URI] = None,
                                 requiresAuthentication: Boolean = true,
-                                headers: Map[String, String] = EmptyHeaders) =
-    Request[A](DeleteMethod, resourcePath = Some(path), baseUri = baseUri, data = data, requiresAuthentication = requiresAuthentication, headers = headers)
+                                headers: Map[String, String] = EmptyHeaders,
+                                timeout: FiniteDuration = AsyncClient.DefaultTimeout) =
+    Request[A](DeleteMethod, resourcePath = Some(path), baseUri = baseUri, data = data, requiresAuthentication = requiresAuthentication, headers = headers, timeout = timeout)
 
   def Get(path:                   String,
           baseUri:                Option[URI]                 = None,

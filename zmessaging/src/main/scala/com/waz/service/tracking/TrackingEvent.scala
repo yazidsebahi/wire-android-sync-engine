@@ -34,7 +34,14 @@ import scala.util.Try
 
 trait TrackingEvent {
   val name: String
-  val props: Option[JSONObject]
+  val props: Option[JSONObject] = None
+}
+
+object TrackingEvent {
+
+  //Utility method for simple events
+  def apply(eventName: String): TrackingEvent =
+    new TrackingEvent { override val name = eventName }
 }
 
 trait OptEvent extends TrackingEvent {

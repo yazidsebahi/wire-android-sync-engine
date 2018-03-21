@@ -28,6 +28,8 @@ trait ActorMessage
 
 trait LogisticalMessage extends ActorMessage
 
+trait ResponseMessage extends LogisticalMessage
+
 
 object ActorMessage {
 
@@ -104,19 +106,19 @@ object ActorMessage {
    * A general utility message signifying that the command was executed successfully. Useful if we HAVE to wait
    * on the command being completed before exectution can continue
    */
-  case object Successful extends LogisticalMessage
+  case object Successful extends ResponseMessage
 
   /**
    * Same as [[Successful]] but with a value that results as part of the completion, such as a [[UserId]], for example.
    * @param response successful completion value
    */
-  case class Successful(response: String) extends ActorMessage
+  case class Successful(response: String) extends ResponseMessage
 
   /**
    * A general utility message signifying that something went wrong while an Actor was carrying out a command
    * @param reason A description of the reason for failure
    */
-  case class Failed(reason: String) extends LogisticalMessage
+  case class Failed(reason: String) extends ResponseMessage
 
   /**
    * A message used to basically ping an actor. All actors should simply return this [[ActorMessage]] to the sender
@@ -124,7 +126,7 @@ object ActorMessage {
    * @param msg Some message to be echoed by the target actor
    * @param processName The target Actor would normally respond with its own alias, just for extra certainty
    */
-  case class Echo(msg: String, processName: String = "") extends LogisticalMessage
+  case class Echo(msg: String, processName: String = "") extends ResponseMessage
 
 
   //////////////////////////////////////////////////////////////////////////////
@@ -188,17 +190,8 @@ object ActorMessage {
     */
   case class SendAsset(remoteId: RConvId, data: Array[Byte], mime: String, fileName: String, delayPost: Boolean = false) extends ActorMessage
 
-  //TODO Dean: Remove after v2 transition period
-  case object SetAssetToV3 extends ActorMessage
-
-  case object SetAssetToV2 extends ActorMessage
 
   case class SendGiphy(remoteId: RConvId, searchQuery: String) extends ActorMessage
-
-  /**
-    * If the last message in the given conversation is an asset message, try to cancel the upload
-    */
-  case class CancelAssetUpload(message: MessageId) extends ActorMessage
 
   case class SendFile(remoteId: RConvId, filePath: String, mime: String) extends ActorMessage
 
@@ -216,12 +209,6 @@ object ActorMessage {
    * @param userId The user ID of the target user. Note on UserIds: @see SendRequest
    */
   case class AcceptConnection(userId: UserId) extends ActorMessage
-
-  /**
-   * Cancel an outgoing connection request to another user
-   * @param userId The user ID of the target user. Note on UserIds: @see SendRequest
-   */
-  case class CancelConnection(userId: UserId) extends ActorMessage
 
   /**
    * Create a new group converation
@@ -298,11 +285,6 @@ object ActorMessage {
   case class UpdateProfileImage(path: String) extends ActorMessage
 
   /**
-   * Remove the profile picture of the user logged into the remote device
-   */
-  case object ClearProfileImage extends ActorMessage
-
-  /**
    * Change the user name of the user logged into the remote device
    * @param name
    */
@@ -332,7 +314,7 @@ object ActorMessage {
 
   case object GetQueueStats extends ActorMessage
 
-  case class QueueStats(reports: Array[QueueReport]) extends ActorMessage
+  case class QueueStats(reports: Array[QueueReport]) extends ResponseMessage
 
   case class SetDeviceLabel(label: String) extends ActorMessage
 
@@ -346,9 +328,11 @@ object ActorMessage {
 
   case class MessageInfo(id: MessageId, tpe: Message.Type, time: Instant)
 
-  case class ConvMessages(msgs: Array[MessageInfo]) extends ActorMessage
+  case class ConvMessages(msgs: Array[MessageInfo]) extends ResponseMessage
 
   case class GetMessages(remoteId: RConvId) extends ActorMessage
 
   case object ForceAddressBookUpload extends ActorMessage
+
+  case class SetStatus(status: String) extends ActorMessage
 }

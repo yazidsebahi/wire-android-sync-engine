@@ -31,7 +31,8 @@ import com.waz.utils._
 
 import scala.concurrent.Future
 
-class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
+class ConversationOrderEventsService(selfUserId: UserId,
+                                     convs:    ConversationsContentUpdater,
                                      storage:  ConversationStorage,
                                      messages: MessagesService,
                                      users:    UserService,
@@ -40,9 +41,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ConversationEventsDispatcher")
 
-  implicit val selfUserId: UserId = users.selfUserId
-
-  private[service] def shouldChangeOrder(event: ConversationEvent)(implicit selfUserId: UserId): Boolean =
+  private[service] def shouldChangeOrder(event: ConversationEvent): Boolean =
     event match {
       case _: CreateConversationEvent => true
       case _: CallMessageEvent        => true
@@ -76,7 +75,7 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
       case _ => false
     }
 
-  private[service] def shouldUnarchive(event: ConversationEvent)(implicit selfUserId: UserId): Boolean =
+  private[service] def shouldUnarchive(event: ConversationEvent): Boolean =
     event match {
       case MemberLeaveEvent(_, _, _, leaving) if leaving contains selfUserId => false
       case _ => shouldChangeOrder(event)
@@ -127,26 +126,24 @@ class ConversationOrderEventsService(convs:    ConversationsContentUpdater,
     }
 
   private def processConversationUnarchiveEvents(convId: RConvId, events: Seq[ConversationEvent]) = {
-    users.withSelfUserFuture { implicit selfUserId =>
-      verbose(s"processConversationUnarchiveEvents($convId, ${events.size} events)")
-      def unarchiveTime(es: Traversable[ConversationEvent]) = {
-        val all = es.filter(shouldUnarchive)
-        if (all.isEmpty) None
-        else Some((all.maxBy(_.time).time.instant, all exists unarchiveMuted))
-      }
+    verbose(s"processConversationUnarchiveEvents($convId, ${events.size} events)")
+    def unarchiveTime(es: Traversable[ConversationEvent]) = {
+      val all = es.filter(shouldUnarchive)
+      if (all.isEmpty) None
+      else Some((all.maxBy(_.time).time.instant, all exists unarchiveMuted))
+    }
 
-      val convs = events.groupBy(_.convId).mapValues(unarchiveTime).filter(_._2.isDefined)
+    val convs = events.groupBy(_.convId).mapValues(unarchiveTime).filter(_._2.isDefined)
 
-      storage.getByRemoteIds(convs.keys) flatMap { convIds =>
-        storage.updateAll2(convIds, { conv =>
-          convs.get(conv.remoteId).flatten match {
-            case Some((time, unarchiveMuted)) if conv.archiveTime.isBefore(time) && (!conv.muted || unarchiveMuted) =>
-              conv.copy(archived = false, archiveTime = time)
-            case _ =>
-              conv
-          }
-        })
-      }
+    storage.getByRemoteIds(convs.keys) flatMap { convIds =>
+      storage.updateAll2(convIds, { conv =>
+        convs.get(conv.remoteId).flatten match {
+          case Some((time, unarchiveMuted)) if conv.archiveTime.isBefore(time) && (!conv.muted || unarchiveMuted) =>
+            conv.copy(archived = false, archiveTime = time)
+          case _ =>
+            conv
+        }
+      })
     }
   }
 

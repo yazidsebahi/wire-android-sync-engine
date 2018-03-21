@@ -23,7 +23,6 @@ import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.{ConvId, UserData, UserId}
-import com.waz.service.UserServiceImpl
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.EventContext
 import com.waz.utils.{BiRelation, ThrottledProcessingQueue}
@@ -37,13 +36,15 @@ import scala.util.Try
 /**
  * Updates conversation names when any dependency changes (members list, user names).
  */
-class NameUpdater(context: Context, users: UserServiceImpl, usersStorage: UsersStorageImpl, convs: ConversationStorageImpl, membersStorage: MembersStorageImpl) {
+class NameUpdater(selfUserId:     UserId,
+                  context:        Context,
+                  usersStorage:   UsersStorageImpl,
+                  convs:          ConversationStorageImpl,
+                  membersStorage: MembersStorageImpl) {
 
   private implicit val tag: LogTag = logTagFor[NameUpdater]
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "NameUpdaterQueue")
-
-  import users._
 
   private lazy val emptyConversationName = Try(context.getResources.getString(R.string.zms_empty_conversation_name)).getOrElse("Empty conversation")
 

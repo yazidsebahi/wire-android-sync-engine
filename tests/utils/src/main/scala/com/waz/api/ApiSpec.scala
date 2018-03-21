@@ -335,7 +335,7 @@ trait ApiSpec extends BeforeAndAfterEach with BeforeAndAfterAll with Matchers wi
 
 trait ActorSystemSpec extends BeforeAndAfterAll { suite: Suite with Alerting with Informing =>
 
-  implicit val timeout: com.waz.RobolectricUtils.Timeout = 15.seconds
+  implicit val timeout: com.waz.RobolectricUtils.Timeout = 120.seconds
   implicit val akkaTimeout = Timeout(timeout)
 
   def testBackend: BackendConfig

@@ -19,8 +19,6 @@ package com.waz.service.call
 
 import com.sun.jna.{Callback, Native, Pointer}
 import com.waz.CLibrary.Members
-import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog._
 import com.waz.utils.jna.{Size_t, Uint32_t}
 
 import scala.concurrent.Promise
@@ -31,14 +29,11 @@ object Calling {
   val avsAvailable = available.future
 
   try {
-    verbose("Native.register: avs")
     Native.register(Calling.getClass, "avs")
     available.success({})
   }
   catch {
-    case e: Throwable =>
-      error("Unable to start avs", e)
-      available.failure(e)
+    case e: Throwable => available.failure(e)
   }
 
   @native def wcall_init(): Int

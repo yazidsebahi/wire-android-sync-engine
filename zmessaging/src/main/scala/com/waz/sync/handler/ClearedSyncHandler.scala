@@ -32,7 +32,13 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class ClearedSyncHandler(convs: ConversationStorageImpl, convsContent: ConversationsContentUpdaterImpl, users: UserServiceImpl, msgs: MessagesStorageImpl, convSync: ConversationsSyncHandler, otrSync: OtrSyncHandler) {
+class ClearedSyncHandler(selfUserId:   UserId,
+                         convs:        ConversationStorageImpl,
+                         convsContent: ConversationsContentUpdaterImpl,
+                         users:        UserServiceImpl,
+                         msgs:         MessagesStorageImpl,
+                         convSync:     ConversationsSyncHandler,
+                         otrSync:      OtrSyncHandler) {
   import com.waz.threading.Threading.Implicits.Background
 
   // Returns actual timestamp to use for clear.
@@ -41,17 +47,15 @@ class ClearedSyncHandler(convs: ConversationStorageImpl, convsContent: Conversat
   // in that case we want to use event and time of the last such message
   // (but we need to first send them to get that info).
   private[sync] def getActualClearInfo(convId: ConvId, time: Instant) =
-    users.withSelfUserFuture { selfUserId =>
-      msgs.findMessagesFrom(convId, time) map { ms =>
-        verbose(s"getActualClearInfo, messages from clear time: $ms")
+    msgs.findMessagesFrom(convId, time) map { ms =>
+      verbose(s"getActualClearInfo, messages from clear time: $ms")
 
-        val sentMessages = ms.takeWhile(m => m.time == time || m.userId == selfUserId && m.state == Message.Status.SENT)
-        val t = sentMessages.lastOption.fold(time)(_.time)
-        val archive = sentMessages.length == ms.length // archive only if there is no new or incoming message
+      val sentMessages = ms.takeWhile(m => m.time == time || m.userId == selfUserId && m.state == Message.Status.SENT)
+      val t = sentMessages.lastOption.fold(time)(_.time)
+      val archive = sentMessages.length == ms.length // archive only if there is no new or incoming message
 
-        verbose(s"getActualClearInfo = ($t, $archive)")
-        (t, archive)
-      }
+      verbose(s"getActualClearInfo = ($t, $archive)")
+      (t, archive)
     }
 
   def postCleared(convId: ConvId, time: Instant): Future[SyncResult] = {
@@ -62,13 +66,11 @@ class ClearedSyncHandler(convs: ConversationStorageImpl, convsContent: Conversat
         case None =>
           Future successful SyncResult(ErrorResponse.internalError(s"No conversation found for id: $convId"))
         case Some(conv) =>
-          users.withSelfUserFuture { selfUserId =>
-            val msg = GenericMessage(Uid(), Cleared(conv.remoteId, time))
-            otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) flatMap (_.fold(e => Future.successful(SyncResult(e)), { _ =>
-              if (archive) convSync.postConversationState(conv.id, ConversationState(archived = Some(true), archiveTime = Some(time)))
-              else Future.successful(SyncResult.Success)
-            }))
-          }
+          val msg = GenericMessage(Uid(), Cleared(conv.remoteId, time))
+          otrSync.postOtrMessage(ConvId(selfUserId.str), RConvId(selfUserId.str), msg) flatMap (_.fold(e => Future.successful(SyncResult(e)), { _ =>
+            if (archive) convSync.postConversationState(conv.id, ConversationState(archived = Some(true), archiveTime = Some(time)))
+            else Future.successful(SyncResult.Success)
+          }))
       }
 
     getActualClearInfo(convId, time) flatMap { case (t, archive) =>
