@@ -32,6 +32,7 @@ import com.waz.utils.returning
 
 trait NetworkModeService {
   def networkMode: Signal[NetworkMode]
+  def isOnline: Signal[Boolean]
   def isOfflineMode: Boolean
   def isOnlineMode: Boolean
   def getNetworkOperatorName: String
@@ -47,6 +48,8 @@ class DefaultNetworkModeService(context: Context, lifeCycle: UiLifeCycle) extend
   private lazy val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE).asInstanceOf[TelephonyManager]
 
   override val networkMode = returning(Signal[NetworkMode](NetworkMode.UNKNOWN)) { _.disableAutowiring() }
+
+  val isOnline: Signal[Boolean] = networkMode.map(_ => isOnlineMode)
 
   lifeCycle.uiActive {
     case true => updateNetworkMode()
