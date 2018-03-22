@@ -17,9 +17,7 @@
  */
 package com.waz.api;
 
-import android.os.Parcelable;
-
-public interface User extends UiObservable, Parcelable {
+public interface User extends UiObservable {
 
     String getName();
     String getId();

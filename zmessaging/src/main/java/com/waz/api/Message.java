@@ -17,23 +17,7 @@
  */
 package com.waz.api;
 
-import android.os.Parcel;
-import android.os.Parcelable;
-import com.waz.service.ZMessaging$;
-
-public interface Message extends UiObservable, Parcelable {
-
-    Parcelable.Creator<Message> CREATOR = new Parcelable.Creator<Message>() {
-        @Override
-        public Message createFromParcel(Parcel source) {
-            return ZMessaging$.MODULE$.currentUi().messages().cachedOrFromParcel(source);
-        }
-
-        @Override
-        public Message[] newArray(int size) {
-            return new Message[size];
-        }
-    };
+public interface Message extends UiObservable {
 
     enum Status {
         DEFAULT, SENT, PENDING, DELETED, FAILED, FAILED_READ, DELIVERED;
@@ -67,16 +51,5 @@ public interface Message extends UiObservable, Parcelable {
         }
     }
 
-    String getId();
-
-    ImageAsset getImage();
-    
-    boolean isEphemeral();
-
-    boolean isExpired();
-
-    /**
-     * Retry sending a previously failed message.
-     */
     void retry();
 }

@@ -17,13 +17,11 @@
  */
 package com.waz.api.impl
 
-import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.model.UserData._
 import com.waz.model._
 import com.waz.ui._
-import com.waz.utils.{JsonEncoder, NameParts}
+import com.waz.utils.NameParts
 
 class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends com.waz.api.User with UiObservable with SignalLoading {
 
@@ -66,7 +64,4 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   override def hashCode: Int = id.hashCode
 
   override def toString: String = s"User(id = $id, data = $data, initials = ${computeInitials(data.name)})"
-
-  override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeString(JsonEncoder.encodeString(data))
-  override def describeContents(): Int = 0
 }
