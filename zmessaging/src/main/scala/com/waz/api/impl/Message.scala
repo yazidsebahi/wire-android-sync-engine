@@ -113,24 +113,4 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
   }
 
   override def describeContents(): Int = 0
-
-  override def getLikes: Array[api.User] = likes.map(context.users.getUser)(breakOut)
-}
-
-object EmptyMessage extends com.waz.api.Message {
-  override def getId: String = Uid(0, 0).str
-  override def retry(): Unit = ()
-  override def getImage: api.ImageAsset = ImageAsset.Empty
-  override def removeUpdateListener(listener: UpdateListener): Unit = {}
-  override def addUpdateListener(listener: UpdateListener): Unit = {}
-  override def writeToParcel(dest: Parcel, flags: Int): Unit = {
-    dest.writeString(JsonEncoder.encodeString(MessageData.Empty))
-    dest.writeStringArray(Array.empty[String])
-    dest.writeInt(0)
-  }
-  override def describeContents(): Int = 0
-  override val getLikes: Array[api.User] = Array.empty
-  override def isEphemeral: Boolean = false
-  override def isExpired: Boolean = false
-
 }

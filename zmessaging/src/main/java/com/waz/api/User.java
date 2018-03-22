@@ -17,46 +17,12 @@
  */
 package com.waz.api;
 
-import android.os.Parcel;
 import android.os.Parcelable;
-import com.waz.service.ZMessaging$;
 
 public interface User extends UiObservable, Parcelable {
 
     String getName();
-    String getDisplayName();
-    @Deprecated // use getDisplayName instead
-    String getNameBasedOnConnectionState(); // display name if connected, name otherwise
-    String getInitials();
     String getId();
-    String getEmail();
-    String getPhone();
-    ImageAsset getPicture();
-    AccentColor getAccent();
-    boolean isConnected();
-    boolean isRelated();
-    boolean isMe();
-    boolean isDeleted();
-    boolean isAutoConnection();
-    boolean isContact();
-    ContactDetails getFirstContact();
-
-    CoreList<OtrClient> getOtrClients();
-    Verification getVerified();
-
-    String getUsername();
-
-    Parcelable.Creator<User> CREATOR = new Parcelable.Creator<User>() {
-        @Override
-        public User createFromParcel(Parcel source) {
-            return ZMessaging$.MODULE$.currentUi().users().getUser(source);
-        }
-
-        @Override
-        public User[] newArray(int size) {
-            return new User[size];
-        }
-    };
 
     enum ConnectionStatus {
         UNCONNECTED("unconnected"), PENDING_FROM_USER("sent"), PENDING_FROM_OTHER("pending"), ACCEPTED("accepted"), BLOCKED("blocked"), IGNORED("ignored"), SELF("self"), CANCELLED("cancelled");
@@ -67,26 +33,4 @@ public interface User extends UiObservable, Parcelable {
             this.code = code;
         }
     }
-
-    ConnectionStatus getConnectionStatus();
-
-    /**
-     * Sends connection request to this user and creates one-to-one conversation.
-     */
-    IConversation connect(String message);
-
-    /**
-     * Returns a one-to-one conversation with this user (creates new conversation if needed), should only be used with already connected user.
-     */
-    IConversation getConversation();
-
-    IConversation acceptConnection();
-
-    void ignoreConnection();
-
-    void cancelConnection();
-
-    void block();
-
-    IConversation unblock();
 }

@@ -70,13 +70,7 @@ public interface Message extends UiObservable, Parcelable {
     String getId();
 
     ImageAsset getImage();
-
-    /**
-     * Returns users (including self) that like this message.
-     */
-    User[] getLikes();
-
-
+    
     boolean isEphemeral();
 
     boolean isExpired();

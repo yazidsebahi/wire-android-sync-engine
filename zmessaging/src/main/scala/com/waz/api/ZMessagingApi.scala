@@ -41,8 +41,6 @@ trait ZMessagingApi {
 
   def getConversations: ConversationsList
 
-  def getUser(id: String): User
-
   /** Lists the contacts from this phone's contact providers (if they have an associated email or phone number) blended
     * with Wire users.
     */

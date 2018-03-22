@@ -88,8 +88,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getConversations = ui.convs.convsList
 
-  override def getUser(id: String): User = ui.users.getUser(UserId(id))
-
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
   override def getInvitations: Invitations = ui.invitations
