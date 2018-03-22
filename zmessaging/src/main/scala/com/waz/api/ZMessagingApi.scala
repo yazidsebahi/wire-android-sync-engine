@@ -19,14 +19,6 @@ package com.waz.api
 
 import android.content.Context
 
-object ZMessagingApi {
-
-  trait RegistrationListener {
-    def onRegistered(user: Self): Unit
-    def onRegistrationFailed(code: Int, message: String, label: String): Unit
-  }
-}
-
 trait ZMessagingApi {
 
   def onCreate(context: Context): Unit
@@ -40,11 +32,6 @@ trait ZMessagingApi {
   def getSelf: Self
 
   def getConversations: ConversationsList
-
-  /** Lists the contacts from this phone's contact providers (if they have an associated email or phone number) blended
-    * with Wire users.
-    */
-  def getContacts: Contacts
 
   def getInvitations: Invitations
 

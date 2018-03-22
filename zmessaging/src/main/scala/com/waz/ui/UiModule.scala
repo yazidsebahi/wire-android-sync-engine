@@ -134,7 +134,6 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
   lazy val users: Users = new Users
   lazy val convs: Conversations = new Conversations()
   lazy val invitations = new Invitations(zms, convs, global.regClient)
-  lazy val contactDetails = wire[ContactDetailsCache]
   lazy val assets = new UiCache[AssetId, Asset](10)(this)
 
   lazy val globalImageLoader = global.imageLoader

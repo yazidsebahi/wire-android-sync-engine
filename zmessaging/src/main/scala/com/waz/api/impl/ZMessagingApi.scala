@@ -20,20 +20,14 @@ package com.waz.api.impl
 import android.content.Context
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api
 import com.waz.content.Uris
-import com.waz.model._
 import com.waz.service.AccountManager
-import com.waz.threading.Threading
 import com.waz.ui.UiModule
 import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
-import scala.util.Success
 
 class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi {
-
-  import Threading.Implicits.Ui
 
   private[waz] var account: Option[AccountManager] = None
   private[waz] def zmessaging = account match {
@@ -91,8 +85,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
   override def getInvitations: Invitations = ui.invitations
-
-  override def getContacts: Contacts = ui.cached(Uris.ContactsUri, new Contacts(SearchKeyFiltering()))
 
   override def getGiphy: Giphy = new Giphy
 
