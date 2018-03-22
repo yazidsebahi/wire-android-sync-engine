@@ -39,7 +39,7 @@ class ErrorsList(implicit ui: UiModule) extends com.waz.api.ErrorsList with Core
         override def getType: ErrorType = err.errType
         override def getUsers = err.users.map(ui.users.getUser).asJava
         override def getMessages = err.messages.map(ui.messages.cachedOrNew).asJava
-        override def getConversation: IConversation = err.convId.map(ui.convs.convById).orNull
+        override def getConversation: IConversation = null
         override def dismiss(): Unit = ui.zms.flatMapFuture(_.errors.dismissError(err.id))
         override def getTime: Date = err.time
         override def getResponse: ErrorResponse = ErrorResponse(err.responseCode, err.responseMessage, err.responseLabel)

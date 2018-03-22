@@ -17,31 +17,8 @@
  */
 package com.waz.api
 
-import com.waz.model.{ConfirmationCode, PhoneNumber, EmailAddress}
+import com.waz.model.{ConfirmationCode, EmailAddress, PhoneNumber}
 import org.json.JSONObject
-import com.waz.model.PersonalInvitationToken
-import com.waz.ZLog._
-import com.waz.ZLog.ImplicitTag._
-
-object CredentialsFactory {
-  def emailCredentials(email: String, password: String): Credentials = impl.EmailCredentials(EmailAddress(email), Option(password))
-  def phoneCredentials(phone: String, confirmationCode: String): Credentials = {
-    assert(Option(confirmationCode).exists(_.nonEmpty), "Empty/missing phone confirmation code. Please always pass a phone confirmation code here.")
-    impl.PhoneCredentials(PhoneNumber(phone), Some(ConfirmationCode(confirmationCode)))
-  }
-  def emailInvitationCredentials(email: String, password: String, invitation: Invitations.PersonalToken): Credentials =
-    impl.EmailCredentials(EmailAddress(email), Option(password), token(invitation))
-  def phoneInvitationCredentials(phone: String, invitation: Invitations.PersonalToken): Credentials =
-    impl.PhoneCredentials(PhoneNumber(phone), None, token(invitation))
-
-  private def token(invitation: Invitations.PersonalToken) = invitation match {
-    case t: PersonalInvitationToken =>
-      Some(t)
-    case _ =>
-      error("Use InvitationTokenFactory to create tokens.")
-      None
-  }
-}
 
 sealed trait Credentials
 
@@ -74,15 +51,14 @@ package impl {
     }
   }
 
-  case class EmailCredentials(email: EmailAddress, password: Option[String], invitation: Option[PersonalInvitationToken] = None) extends Credentials {
+  case class EmailCredentials(email: EmailAddress, password: Option[String]) extends Credentials {
     override def canLogin: Boolean = password.isDefined
 
-    def autoLoginOnRegistration: Boolean = invitation.isDefined
+    def autoLoginOnRegistration: Boolean = false
 
     override def addToRegistrationJson(o: JSONObject): Unit = {
       o.put("email", email.str)
       password foreach (o.put("password", _))
-      invitation foreach (i => o.put("invitation_code", i.code))
     }
 
     override def addToLoginJson(o: JSONObject): Unit = addToRegistrationJson(o)
@@ -95,7 +71,7 @@ package impl {
     override def toString: String = s"EmailBasedCredentials($email, ${password map (_.map(_ => '*'))})"
   }
 
-  case class PhoneCredentials(phone: PhoneNumber, code: Option[ConfirmationCode], invitation: Option[PersonalInvitationToken] = None) extends Credentials {
+  case class PhoneCredentials(phone: PhoneNumber, code: Option[ConfirmationCode]) extends Credentials {
     override def canLogin: Boolean = false
 
     def autoLoginOnRegistration: Boolean = true
@@ -106,7 +82,6 @@ package impl {
     private def addToJson(o: JSONObject, codeName: String): Unit = {
       o.put("phone", phone.str)
       code foreach { code => o.put(codeName, code.str) }
-      invitation foreach (i => o.put("invitation_code", i.code))
     }
 
     override def maybeEmail: Option[EmailAddress] = None
@@ -117,15 +92,14 @@ package impl {
     override def toString: String = s"PhoneBasedCredentials($phone, ${code map (_.str.map(_ => '*'))})"
   }
 
-  case class UsernameCredentials(handle: Handle, password: Option[String], invitation: Option[PersonalInvitationToken] = None) extends Credentials {
+  case class UsernameCredentials(handle: Handle, password: Option[String]) extends Credentials {
     override def canLogin: Boolean = password.isDefined
 
-    def autoLoginOnRegistration: Boolean = invitation.isDefined
+    def autoLoginOnRegistration: Boolean = false
 
     override def addToRegistrationJson(o: JSONObject): Unit = {
       o.put("email", handle.string)
       password foreach (o.put("password", _))
-      invitation foreach (i => o.put("invitation_code", i.code))
     }
 
     override def addToLoginJson(o: JSONObject): Unit = addToRegistrationJson(o)

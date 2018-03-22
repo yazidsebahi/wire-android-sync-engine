@@ -23,7 +23,6 @@ import android.os.{Handler, Looper}
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api._
-import com.waz.api.impl.Invitations
 import com.waz.model.{AssetId, ConvId, UserId}
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, Threading}
@@ -132,8 +131,6 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
   lazy val images: Images = new Images(context, bitmapDecoder, tracking)
   lazy val messages: Messages = new Messages
   lazy val users: Users = new Users
-  lazy val convs: Conversations = new Conversations()
-  lazy val invitations = new Invitations(zms, convs, global.regClient)
   lazy val assets = new UiCache[AssetId, Asset](10)(this)
 
   lazy val globalImageLoader = global.imageLoader

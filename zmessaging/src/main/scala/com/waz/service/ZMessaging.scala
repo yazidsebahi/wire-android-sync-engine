@@ -200,7 +200,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val assets: AssetService                       = wire[AssetServiceImpl]
   lazy val users: UserService                         = wire[UserServiceImpl]
   lazy val conversations: ConversationsService        = wire[ConversationsServiceImpl]
-  lazy val convsNotifier                              = wire[ConversationsNotifier]
   lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
   lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
   lazy val convsStats: ConversationsListStateService  = wire[ConversationsListStateServiceImpl]

@@ -24,16 +24,13 @@ import com.waz.api.{KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.model._
 import com.waz.service.BackendConfig
-import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.sync.client.UsersClient.UserResponseExtractor
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.JsonEncoder
 import com.waz.utils.Locales._
-import com.waz.utils.wrappers.URI
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
-import com.waz.znet.Response.Status._
-import com.waz.znet.Response.{HttpStatus, Status, SuccessHttpStatus}
+import com.waz.znet.Response.{Status, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
 import org.json.JSONObject
@@ -49,7 +46,6 @@ trait RegistrationClient {
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
   def requestEmailConfirmationCode(email: EmailAddress): CancellableFuture[ActivateResult]
   def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
-  def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation]
 }
 
 class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extends RegistrationClient {
@@ -203,24 +199,6 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
     }
   }
 
-  import com.waz.sync.client.InvitationClient._
-
-  def getInvitationDetails(token: PersonalInvitationToken): ErrorOrResponse[ConfirmedInvitation] = {
-    val path = infoPath(token)
-    val request = Request.Get(path.toString, baseUri = Some(backend.baseUrl))
-    client(request) map {
-      case Response(HttpStatus(Success, _), ConfirmedInvitation(inv), _) =>
-        debug(s"received invitation details for $token: $inv")
-        Right(inv)
-      case Response(HttpStatus(BadRequest, "invalid-invitation-code"), EmptyResponse, _) =>
-        warn(s"invitation token not found: $token")
-        Left(ErrorResponse(NotFound, "no such invitation code", "invalid-invitation-code"))
-      case other =>
-        ZNetClient.errorHandling("getInvitationInfo")("RegistrationClient")(other)
-    }
-  }
-
-  private def infoPath(token: PersonalInvitationToken): URI = URI.parse(InvitationPath).buildUpon.appendPath("info").appendQueryParameter("code", token.code).build
 }
 
 object RegistrationClientImpl {

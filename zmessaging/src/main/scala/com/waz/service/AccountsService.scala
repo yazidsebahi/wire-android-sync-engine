@@ -19,7 +19,6 @@ package com.waz.service
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.Invitations._
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.impl._
 import com.waz.api.{ClientRegistrationState, KindOfAccess, KindOfVerification}
@@ -27,7 +26,6 @@ import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
 import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
 import com.waz.model._
-import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.{RichOption, returning}
@@ -455,38 +453,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         info(s"register($accountData, $name) failed: $error")
         Future successful Left(error)
     }
-  }
-
-  def retrieveInvitationDetails(invitation: PersonalToken): Future[InvitationDetailsResponse] = invitation match {
-    case token: PersonalInvitationToken =>
-      regClient.getInvitationDetails(token).future.map {
-        case Right(ConfirmedInvitation(_, name, Left(email), _)) => EmailAddressResponse(name, email.str)
-        case Right(ConfirmedInvitation(_, name, Right(phone), _)) => PhoneNumberResponse(name, phone.str)
-        case Left(r) => RetrievalFailed(r)
-      }
-  }
-
-  def generateAccountFromInvitation(invitationDetails: InvitationDetailsResponse, invitation: PersonalInvitationToken): Future[Unit] = {
-    invitationDetails match {
-      case EmailAddressResponse(name, email) =>
-        for {
-          acc <- storage.findByEmail(EmailAddress(email)).map(_.getOrElse(AccountData()))
-          updated = acc.copy(email = Some(EmailAddress(email)), pendingEmail = None, name = Some(name), invitationToken = Some(invitation))
-          _ <- storage.updateOrCreate(acc.id, _ => updated, updated)
-        } yield ()
-      case PhoneNumberResponse(name, phone) =>
-        for {
-          acc <- storage.findByPhone(PhoneNumber(phone)).map(_.getOrElse(AccountData()))
-          updated = acc.copy(phone = Some(PhoneNumber(phone)), pendingPhone = None, name = Some(name), invitationToken = Some(invitation))
-          _ <- storage.updateOrCreate(acc.id, _ => updated, updated)
-        } yield ()
-      case _ =>
-        Future.successful(())
-    }
-  }
-
-  def clearInvitation(accountId: AccountId): Future[Unit] = {
-    storage.update(accountId, _.copy(invitationToken = None)).map(_ => ())
   }
 
   def setLoggedIn(accountId: AccountId): Future[Unit] = {

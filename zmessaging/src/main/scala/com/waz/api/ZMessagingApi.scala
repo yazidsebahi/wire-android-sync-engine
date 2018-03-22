@@ -31,10 +31,6 @@ trait ZMessagingApi {
 
   def getSelf: Self
 
-  def getConversations: ConversationsList
-
-  def getInvitations: Invitations
-
   def getErrors: ErrorsList
 
   def getGiphy: Giphy

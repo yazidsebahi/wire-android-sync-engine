@@ -39,8 +39,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
   private var resumeCount = 0
   private var createCount = 0
 
-  private val startTime = System.nanoTime()
-
   private val accounts = ui.accounts
 
   accounts.activeAccountManager.onUi { setAccount } (EventContext.Global)
@@ -80,11 +78,7 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getSelf: Self = ui.users.selfUser
 
-  override def getConversations = ui.convs.convsList
-
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
-
-  override def getInvitations: Invitations = ui.invitations
 
   override def getGiphy: Giphy = new Giphy
 
