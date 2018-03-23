@@ -55,9 +55,9 @@ class ZMessagingFactory(global: GlobalModule) {
 
   implicit val tracking = global.trackingService
 
-  def baseStorage(userId: UserId) = new StorageModule(global.context, userId, "", global.prefs)
+  def baseStorage(userId: UserId) = new StorageModule(global.context, userId, global.prefs)
 
-  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorageOld, global.loginClient, tracking)
+  def auth(userId: AccountId) = new AuthenticationManager(userId, global.accountsStorageOld, global.loginClient, tracking)
 
   def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
@@ -74,8 +74,8 @@ class ZMessagingFactory(global: GlobalModule) {
   def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule, storage: StorageModule, cryptoBox: CryptoBoxService) = wire[ZMessaging]
 }
 
-class StorageModule(context: Context, val userId: UserId, dbPrefix: String, globalPreferences: GlobalPreferences) {
-  lazy val db                                         = new ZmsDatabase(userId, context, dbPrefix)
+class StorageModule(context: Context, val userId: UserId, globalPreferences: GlobalPreferences) {
+  lazy val db                                         = new ZmsDatabase(userId, context)
   lazy val userPrefs                                  = UserPreferences.apply(context, db, globalPreferences)
   lazy val usersStorage:      UsersStorage        = wire[UsersStorageImpl]
   lazy val otrClientsStorage: OtrClientsStorage       = wire[OtrClientsStorageImpl]

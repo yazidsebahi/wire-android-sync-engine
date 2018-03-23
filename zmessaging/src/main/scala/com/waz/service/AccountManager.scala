@@ -105,16 +105,15 @@ class UserModule(val userId: UserId, val account: AccountManager, tracking: Trac
   }
 }
 
-class AccountManager(val id: UserId, val global: GlobalModule, val accounts: AccountsServiceImpl)(implicit ec: EventContext) { self =>
+class AccountManager(val id: UserId, val global: GlobalModule, val accounts: AccountsService)(implicit ec: EventContext) { self =>
   import AccountManager._
   implicit val dispatcher = new SerialDispatchQueue()
   verbose(s"Creating for: $id")
 
   lazy val accountContext: AccountContext = new AccountContext(id, accounts)
 
-  import global._
   val storage: StorageModule = global.factory.baseStorage(id)
-  val accountData = global.accountsStorageOld.signal(id)
+  val accountData = global.accountsStorage.signal(id)
 
   val clientState = storage.flatMap(_.userPrefs.preference(SelfClient).signal)
 

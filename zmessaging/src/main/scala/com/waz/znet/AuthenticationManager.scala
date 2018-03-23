@@ -20,11 +20,13 @@ package com.waz.znet
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.AccountsStorageOld
-import com.waz.model.{AccountDataOld, AccountId}
-import com.waz.service.ZMessaging.accountTag
+import com.waz.content.{AccountStorage, AccountsStorageOld}
+import com.waz.model.{AccountDataOld, AccountId, UserId}
+import com.waz.service.ZMessaging
+import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.utils.JsonEncoder.encodeInstant
 import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager.AccessToken
@@ -44,7 +46,7 @@ trait AccessTokenProvider {
  * Manages authentication token, and dispatches login requests when needed.
  * Will retry login request if unsuccessful.
  */
-class AuthenticationManager(id: AccountId, accStorage: AccountsStorageOld, client: LoginClient, tracking: TrackingService) extends AccessTokenProvider {
+class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: LoginClient, tracking: TrackingService) extends AccessTokenProvider {
 
   lazy implicit val logTag: LogTag = accountTag[AuthenticationManager](id)
 
@@ -182,23 +184,23 @@ object AuthenticationManager {
     override def toString = s"${str.take(10)}, exp: $expiry, isValid: $isValid"
   }
 
-  case class AccessToken(accessToken: String, tokenType: String, expiresAt: Long = 0) {
+  case class AccessToken(accessToken: String, tokenType: String, expiresAt: Instant) {
     val headers = Map(AccessToken.AuthorizationHeader -> s"$tokenType $accessToken")
     def prepare(req: AsyncHttpRequest) = req.addHeader(AccessToken.AuthorizationHeader, s"$tokenType $accessToken")
 
-    def isValid = expiresAt > System.currentTimeMillis()
+    def isValid = expiresAt isAfter clock.instant()
 
     override def toString = s"${accessToken.take(10)}, exp: $expiresAt, isValid: $isValid"
   }
 
-  object AccessToken extends ((String, String, Long) => AccessToken ){
+  object AccessToken extends ((String, String, Instant) => AccessToken ){
     val AuthorizationHeader = "Authorization"
 
     implicit lazy val Encoder: JsonEncoder[AccessToken] = new JsonEncoder[AccessToken] {
       override def apply(v: AccessToken): JSONObject = JsonEncoder { o =>
         o.put("token", v.accessToken)
         o.put("type", v.tokenType)
-        o.put("expires", v.expiresAt)
+        o.put("expires", encodeInstant(v.expiresAt))
       }
     }
 

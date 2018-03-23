@@ -20,7 +20,6 @@ package com.waz.model
 import android.util.Base64
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.impl.{Credentials, EmailCredentials}
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
 import com.waz.model.AccountDataOld.{PermissionsMasks, TriTeamId}
@@ -45,9 +44,6 @@ case class AccountData(id:           UserId,
                        cookie:       Cookie,
                        accessToken:  Option[AccessToken] = None,
                        pushToken:    Option[PushToken]   = None)
-
-
-
 
 /**
  * This account data needs to be maintained for migration purposes - it can be deleted after a while (1 year?)
@@ -111,13 +107,6 @@ case class AccountDataOld(id:              AccountId                       = Acc
   def verified =
     (phone.isDefined && pendingPhone != phone) || email.isDefined
 
-  def authorized(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd)) if pendingEmail.contains(e) || email.contains(e) =>
-      Some(copy(password = Some(passwd)))
-    case _ =>
-      None
-  }
-
   def updatedNonPending = (pendingEmail, pendingPhone) match {
     case (Some(e), _) => copy(email = Some(e), pendingEmail = None)
     case (_, Some(p)) => copy(phone = Some(p), pendingPhone = None)
@@ -129,15 +118,6 @@ case class AccountDataOld(id:              AccountId                       = Acc
     case (None, Some(p)) => copy(pendingPhone = Some(p), phone = None)
     case _ => this
   }
-
-  def canLogin: Boolean = {
-    (email.orElse(pendingEmail).isDefined && password.isDefined) ||
-      (handle.isDefined && password.isDefined) ||
-      (phone.orElse(pendingPhone).isDefined && code.isDefined)
-  }
-
-  def addToLoginJson(o: JSONObject) =
-    addCredentialsToJson(o)
 
   def addToRegistrationJson(o: JSONObject) =
     addCredentialsToJson(o, isLogin = !regWaiting)
@@ -195,12 +175,6 @@ object AccountDataOld {
   type TriTeamId = Either[Unit, Option[TeamId]]
 
   type PermissionsMasks = (Long, Long) //self and copy permissions
-
-  def apply(credentials: Credentials): AccountDataOld = {
-    val id = AccountId()
-    val hash = credentials.maybePassword.map(computeHash(id, _)).getOrElse("")
-    new AccountDataOld(id, Left({}), password = credentials.maybePassword, handle = credentials.maybeUsername, pendingPhone = credentials.maybePhone, pendingEmail = credentials.maybeEmail)
-  }
 
   def apply(email: EmailAddress, password: String): AccountDataOld = {
     val id = AccountId()

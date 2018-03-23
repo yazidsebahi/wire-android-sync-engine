@@ -19,8 +19,8 @@ package com.waz.client
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.impl.{ErrorResponse, PhoneCredentials}
-import com.waz.api.{KindOfAccess, KindOfVerification}
+import com.waz.api.impl.ErrorResponse
+import com.waz.api._
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.model._
 import com.waz.service.BackendConfig
@@ -38,7 +38,7 @@ import org.json.JSONObject
 import scala.concurrent.duration._
 
 trait RegistrationClient {
-  def register(account: AccountDataOld, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
+  def register(credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
   def registerTeamAccount(account: AccountDataOld): ErrorOrResponse[(UserInfo, Option[Cookie])]
 
   def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit]
@@ -52,19 +52,19 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
   import Threading.Implicits.Background
   import com.waz.client.RegistrationClientImpl._
 
-  def register(account: AccountDataOld, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
+  def register(credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
     val json = JsonEncoder { o =>
       o.put("name", name)
       accentId foreach (o.put("accent_id", _))
       o.put("locale", bcp47.languageTagOf(currentLocale))
-      account.addToRegistrationJson(o)
+      credentials.addToRegistrationJson(o)
     }
 
     val request = Request.Post(RegisterPath, JsonContentEncoder(json), baseUri = Some(backend.baseUrl), timeout = timeout)
     client(request) map {
       case resp @ Response(SuccessHttpStatus(), UserResponseExtractor(user), headers) =>
         debug(s"registration succeeded: $resp")
-        Right((user, if (account.autoLoginOnRegistration) LoginClient.getCookieFromHeaders(headers) else None))
+        Right((user, LoginClient.getCookieFromHeaders(headers))) //cookie will be optional depending on login method
       case Response(_, ErrorResponse(code, msg, label), headers) =>
         info(s"register failed with error: ($code, $msg, $label), headers: $headers")
         Left(ErrorResponse(code, msg, label))
@@ -219,7 +219,7 @@ object RegistrationClientImpl {
 
   def activateRequestBody(credentials: PhoneCredentials, kindOfVerification: KindOfVerification) = JsonContentEncoder(JsonEncoder { o =>
     o.put("phone", credentials.phone.str)
-    credentials.code foreach { code => o.put("code", code.str) }
+    o.put("code", credentials.code.str)
     o.put("dryrun", kindOfVerification == KindOfVerification.PREVERIFY_ON_REGISTRATION)
   })
 }

@@ -22,7 +22,7 @@ import java.io.File
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
-import com.waz.api.{KindOfAccess, KindOfVerification}
+import com.waz.api.{Credentials, KindOfAccess, KindOfVerification}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.GlobalPreferences.{ActiveAccountPef, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
 import com.waz.content.UserPreferences
@@ -60,18 +60,14 @@ trait AccountsService {
   def zms(userId: UserId): Signal[Option[ZMessaging]]
   def getZms(userId: UserId): Future[Option[ZMessaging]]
 
-  def switchAccount(userId: Option[UserId]): Future[Unit]
+  //Set to None in order to go to the login screen without logging out the current users
+  def setAccount(userId: Option[UserId]): Future[Unit]
 
   def logout(userId: UserId): Future[Unit]
 
-  /**
-    * These two methods will either get or create the corresponding User object from the backend, and create an Account
-    * Manager for that user. No database will be created for those users, but they will be persisted and set as the
-    * active user
-    * //TODO
-    */
-  def login(loginCredentials: LoginCredentials): ErrorOr[UserId]
-  def register(registerCredentials: RegisterCredentials): ErrorOr[UserId]
+  //TODO
+  def login(loginCredentials: Credentials): ErrorOr[UserId]
+  def register(registerCredentials: Credentials): ErrorOr[UserId]
 
 }
 
@@ -85,11 +81,6 @@ object AccountsService {
   case object InForeground extends Active
 
   val NoEmailSetWarning = "Account does not have email set - can't request activation code"
-
-  //TODO rename to something better like Credentials? Or use the credentials classes?
-  case class LoginCredentials()
-
-  case class RegisterCredentials()
 }
 
 class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
@@ -262,7 +253,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
     zs  <- Signal.sequence(ams.map(_.zmessaging).toSeq: _*)
   } yield
-    returning(zs.flatten.toSet) { v =>
+    returning(zs.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
 
@@ -275,7 +266,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     for {
       current       <- getActiveAccountId
       otherAccounts <- getLoggedInAccountIds.map(_.filter(userId != _))
-      _ <- if (current.contains(userId)) switchAccount(otherAccounts.headOption) else Future.successful(())
+      _ <- if (current.contains(userId)) setAccount(otherAccounts.headOption) else Future.successful(())
       _ <- storage.remove(userId) //TODO pass Id to some sort of clean up service before removing
     } yield {}
   }
@@ -284,7 +275,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     * Logs out of the current account and switches to another specified by the AccountId. If the other cannot be authorized
     * (no cookie) or if anything else goes wrong, we leave the user logged out
     */
-  override def switchAccount(userId: Option[UserId]) = {
+  override def setAccount(userId: Option[UserId]) = {
     verbose(s"switchAccount: $userId")
     userId match {
       case Some(id) =>

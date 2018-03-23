@@ -26,7 +26,7 @@ import com.waz.utils.wrappers.DBHelper
 /**
  * Single user storage. Keeps data specific to used user account.
   */
-class ZmsDatabase(user: UserId, context: Context, dbNamePrefix: String = "") extends Database {
+class ZmsDatabase(user: UserId, context: Context) extends Database {
   override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue(executor = Threading.IOThreadPool, name = "ZmsDatabase_" + user.str.substring(24))
-  val dbHelper: DBHelper = new ZMessagingDB(context, dbNamePrefix + user.str)
+  val dbHelper: DBHelper = new ZMessagingDB(context, user.str)
 }
