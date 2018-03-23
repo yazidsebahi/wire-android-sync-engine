@@ -27,7 +27,7 @@ import android.view.View
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.LogTag
 import com.waz.api._
-import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
+import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.log.{InternalLog, LogOutput}
 import com.waz.media.manager.context.IntensityLevel
@@ -49,7 +49,7 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future.successful
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Random, Success, Try}
 
 /**
@@ -141,12 +141,8 @@ class DeviceActor(val deviceName: String,
     Await.ready(firstTimePref := false, 5.seconds)
   }
 
-  val ui = new UiModule(accountsService)
-  val api = {
-    val api = new ZMessagingApi()(ui)
-    api.onCreate(application)
-    api.onResume()
-    api
+  val ui = returning(new UiModule(accountsService)) { ui =>
+    ui.onStart()
   }
 
   val zms = accountsService.activeZms.collect { case Some(z) => z }
@@ -156,10 +152,9 @@ class DeviceActor(val deviceName: String,
 
   @throws[Exception](classOf[Exception])
   override def postStop(): Unit = {
-    api.onPause()
-    api.onDestroy()
+    ui.onDestroy()
     globalModule.lifecycle.releaseUi()
-    Await.result(api.ui.getCurrent, 5.seconds) foreach { zms =>
+    Await.result(ui.getCurrent, 5.seconds) foreach { zms =>
       zms.syncContent.syncStorage { storage =>
         storage.getJobs foreach { job => storage.remove(job.id) }
       }
@@ -321,7 +316,7 @@ class DeviceActor(val deviceName: String,
         z.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).map { cacheEntry =>
           Mime(mime) match {
             case Mime.Image() =>
-              z.convsUi.sendMessage(convId, api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
+              z.convsUi.sendMessage(convId, ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
               Successful
             case _ =>
               val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
@@ -383,7 +378,7 @@ class DeviceActor(val deviceName: String,
       }.map(_ => Successful)
 
     case UpdateProfileImage(path) =>
-      zms.head.flatMap(_.users.updateSelfPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path)))))
+      zms.head.flatMap(_.users.updateSelfPicture(ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path)))))
         .map(_ => Successful)
 
     case UpdateProfileName(name) =>

@@ -17,7 +17,6 @@
  */
 package com.waz.ui
 
-import android.content.Context
 import android.net.Uri
 import android.os.{Handler, Looper}
 import com.waz.Control.getOrUpdate
@@ -40,54 +39,37 @@ class ZMessagingResolver(ui: UiModule) {
 
 trait UiEventContext {
   implicit val eventContext = new EventContext() {}
-  def context: Context
 
   private[ui] var createCount = 0
-  private[ui] var resumeCount = 0
+  private[ui] var startCount = 0
 
-  val onCreated = new SourceSignal[Option[Context]](None) with ForcedEventSource[Option[Context]]
-  val onResumed = new SourceSignal[Option[Context]](None) with ForcedEventSource[Option[Context]]
+  val onStarted = new SourceSignal[Boolean]() with ForcedEventSource[Boolean]
   val onReset = new Publisher[Boolean] with ForcedEventSource[Boolean]
 
-  def onCreate(context: Context): Unit = {
+  def onStart(): Unit = {
     Threading.assertUiThread()
-    createCount += 1
+    startCount += 1
 
-    if (createCount == 1) {
-      onCreated ! Some(context)
+    if (startCount == 1) {
       eventContext.onContextStart()
-    }
-  }
-
-  def onResume(): Unit = {
-    Threading.assertUiThread()
-    resumeCount += 1
-
-    if (resumeCount == 1) {
-      eventContext.onContextStart()
-      onResumed ! Some(context)
+      onStarted ! true
     }
   }
 
   def onPause(): Unit = {
     Threading.assertUiThread()
-    assert(resumeCount > 0, "onPause should be called exactly once for each onResume")
-    resumeCount -= 1
+    assert(startCount > 0, "onPause should be called exactly once for each onResume")
+    startCount -= 1
 
-    if (resumeCount == 0) {
-      onResumed ! None
+    if (startCount == 0) {
+      onStarted ! false
       eventContext.onContextStop()
     }
   }
 
   def onDestroy(): Unit = {
     Threading.assertUiThread()
-    assert(createCount > 0, "onDestroy should be called exactly once for each onCreate")
-    createCount -= 1
-    if (createCount == 0) {
-      eventContext.onContextStop()
-      onCreated ! None
-    }
+    eventContext.onContextDestroy()
   }
 }
 
@@ -99,7 +81,6 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
   val uiCache = new UiCache[Uri, AnyRef](0)(this)
 
   val global = accounts.global
-  def context = global.context
   def imageCache = global.imageCache
   def bitmapDecoder = global.bitmapDecoder
   val tracking = global.trackingService
@@ -111,7 +92,7 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
 
   def getCurrent = accounts.getActiveZms
 
-  lazy val images: Images = new Images(context, bitmapDecoder, tracking)
+  lazy val images: Images = new Images(global.context, bitmapDecoder, tracking)
   lazy val messages: Messages = new Messages
   lazy val users: Users = new Users
 

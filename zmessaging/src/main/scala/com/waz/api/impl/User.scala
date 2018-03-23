@@ -21,7 +21,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model._
 import com.waz.ui._
-import com.waz.utils.NameParts
 
 class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends com.waz.api.User with UiObservable with SignalLoading {
 
@@ -29,7 +28,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   def this(data: UserData)(implicit ui: UiModule) = this(data.id, data)
 
   require(id == data.id)
-
 
   // XXX: listen to storage directly if no ZMessaging is available
   // this is needed for Self.getUser to work, UI accesses it before zms is fully logged in
@@ -50,8 +48,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
     }
   }
 
-  private def computeInitials(name: String): String = NameParts.parseFrom(name).initials
-
   def getName = data.name
 
   override def equals(other: Any): Boolean = other match {
@@ -61,5 +57,5 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   override def hashCode: Int = id.hashCode
 
-  override def toString: String = s"User(id = $id, data = $data, initials = ${computeInitials(data.name)})"
+  override def toString: String = s"User(id = $id, data = $data)"
 }

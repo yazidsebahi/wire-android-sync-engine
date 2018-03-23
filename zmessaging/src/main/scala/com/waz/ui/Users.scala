@@ -26,8 +26,4 @@ class Users(implicit ui: UiModule) {
   val users = new UiCache[UserId, User](lruSize = 50)
 
   def getUser(id: UserId): User = getOrUpdate(users)(id, new User(id))
-
-  def getUser(data: UserData): User = getOrUpdate(users)(data.id, new User(data.id, data))
-
-  def requestVerificationEmail(email: EmailAddress): Unit = ui.accounts.requestVerificationEmail(email)
 }
