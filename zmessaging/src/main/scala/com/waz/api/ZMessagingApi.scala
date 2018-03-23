@@ -34,6 +34,4 @@ trait ZMessagingApi {
   def getErrors: ErrorsList
 
   def getConnectionIndicator: ConnectionIndicator
-
-  def getUsernames: Usernames
 }

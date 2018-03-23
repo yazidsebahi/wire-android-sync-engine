@@ -90,8 +90,6 @@ trait SyncServiceHandle {
   def syncPreKeys(user: UserId, clients: Set[ClientId]): Future[SyncId]
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId]
 
-  def postValidateHandles(handles: Seq[Handle]): Future[SyncId]
-
   def performFullSync(): Future[Unit]
 }
 
@@ -161,8 +159,6 @@ class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeout
 
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId) = addRequest(PostSessionReset(conv, user, client))
 
-  override def postValidateHandles(handles: Seq[Handle]): Future[SyncId] = addRequest(ValidateHandles(handles))
-
   override def performFullSync(): Future[Unit] = for {
     id1 <- syncConversations()
     id2 <- syncTeam()
@@ -230,7 +226,6 @@ class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHand
     case PostRecalled(convId, msg, recall)     => zms.messagesSync.postRecalled(convId, msg, recall)
     case PostSessionReset(conv, user, client)  => zms.otrSync.postSessionReset(conv, user, client)
     case PostReceipt(conv, msg, user, tpe)     => zms.messagesSync.postReceipt(conv, msg, user, tpe)
-    case ValidateHandles(handles)              => zms.handlesSync.validateHandles(handles)
   }
 
   override def apply(req: SyncRequest): Future[SyncResult] =
