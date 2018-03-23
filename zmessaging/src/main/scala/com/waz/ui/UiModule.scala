@@ -21,7 +21,6 @@ import android.content.Context
 import android.net.Uri
 import android.os.{Handler, Looper}
 import com.waz.Control.getOrUpdate
-import com.waz.ZLog.ImplicitTag._
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events._
@@ -101,7 +100,6 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
 
   val global = accounts.global
   def context = global.context
-  def cache = global.cache
   def imageCache = global.imageCache
   def bitmapDecoder = global.bitmapDecoder
   val tracking = global.trackingService

@@ -17,9 +17,7 @@
  */
 package com.waz.ui
 
-import android.content.{ContentResolver, Context}
-import android.graphics.Bitmap
-import android.media.ExifInterface
+import android.content.Context
 import android.os.Parcel
 import com.waz.Control.getOrUpdate
 import com.waz.ZLog._
@@ -85,23 +83,10 @@ class Images(context: Context, bitmapLoader: BitmapDecoder, tracking: TrackingSe
 
   def createMirroredImageAssetFrom(bytes: Array[Byte]): api.ImageAsset =
     returning(createImageAssetFrom(bytes))(_.setMirrored(true))
-
-  def getOrCreateImageAssetFromResourceId(resourceId: Int): api.ImageAsset =
-    getOrCreateUriImageAsset(URI.parse(s"${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.getPackageName}/$resourceId"))
-
-  def getOrCreateImageAssetFrom(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL): api.ImageAsset = {
-    if (bitmap == null || bitmap == com.waz.bitmap.EmptyBitmap) ImageAsset.Empty
-    //Created with sketch, so don't cache since if the user cancels or sends, the image asset won't be needed again
-    else new LocalBitmapAsset(bitmap, orientation)
-  }
 }
 
 object Images {
   private implicit val logTag: LogTag = logTagFor[Images]
 
   val EmptyBitmap = bitmap.EmptyBitmap
-}
-
-trait ImagesComponent {
-  val images: Images
 }

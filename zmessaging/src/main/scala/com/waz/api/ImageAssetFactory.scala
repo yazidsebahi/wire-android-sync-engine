@@ -17,7 +17,6 @@
  */
 package com.waz.api
 
-import android.graphics.Bitmap
 import com.waz.service.ZMessaging
 import com.waz.utils.wrappers.URI
 
@@ -35,26 +34,9 @@ object ImageAssetFactory {
    */
   def getImageAsset(bytes: Array[Byte]): ImageAsset = ZMessaging.currentUi.images.createImageAssetFrom(bytes)
 
-  def getImageAsset(bitmap: Bitmap): ImageAsset = ZMessaging.currentUi.images.getOrCreateImageAssetFrom(bitmap)
-
-  /**
-   * Created image asset from rotated bitmap.
-   * @param orientation ExifInterface.ORIENTATION_* constant
-   */
-  def getImageAsset(bitmap: Bitmap, orientation: Int): ImageAsset = {
-    assert(orientation >= 0 && orientation <= 8, "rotation should be ExifInterface.ORIENTATION_* constant (values in range: [0-8])")
-    ZMessaging.currentUi.images.getOrCreateImageAssetFrom(bitmap, orientation)
-  }
-
   /**
    * Retrieve mirrored image asset from a byte array.
    * This will handle caching, orientation (according to exif data if available) and sampling.
    */
   def getMirroredImageAsset(bytes: Array[Byte]): ImageAsset = ZMessaging.currentUi.images.createMirroredImageAssetFrom(bytes)
-
-  /**
-   * Retrieve an image asset directly from a resource id.
-   * This will handle caching and sampling.
-   */
-  def getImageAsset(resourceId: Int): ImageAsset = ZMessaging.currentUi.images.getOrCreateImageAssetFromResourceId(resourceId)
 }
