@@ -33,6 +33,7 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
+import com.waz.znet.ZNetClient.ErrorOrResponse
 import org.json.JSONObject
 import org.threeten.bp
 
@@ -42,7 +43,7 @@ import scala.util.Try
 trait LoginClient {
   def access(cookie: Cookie, token: Option[AccessToken]): CancellableFuture[LoginResult]
   def login(credentials: Credentials): CancellableFuture[LoginResult]
-  def requestVerificationEmail(email: EmailAddress): CancellableFuture[Either[ErrorResponse, Unit]]
+  def requestVerificationEmail(email: EmailAddress): ErrorOrResponse[Unit]
 }
 
 class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: TrackingService) extends LoginClient {
@@ -52,7 +53,7 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
   private[znet] var lastRequestTime = 0L
   private[znet] var failedAttempts = 0
   private var lastResponse = Status.Success
-  private var loginFuture = CancellableFuture.successful[LoginResult](Left((None, ErrorResponse.Cancelled)))
+  private var loginFuture = CancellableFuture.successful[LoginResult](Left(ErrorResponse.Cancelled))
 
   def requestDelay =
     if (failedAttempts == 0) Duration.Zero
@@ -78,11 +79,11 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
     } flatMap { _ =>
       verbose(s"starting request")
       lastRequestTime = System.currentTimeMillis()
-      request map {
-        case Left((rId, error)) =>
+      request.map {
+        case Left(error) =>
           failedAttempts += 1
           lastResponse = error.getCode
-          Left((rId, error))
+          Left(error)
         case resp =>
           failedAttempts = 0
           lastResponse = Status.Success
@@ -121,16 +122,16 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
     case Response(SuccessHttpStatus(), JsonObjectResponse(TokenResponse(token)), responseHeaders) =>
       debug(s"receivedAccessToken: '$token', headers: $responseHeaders")
       Right((token, getCookieFromHeaders(responseHeaders)))
-    case r @ Response(status, ErrorResponse(code, msg, label), headers) =>
+    case r @ Response(_, ErrorResponse(code, msg, label), _) =>
       warn(s"failed login attempt: $r")
-      Left((headers(RequestId), ErrorResponse(code, msg, label)))
-    case r @ Response(status, _, headers) => Left((headers(RequestId), ErrorResponse(status.status, s"unexpected login response: $r", "")))
+      Left(ErrorResponse(code, msg, label))
+    case r @ Response(status, _, _) => Left(ErrorResponse(status.status, s"unexpected login response: $r", ""))
   }
 
 }
 
 object LoginClient {
-  type LoginResult = Either[(Option[String], ErrorResponse), (AccessToken, Option[Cookie])]
+  type LoginResult = Either[ErrorResponse, (AccessToken, Option[Cookie])]
 
   val InsufficientCredentials = "insufficient credentials"
 
@@ -141,9 +142,6 @@ object LoginClient {
   val AccessPath = "/access"
   val ActivateSendPath = "/activate/send"
   val LoginUriStr = Request.query(LoginPath, ("persist", true))
-
-  //TODO remove once logout issue is fixed: https://wearezeta.atlassian.net/browse/AN-4816
-  val RequestId = "Request-Id"
 
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
 

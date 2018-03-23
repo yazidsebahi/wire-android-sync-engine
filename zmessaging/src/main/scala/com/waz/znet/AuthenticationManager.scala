@@ -20,26 +20,27 @@ package com.waz.znet
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.{AccountStorage, AccountsStorageOld}
-import com.waz.model.{AccountDataOld, AccountId, UserId}
-import com.waz.service.ZMessaging
+import com.waz.content.AccountStorage
+import com.waz.model.{AccountData, UserId}
 import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service.tracking.TrackingService
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.JsonEncoder.encodeInstant
 import com.waz.utils.events.EventStream
-import com.waz.utils.{JsonDecoder, JsonEncoder}
+import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import com.waz.znet.AuthenticationManager.AccessToken
-import com.waz.znet.LoginClient.{InsufficientCredentials, LoginResult}
+import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response._
+import com.waz.znet.ZNetClient.ErrorOr
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 trait AccessTokenProvider {
-  def currentToken(): Future[Either[Status, AccessToken]]
-  def checkLoggedIn(token: Option[AccessToken]): CancellableFuture[Either[Status, AccessToken]]
+  def currentToken(): ErrorOr[AccessToken]
+  def checkLoggedIn(token: Option[AccessToken]): ErrorOr[AccessToken]
 }
 
 /**
@@ -54,41 +55,32 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
 
   implicit val dispatcher = new SerialDispatchQueue(name = "AuthenticationManager")
 
-  private var closed = false
-
   val onInvalidCredentials = EventStream[Unit]()
 
   private def token  = withAccount(_.accessToken)
   private def cookie = withAccount(_.cookie)
 
-  private def account = withAccount(identity)
-
-  private def withAccount[A](f: (AccountDataOld) => A): Future[A] = accStorage.get(id).map {
+  private def withAccount[A](f: (AccountData) => A): Future[A] = accStorage.get(id).map {
     case Some(acc) => f(acc)
     case _         => throw new IllegalStateException(s"Could not find matching account for: $id")
   }
 
   //Only performs safe update - never wipes either the cookie or the token.
   private def updateCredentials(token: Option[AccessToken] = None, cookie: Option[Cookie] = None) =
-    accStorage.update(id, acc => acc.copy(accessToken = if (token.isDefined) token else acc.accessToken, cookie = if (cookie.isDefined) cookie else acc.cookie))
+    accStorage.update(id, acc => acc.copy(accessToken = if (token.isDefined) token else acc.accessToken, cookie = cookie.getOrElse(acc.cookie)))
 
 
   private def wipeCredentials() =
-    accStorage.update(id, _.copy(accessToken = None, cookie = None))
+    accStorage.remove(id)
 
   /**
    * Last login request result. Used to make sure we never send several concurrent login requests.
    */
-  private var loginFuture: CancellableFuture[Either[Status, AccessToken]] = CancellableFuture.lift(token.map { _.fold[Either[Status, AccessToken]](Left(Cancelled))(Right(_)) })
+  private var loginFuture: ErrorOr[AccessToken] = token.map(_.fold2(Left(ErrorResponse.internalError("No token currently set")), Right(_))) //TODO will this cause lots of failures?
 
-  def invalidateToken() = token.map(_.foreach(t => updateCredentials(Some(t.copy(expiresAt = 0)))))
+  def invalidateToken() = token.map(_.foreach(t => updateCredentials(Some(t.copy(expiresAt = Instant.EPOCH)))))
 
-  def isExpired(token: AccessToken) = token.expiresAt - ExpireThreshold < System.currentTimeMillis()
-
-  def close() = dispatcher {
-    closed = true
-    loginFuture.cancel()
-  }
+  def isExpired(token: AccessToken) = (token.expiresAt - ExpireThreshold) isBefore clock.instant()
 
   /**
    * Returns current token if not expired or performs login request
@@ -97,63 +89,41 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
     loginFuture = loginFuture.recover {
       case ex =>
         warn(s"login failed", ex)
-        Left(Cancelled)
+        Left(ErrorResponse.internalError(s"Exception while trying to login: ${ex.getCause}"))
     } flatMap { _ =>
-      CancellableFuture.lift(token) flatMap {
+      token.flatMap {
         case Some(token) if !isExpired(token) =>
           verbose(s"Non expired token: $token")
           CancellableFuture.successful(Right(token))
         case token => checkLoggedIn(token)
       }
     }
-    loginFuture.future
+    loginFuture
   }
 
   /**
     * Forces an access request to check if the current cookie is valid. Can be used to see if a password reset was successful
     */
   override def checkLoggedIn(token: Option[AccessToken]) =
-    CancellableFuture.lift(cookie).flatMap { cookie =>
+    cookie.flatMap { cookie =>
       debug(s"Non existent or potentially expired token: $token, will attempt to refresh with cookie: $cookie")
-      cookie match {
-        case Some(c) =>
-          dispatchRequest(client.access(c, token)) {
-            case Left((requestId, resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label))) =>
-              verbose(s"access request failed (label: $label, message: $message), will try login request. currToken: $token, cookie: $cookie, access resp: $resp")
-
-              tracking.exception(new RuntimeException(s"Access request: $requestId failed: msg: $message, label: $label, cookie expired at: ${cookie.map(_.expiry)} (is valid: ${cookie.exists(_.isValid)}), currToken expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
-              for {
-                _ <- CancellableFuture.lift(wipeCredentials())
-                res <- dispatchLoginRequest()
-              } yield res
-          }
-        case None => dispatchLoginRequest()
+      dispatchRequest(client.access(cookie, token).future) {
+        case Left(resp @ ErrorResponse(Status.Forbidden | Status.Unauthorized, message, label)) =>
+          verbose(s"access request failed (label: $label, message: $message), will try login request. currToken: $token, cookie: $cookie, access resp: $resp")
+          tracking.exception(new RuntimeException(s"Access request failed: msg: $message, label: $label, cookie expired at: ${cookie.expiry} (is valid: ${cookie.isValid}), currToken expired at: ${token.map(_.expiresAt)} (is valid: ${token.exists(_.isValid)})"), null)
+          wipeCredentials().map(_ => Left(resp))
       }
     }
 
-  private def dispatchLoginRequest(): CancellableFuture[Either[Status, AccessToken]] =
-    CancellableFuture.lift(account).flatMap { acc =>
-      dispatchRequest(client.login(acc)) {
-        case Left((_, resp)) if resp.code == Status.Forbidden || resp.message == InsufficientCredentials =>
-          debug(s"login request failed with: $resp")
-          onInvalidCredentials ! {}
-          CancellableFuture.successful(Left(HttpStatus(resp.code, resp.message)))
-      }
-    }
-
-  private def dispatchRequest(request: => CancellableFuture[LoginResult], retryCount: Int = 0)(handler: ResponseHandler): CancellableFuture[Either[Status, AccessToken]] =
-    request flatMap handler.orElse {
+  private def dispatchRequest(request: => Future[LoginResult], retryCount: Int = 0)(handler: ResponseHandler): ErrorOr[AccessToken] =
+    request.flatMap(handler.orElse {
       case Right((token, cookie)) =>
         debug(s"receivedAccessToken: '$token'")
-        CancellableFuture.lift {
-          updateCredentials(Some(token), cookie).map(_ => Right(token))
-        }
+        updateCredentials(Some(token), cookie).map(_ => Right(token))
 
-      case Left(_) if closed => CancellableFuture.successful(Left(ClientClosed))
-
-      case Left((_, err @ ErrorResponse(Cancelled.status, msg, label))) =>
+      case Left(err @ ErrorResponse(Cancelled.status, msg, label)) =>
         debug(s"request has been cancelled")
-        CancellableFuture.successful(Left(HttpStatus(err.code, s"$msg - $label")))
+        Future.successful(Left(err))
 
       case Left(err) if retryCount < MaxRetryCount =>
         info(s"Received error from request: $err, will retry")
@@ -162,15 +132,15 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
       case Left((_, err)) =>
         val msg = s"Login request failed after $retryCount retries, last status: $err"
         error(msg)
-        CancellableFuture.successful(Left(HttpStatus(err.code, msg)))
-    }
+        Future.successful(Left(err))
+    })
 }
 
 object AuthenticationManager {
   val MaxRetryCount = 3
-  val ExpireThreshold = 15 * 1000 // refresh access token on background if it is close to expire
+  val ExpireThreshold = 15.seconds // refresh access token on background if it is close to expire
 
-  type ResponseHandler = PartialFunction[LoginResult, CancellableFuture[Either[Status, AccessToken]]]
+  type ResponseHandler = PartialFunction[LoginResult, ErrorOr[AccessToken]]
 
   case class Cookie(str: String) {
 
