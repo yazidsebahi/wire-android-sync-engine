@@ -33,8 +33,6 @@ trait ZMessagingApi {
 
   def getErrors: ErrorsList
 
-  def getGiphy: Giphy
-
   def getConnectionIndicator: ConnectionIndicator
 
   def getUsernames: Usernames

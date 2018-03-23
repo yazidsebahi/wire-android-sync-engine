@@ -54,8 +54,6 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
 
   def getName = data.name
 
-  def getId = id.str
-
   override def equals(other: Any): Boolean = other match {
     case other: User => other.id == id
     case _ => false

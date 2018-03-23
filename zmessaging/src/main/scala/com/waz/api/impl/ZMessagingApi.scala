@@ -80,8 +80,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
 
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
-  override def getGiphy: Giphy = new Giphy
-
   override def getConnectionIndicator = new ConnectionIndicator()
 
   override def getUsernames = new Usernames

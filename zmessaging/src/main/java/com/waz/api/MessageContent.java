@@ -20,32 +20,17 @@ package com.waz.api;
 public interface MessageContent {
 
     class Text implements MessageContent {
-        private static final User[] EmptyMentions = new User[0];
 
         private final String content;
-        private final User[] mentions;
-
-        public Text(String content, User[] mentioned) {
-            this.content = content;
-            this.mentions = mentioned;
-        }
-
-        public Text(String content, User mentioned) {
-            this.content = content;
-            this.mentions = new User[] { mentioned };
-        }
 
         public Text(String content) {
-            this(content, EmptyMentions);
+            this.content = content;
         }
 
         public String getContent() {
             return content;
         }
 
-        public User[] getMentions() {
-            return mentions;
-        }
     }
 
     class Image implements MessageContent {

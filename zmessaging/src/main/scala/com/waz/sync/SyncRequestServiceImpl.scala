@@ -21,12 +21,10 @@ import android.util.Log
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{SyncState, ZmsVersion}
-import com.waz.api.impl.SyncIndicator
 import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService, ReportingService}
-import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler, SyncSchedulerImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
@@ -50,6 +48,8 @@ class SyncRequestServiceImpl(context:   Context,
                              tracking:  TrackingService
                             )
                             (implicit accountContext: AccountContext) extends SyncRequestService {
+
+  import SyncRequestServiceImpl._
 
   private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
@@ -85,14 +85,19 @@ class SyncRequestServiceImpl(context:   Context,
     }
   }
 
-  def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] =
+  def syncState(matchers: Seq[SyncMatcher]): Signal[Data] =
     content.syncJobs map { _.values.filter(job => matchers.exists(_.apply(job))) } map { jobs =>
       val state = if (jobs.isEmpty) SyncState.COMPLETED else jobs.minBy(_.state.ordinal()).state
-      SyncIndicator.Data(state, api.SyncIndicator.PROGRESS_UNKNOWN, jobs.flatMap(_.error).toSeq)
+      Data(state, ProgressUnknown, jobs.flatMap(_.error).toSeq)
     }
 }
 
 object SyncRequestServiceImpl {
+
+  val ProgressUnknown = -1
+
+  case class Data(state: SyncState = SyncState.COMPLETED, progress: Int = 0, errors: Seq[api.ErrorResponse] = Nil)
+
   val MaxSyncAttempts = 20
 
   case class SyncMatcher(cmd: SyncCommand, convId: Option[ConvId]) {

@@ -24,8 +24,8 @@ import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.view.View
-import com.waz.ZLog.LogTag
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.LogTag
 import com.waz.api._
 import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
 import com.waz.content.{Database, GlobalDatabase}
@@ -38,7 +38,6 @@ import com.waz.model.{ConvId, Liking, RConvId, MessageContent => _, _}
 import com.waz.provision.DeviceActor.responseTimeout
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
-import com.waz.service.call.FlowManagerService.VideoCaptureDevice
 import com.waz.testutils.Implicits._
 import com.waz.threading._
 import com.waz.ui.UiModule
@@ -267,21 +266,11 @@ class DeviceActor(val deviceName: String,
 
     case SendGiphy(rConvId, searchQuery) =>
       zmsWithLocalConv(rConvId).flatMap { case (z, convId) =>
-        searchQuery match {
-          case "" =>
-            waitUntil(api.getGiphy.random())(_.isReady == true) map { results =>
-              z.convsUi.sendMessage(convId, "Via giphy.com")
-              z.convsUi.sendMessage(convId, results.head)
-              Successful
-            }
-
-          case _ =>
-            waitUntil(api.getGiphy.search(searchQuery))(_.isReady == true) map { results =>
-              z.convsUi.sendMessage(convId, "%s · via giphy.com".format(searchQuery))
-              z.convsUi.sendMessage(convId, results.head)
-              Successful
-            }
-        }
+        for {
+          res   <- (if (searchQuery.isEmpty) z.giphy.getRandomGiphyImage else z.giphy.searchGiphyImage(searchQuery)).future
+          msg1  <- z.convsUi.sendMessage(convId, "Via giphy.com")
+//              msg2  <- z.convsUi.sendMessage(convId, ) //TODO use asset data directly when we get rid of ImageAsset
+        } yield Successful
       }
 
     case RecallMessage(rConvId, msgId) =>
