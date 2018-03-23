@@ -154,24 +154,3 @@ class MockZMessaging(val mockUser: MockUserModule = new MockUserModule(), teamId
   def lastLocalMessage(conv: ConvId, tpe: Message.Type) = Await.result(messagesStorage.lastLocalMessage(conv, tpe), timeout)
 }
 
-class MockUiModule(zmessaging: MockZMessaging) extends UiModule(zmessaging.mockUser.mockAccount.accounts) {
-  ZMessaging.currentUi = this
-  setCurrent(Some(zmessaging))
-
-  def setCurrent(zms: Option[ZMessaging]) = zms match {
-    case Some(z: MockZMessaging) =>
-      accounts.accountMap(z.accountId) = z.account
-      accounts.activeAccountPref := Some(z.accountId)
-    case _ =>
-      accounts.activeAccountPref := None
-  }
-}
-
-object MockUiModule {
-
-  def apply(accounts: AccountsServiceImpl): UiModule = returning(new UiModule(accounts)) { ui =>
-    ZMessaging.currentUi = ui
-  }
-
-  def apply(zmessaging: MockZMessaging): UiModule = new MockUiModule(zmessaging)
-}

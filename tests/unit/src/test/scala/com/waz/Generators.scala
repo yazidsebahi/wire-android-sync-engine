@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{Date, Locale}
 
-import com.waz.api.{InvitationTokenFactory, Invitations}
+import com.waz.api.Invitations
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.ConversationData.{ConversationType, UnreadCount}
 import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
@@ -299,8 +299,6 @@ object Generators {
   implicit lazy val arbPhoneNumber: Arbitrary[PhoneNumber] = Arbitrary(resultOf(PhoneNumber))
   implicit lazy val arbInvitation: Arbitrary[Invitation] = Arbitrary(resultOf(Invitation))
   implicit lazy val ArbLocale: Arbitrary[Locale] = Arbitrary(oneOf(availableLocales))
-  implicit lazy val ArbGenericToken: Arbitrary[Invitations.GenericToken] = Arbitrary(resultOf(InvitationTokenFactory.genericTokenFromCode _))
-  implicit lazy val ArbPersonalToken: Arbitrary[Invitations.PersonalToken] = Arbitrary(resultOf(InvitationTokenFactory.personalTokenFromCode _))
 
   implicit lazy val arbHandle: Arbitrary[Option[Handle]] = Arbitrary(sideEffect(Some(Handle.random)))
 

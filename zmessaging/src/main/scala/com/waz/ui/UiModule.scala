@@ -35,7 +35,7 @@ trait ZMessagingResolverComponent {
 class ZMessagingResolver(ui: UiModule) {
   def apply[A](f: ZMessaging => A)(implicit ec: ExecutionContext = Threading.Background): CancellableFuture[A] =
     CancellableFuture.lift(ui.getCurrent.collect { case Some(zms) => f(zms) })
-  
+
   def flatMapFuture[A](f: ZMessaging => Future[A])(implicit ec: ExecutionContext = Threading.Background) = apply(identity).future flatMap f
 }
 

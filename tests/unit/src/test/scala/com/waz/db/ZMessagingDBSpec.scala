@@ -23,7 +23,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
 import com.waz.Generators
 import com.waz.utils.wrappers.{DB, DBHelper, URI}
-import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
+import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.ConversationData.ConversationDataDao
