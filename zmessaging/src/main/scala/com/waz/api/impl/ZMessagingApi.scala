@@ -76,8 +76,6 @@ class ZMessagingApi(implicit val ui: UiModule) extends com.waz.api.ZMessagingApi
     createCount -= 1
   }
 
-  override def getSelf: Self = ui.users.selfUser
-
   override def getErrors: ErrorsList = ui.cached(Uris.ErrorsUri, new ErrorsList)
 
   override def getConnectionIndicator = new ConnectionIndicator()

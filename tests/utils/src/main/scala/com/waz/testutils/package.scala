@@ -58,7 +58,6 @@ package object testutils {
     implicit def apimsg_to_msg(msg: com.waz.api.Message): Message = msg.asInstanceOf[Message]
     implicit def apiuser_to_user(user: com.waz.api.User): User = user.asInstanceOf[User]
     implicit def apiim_to_im(im: com.waz.api.ImageAsset): ImageAsset = im.asInstanceOf[ImageAsset]
-    implicit def apiself_to_self(s: com.waz.api.Self): Self = s.asInstanceOf[Self]
 
     implicit lazy val CursorEmptiness: Emptiness[Cursor] = new Emptiness[Cursor] {
       override def isEmpty(thing: Cursor): Boolean = thing.getCount == 0

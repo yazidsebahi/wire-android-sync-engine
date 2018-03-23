@@ -29,8 +29,6 @@ trait ZMessagingApi {
 
   def onDestroy(): Unit
 
-  def getSelf: Self
-
   def getErrors: ErrorsList
 
   def getConnectionIndicator: ConnectionIndicator

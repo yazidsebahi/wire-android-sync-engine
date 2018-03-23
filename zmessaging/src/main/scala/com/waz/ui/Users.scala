@@ -23,8 +23,6 @@ import com.waz.model._
 
 class Users(implicit ui: UiModule) {
 
-  lazy val selfUser = new Self()
-
   val users = new UiCache[UserId, User](lruSize = 50)
 
   def getUser(id: UserId): User = getOrUpdate(users)(id, new User(id))
