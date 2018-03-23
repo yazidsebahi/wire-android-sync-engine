@@ -501,39 +501,4 @@ class DeviceActor(val deviceName: String,
     t.printStackTrace(printWriter)
     result.toString
   }
-
-  private var listeners = Set.empty[UpdateListener] // required to keep references to the listeners as waitUntil manages to get them garbage-collected
-  private var delay = CancellableFuture.cancelled[Unit]()
-
-  def waitUntil[S <: UiObservable](observable: S, timeout: FiniteDuration = 120.seconds)(check: S => Boolean): Future[S] = {
-    Threading.assertUiThread()
-    val promise = Promise[S]()
-
-    def onUpdated: Unit = {
-      Threading.assertUiThread()
-      if (check(observable)) {
-        promise.trySuccess(observable)
-      }
-    }
-
-    val listener = new UpdateListener {
-      override def updated(): Unit = onUpdated
-    }
-    listeners += listener
-    observable.addUpdateListener(listener)
-
-    onUpdated
-
-    delay = CancellableFuture.delay(timeout)
-    delay.onSuccess { case _ =>
-      promise.tryFailure(new Exception(s"Wait until did not complete before timeout of : ${timeout.toSeconds} seconds"))
-    }
-
-    promise.future.andThen {
-      case _ =>
-        observable.removeUpdateListener(listener)
-        listeners -= listener
-        delay.cancel()("wait_until")
-    }
-  }
 }
