@@ -31,6 +31,8 @@ import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.IConversation.{Access, AccessRole}
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.ShouldSyncInitial
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -93,10 +95,17 @@ trait SyncServiceHandle {
   def performFullSync(): Future[Unit]
 }
 
-class AndroidSyncServiceHandle(service: => SyncRequestService, timeouts: Timeouts) extends SyncServiceHandle {
+class AndroidSyncServiceHandle(service: SyncRequestService, timeouts: Timeouts, userPreferences: UserPreferences) extends SyncServiceHandle {
 
   import com.waz.model.sync.SyncRequest._
   import Threading.Implicits.Background
+
+  val shouldSyncPref = userPreferences.preference(ShouldSyncInitial)
+
+  shouldSyncPref().flatMap {
+    case true => performFullSync().flatMap(_ => shouldSyncPref := false)
+    case _    => Future.successful({})
+  }
 
   private def addRequest(req: SyncRequest, priority: Int = Priority.Normal, dependsOn: Seq[SyncId] = Nil, optional: Boolean = false, timeout: Long = 0, forceRetry: Boolean = false, delay: FiniteDuration = Duration.Zero): Future[SyncId] = {
     val timestamp = SyncJob.timestamp

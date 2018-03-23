@@ -280,6 +280,7 @@ class UserServiceImpl(val selfUserId:    UserId,
     usersStorage.updateAll2(users.map {user => user.id}, update).map(_ => ())
   }
 
+  //TODO handle self user deletion event
   def updateUserDeleted(userIds: Vector[UserId]): Future[Any] =
     usersStorage.updateAll2(userIds, _.copy(deleted = true))
 
@@ -287,6 +288,19 @@ class UserServiceImpl(val selfUserId:    UserId,
     def update(user: UserData): UserData = avMap.get(user.id).fold(user){ av => user.copy(availability = av) }
 
     usersStorage.updateAll2(avMap.keySet, update)
+  }
+
+  //TODO update preferences when this information changes
+  // listen to user data changes, update account email/phone if self user data is changed
+  selfUser.map(user => (user.email, user.phone)) { case (email, phone) =>
+//    verbose(s"self user data changed, email: $email, phone: $phone")
+//    global.accountsStorageOld.update(id, { acc =>
+//      if (acc.pendingPhone == phone) {
+//        acc.copy(email = email)
+//      } else {
+//        acc.copy(email = email, phone = phone)
+//      }
+//    })
   }
 }
 

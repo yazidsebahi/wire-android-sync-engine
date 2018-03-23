@@ -57,9 +57,9 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def baseStorage(userId: UserId) = new StorageModule(global.context, userId, global.prefs)
 
-  def auth(userId: AccountId) = new AuthenticationManager(userId, global.accountsStorageOld, global.loginClient, tracking)
+  def auth(userId: UserId) = new AuthenticationManager(userId, global.accountsStorage, global.loginClient, tracking)
 
-  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
+  def client(auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
   def usersClient(client: ZNetClient) = new UsersClient(client)
 
@@ -69,9 +69,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def cryptobox(userId: UserId, storage: StorageModule) = new CryptoBoxService(global.context, userId, global.metadata, storage.userPrefs)
 
-  def userModule(userId: UserId, account: AccountManager) = wire[UserModule]
-
-  def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule, storage: StorageModule, cryptoBox: CryptoBoxService) = wire[ZMessaging]
+  def zmessaging(teamId: Option[TeamId], clientId: ClientId, accountManager: AccountManager, storage: StorageModule, cryptoBox: CryptoBoxService) = wire[ZMessaging]
 }
 
 class StorageModule(context: Context, val userId: UserId, globalPreferences: GlobalPreferences) {
@@ -90,12 +88,11 @@ class StorageModule(context: Context, val userId: UserId, globalPreferences: Glo
 }
 
 
-class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userModule: UserModule, val storage: StorageModule, val cryptoBox: CryptoBoxService) {
+class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: AccountManager, val storage: StorageModule, val cryptoBox: CryptoBoxService) {
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
 
-  val account    = userModule.account
   val global     = account.global
   val selfUserId = account.id
 
@@ -104,13 +101,13 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   val lifecycle  = global.lifecycle
 
   lazy val accounts             = ZMessaging.currentAccounts
-  implicit lazy val evContext   = userModule.accountContext
-  lazy val sync                 = userModule.sync
-  lazy val syncHandler          = userModule.syncHandler
-  lazy val otrClientsService    = userModule.clientsService
-  lazy val syncContent          = userModule.syncContent
-  lazy val syncRequests         = userModule.syncRequests
-  lazy val otrClientsSync       = userModule.clientsSync
+  implicit lazy val evContext   = account.accountContext
+  lazy val sync                 = account.sync
+  lazy val syncHandler          = account.syncHandler
+  lazy val otrClientsService    = account.clientsService
+  lazy val syncContent          = account.syncContent
+  lazy val syncRequests         = account.syncRequests
+  lazy val otrClientsSync       = account.clientsSync
 
   def context           = global.context
   def contextWrapper    = new AndroidContext(context)

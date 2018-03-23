@@ -22,11 +22,12 @@ import java.io.File
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
-import com.waz.api.{Credentials, KindOfAccess, KindOfVerification}
+import com.waz.api.{Credentials, KindOfAccess, KindOfVerification, PhoneCredentials}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.GlobalPreferences.{ActiveAccountPef, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
 import com.waz.content.UserPreferences
 import com.waz.model._
+import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.returning
@@ -169,6 +170,10 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         _ <- databasesRenamedPref   := true
       } yield {}
   }
+
+  storage.onDeleted(_.foreach { user =>
+    global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
+  })
 
   override def getLoggedInAccounts = storage.list().map(_.toSet)
 

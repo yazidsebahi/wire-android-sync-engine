@@ -35,17 +35,17 @@ import scala.util.Try
 trait TrackingService {
   def events: EventStream[(Option[ZMessaging], TrackingEvent)]
 
-  def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit
+  def track(event: TrackingEvent, userId: Option[UserId] = None): Unit
 
-  def loggedOut(reason: String, accountId: AccountId): Unit = track(LoggedOutEvent(reason), Some(accountId))
+  def loggedOut(reason: String, userId: UserId): Unit = track(LoggedOutEvent(reason), Some(userId))
 
   def optIn(): Unit = track(OptInEvent)
   def optOut(): Unit = track(OptOutEvent)
 
   def contribution(action: ContributionEvent.Action): Unit
-  def assetContribution(assetId: AssetId, accountId: AccountId): Unit
+  def assetContribution(assetId: AssetId, userId: UserId): Unit
 
-  def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit
+  def exception(e: Throwable, description: String, userId: Option[UserId] = None)(implicit tag: LogTag): Unit
   def crash(e: Throwable): Unit
 
   def integrationAdded(integrationId: IntegrationId, convId: ConvId, method: IntegrationAdded.Method): Unit
@@ -59,7 +59,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
 
   val events = EventStream[(Option[ZMessaging], TrackingEvent)]()
 
-  override def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit = (accountId match {
+  override def track(event: TrackingEvent, userId: Option[UserId] = None): Unit = (userId match {
     case Some(id) => zmsProvider(id)
     case _        => zmsProvider.current
   }).map { events ! _ -> event }
@@ -78,9 +78,9 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
     case _ => //
   }
 
-  override def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit = {
+  override def exception(e: Throwable, description: String, userId: Option[UserId] = None)(implicit tag: LogTag): Unit = {
     val cause = rootCause(e)
-    track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e))(tag), accountId)
+    track(ExceptionEvent(cause.getClass.getSimpleName, details(cause), description, throwable = Some(e))(tag), userId)
   }
 
   override def crash(e: Throwable): Unit = {
@@ -97,7 +97,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
   private def details(rootCause: Throwable) =
     Try(rootCause.getStackTrace).toOption.filter(_.nonEmpty).map(_(0).toString).getOrElse("")
 
-  override def assetContribution(assetId: AssetId, accountId: AccountId): Unit = zmsProvider(accountId).map {
+  override def assetContribution(assetId: AssetId, userId: UserId): Unit = zmsProvider(userId).map {
     case Some(z) =>
       for {
         Some(msg)   <- z.messagesStorage.get(MessageId(assetId.str))
@@ -106,7 +106,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         userIds     <- z.membersStorage.activeMembers(conv.id).head
         users       <- z.users.getUsers(userIds.toSeq)
         isGroup     <- z.conversations.isGroupConversation(conv.id)
-      } yield track(ContributionEvent(fromMime(asset.mime), isGroup, msg.ephemeral, users.exists(_.isWireBot), !conv.isTeamOnly, conv.isMemberFromTeamGuest(z.teamId)), Some(accountId))
+      } yield track(ContributionEvent(fromMime(asset.mime), isGroup, msg.ephemeral, users.exists(_.isWireBot), !conv.isTeamOnly, conv.isMemberFromTeamGuest(z.teamId)), Some(userId))
     case _ => //
   }
 
@@ -167,19 +167,19 @@ object TrackingService {
 
   trait ZmsProvider {
     def current: Future[Option[ZMessaging]]
-    def apply(accountId: AccountId): Future[Option[ZMessaging]]
+    def apply(userId: UserId): Future[Option[ZMessaging]]
   }
 
   val defaultZmsProvider = new ZmsProvider {
-    override def apply(accountId: AccountId): Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.zms(accountId).head)
-    override def current: Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.activeZms.head)
+    override def apply(userId: UserId): Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.zms(userId).head)
+    override def current: Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.getActiveZms)
   }
 
-  def exception(e: Throwable, description: String, accountId: Option[AccountId] = None)(implicit tag: LogTag): Unit =
-    ZMessaging.globalModule.map(_.trackingService.exception(e, description, accountId)(tag))
+  def exception(e: Throwable, description: String, userId: Option[UserId] = None)(implicit tag: LogTag): Unit =
+    ZMessaging.globalModule.map(_.trackingService.exception(e, description, userId)(tag))
 
-  def track(event: TrackingEvent, accountId: Option[AccountId] = None): Unit =
-    ZMessaging.globalModule.map(_.trackingService.track(event, accountId))
+  def track(event: TrackingEvent, userId: Option[UserId] = None): Unit =
+    ZMessaging.globalModule.map(_.trackingService.track(event, userId))
 
   trait NoReporting { self: Throwable => }
 

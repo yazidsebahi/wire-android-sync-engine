@@ -23,6 +23,7 @@ import com.waz.ZLog._
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
+import com.waz.model.AccountDataOld.PermissionsMasks
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
 import com.waz.model.otr.ClientId
@@ -32,7 +33,7 @@ import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
-import com.waz.znet.AuthenticationManager.{Cookie, AccessToken}
+import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
@@ -46,6 +47,8 @@ trait Preferences {
 
   //protected for test prefs
   protected var cache = Map.empty[PrefKey[_], Preference[_]]
+
+  final def apply[A: PrefCodec](key: PrefKey[A]): Preference[A] = preference(key)
 
   final def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] =
     cache.getOrElse(key, returning(buildPreference(key))(cache += key -> _)).asInstanceOf[Preference[A]]
@@ -71,6 +74,8 @@ object Preferences {
 
     def :=(value: A):      Future[Unit] = update(value)
     def mutate(f: A => A): Future[Unit] = apply().flatMap(cur => update(f(cur)))
+
+    def flatMutate(f: A => Future[A]) = apply().flatMap(cur => f(cur).flatMap(n => update(n)))
 
     lazy val signal: SourceSignal[A] = {
       returning(Signal[A]()) { s =>
@@ -363,6 +368,15 @@ object UserPreferences {
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
   lazy val SelfClient               = PrefKey[ClientRegistrationState]("self_client")
+  lazy val TeamId                   = PrefKey[Either[Unit, Option[TeamId]]]("team_id") //TODO codec
+  lazy val PrivateMode              = PrefKey[Boolean]("private_mode")
+  lazy val SelfPermissions          = PrefKey[Long]("self_permissions")
+  lazy val CopyPermissions          = PrefKey[Long]("copy_permissions")
+
+  //TODO we probably still need pending emails and phones
+  lazy val Email                    = PrefKey[Option[EmailAddress]]("email") //TODO codec
+  lazy val Phone                    = PrefKey[Option[PhoneNumber]]("phone") //TODO codec
+  //Note, Handle is taken from user storage
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val ShowShareContacts        = PrefKey[Boolean]       ("show_share_contacts", customDefault = true) //whether to ask for permission or not
