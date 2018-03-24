@@ -134,6 +134,17 @@ object Preferences {
         case "LimitReached"    => LimitReached
         case id                => Registered(ClientId(id))
       }, Unregistered)
+
+      implicit lazy val TeamIdCodec = apply[Either[Unit, Option[TeamId]]] ({
+        case Left(_) => "TEAM_ID_UNDEFINED"
+        case Right(t) => implicitly[PrefCodec[Option[TeamId]]].encode(t)
+      }, {
+        case "TEAM_ID_UNDEFINED" => Left({})
+        case v => Right(implicitly[PrefCodec[Option[TeamId]]].decode(v))
+      }, Left({}))
+
+      implicit lazy val EmailAddressCodec = apply[EmailAddress](_.str, EmailAddress(_), EmailAddress(""))
+      implicit lazy val PhoneNumberCodec = apply[PhoneNumber](_.str, PhoneNumber(_), PhoneNumber(""))
     }
   }
 
