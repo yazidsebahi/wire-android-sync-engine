@@ -19,8 +19,8 @@ package com.waz.client
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.impl.ErrorResponse
 import com.waz.api._
+import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.model._
 import com.waz.service.BackendConfig
@@ -31,21 +31,20 @@ import com.waz.utils.Locales._
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.ErrorOrResponse
+import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import com.waz.znet._
-import org.json.JSONObject
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 trait RegistrationClient {
+  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): Future[ActivateResult]
+  def requestEmailCode(email: EmailAddress): Future[ActivateResult] //for now only used for registration
+
+  def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
+
   def register(credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
   def registerTeamAccount(account: AccountDataOld): ErrorOrResponse[(UserInfo, Option[Cookie])]
-
-  def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean): ErrorOrResponse[Unit]
-
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
-  def requestEmailConfirmationCode(email: EmailAddress): CancellableFuture[ActivateResult]
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
 }
 
 class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extends RegistrationClient {
@@ -111,58 +110,43 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
     }
   }
 
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
-    postActivateSend(kindOfAccess) {
-      JsonEncoder { o =>
-        o.put("phone", phone.str)
-        if (kindOfAccess == KindOfAccess.LOGIN_IF_NO_PASSWD) o.put("force", false)
-        if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
-      }
+  override def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean) =
+    requestCode(Left(phone), login, call)
+
+  override def requestEmailCode(email: EmailAddress) =
+    requestCode(Right(email))
+
+  //note, login and call only apply to PhoneNumber and are always false for email addresses
+  private def requestCode(method: Either[PhoneNumber, EmailAddress], login: Boolean = false, call: Boolean = false) = {
+    val params = JsonEncoder { o =>
+      method.fold(p => o.put("phone", p.str), e => o.put("email",  e.str))
+      if (!login) o.put("locale", bcp47.languageTagOf(currentLocale))
+      if (call)   o.put("voice_call", call)
     }
 
-  //TODO combine with other code methods when safe to do so
-  def requestEmailConfirmationCode(email: EmailAddress): CancellableFuture[ActivateResult] =
-    postActivateSend(KindOfAccess.REGISTRATION) {
-      JsonEncoder { o =>
-        o.put("email", email.str)
-        o.put("locale", bcp47.languageTagOf(currentLocale))
-      }
-    }
-
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
-    postActivateSend(kindOfAccess) {
-      JsonEncoder { o =>
-        o.put("phone", phone.str)
-        o.put("voice_call", true)
-        if (kindOfAccess == KindOfAccess.LOGIN_IF_NO_PASSWD) o.put("force", false)
-        if (kindOfAccess == KindOfAccess.REGISTRATION) o.put("locale", bcp47.languageTagOf(currentLocale))
-      }
-    }
-
-  private def postActivateSend(kindOfAccess: KindOfAccess)(params: JSONObject): CancellableFuture[ActivateResult] = {
-    val uri = kindOfAccess match {
-      case KindOfAccess.LOGIN_IF_NO_PASSWD | KindOfAccess.LOGIN => LoginSendPath
-      case KindOfAccess.REGISTRATION => ActivateSendPath
-    }
-
-    val request = Request.Post(uri, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)
-    client(request) map {
+    client(Request.Post(if (login) LoginSendPath else ActivateSendPath, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)).map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"confirmation code requested: $resp")
         ActivateResult.Success
       case Response(_, ErrorResponse(Status.Forbidden, _, "password-exists"), headers) =>
         ActivateResult.PasswordExists
       case Response(_, ErrorResponse(code, msg, label), headers) =>
-        warn(s"requestPhoneNumberConfirmation($kindOfAccess) failed with error: ($code, $msg, $label), headers: $headers")
+        warn(s"postActivateSend: login=$login failed with error: ($code, $msg, $label), headers: $headers")
         ActivateResult.Failure(ErrorResponse(code, msg, label))
       case other =>
-        error(s"Unexpected response from requestPhoneNumberConfirmation($kindOfAccess): $other")
+        error(s"Unexpected response from postActivateSend: login=$login: $other")
         ActivateResult.Failure(ErrorResponse(other.status.status, other.toString, "unknown"))
-    }
+    }.future
   }
 
   override def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean) = {
-    client(Request.Post(ActivatePath, activateRequestBody(method, code, dryRun), baseUri = Some(backend.baseUrl), timeout = timeout)) map {
+    val params = JsonEncoder { o =>
+      method.fold(p => o.put("phone", p.str), e => o.put("email",  e.str))
+      o.put("code",   code.str)
+      o.put("dryrun", dryRun)
+    }
+
+    client(Request.Post(ActivatePath, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)).map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"verifyRegistrationMethod: verified: $resp")
         Right(())
@@ -172,7 +156,7 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
       case other =>
         error(s"verifyRegistrationMethod: Unexpected response: $other")
         Left(ErrorResponse(other.status.status, other.toString, "unknown"))
-    }
+    }.future
   }
 }
 
@@ -190,11 +174,4 @@ object RegistrationClientImpl {
     case object PasswordExists extends ActivateResult
     case class Failure(err: ErrorResponse) extends ActivateResult
   }
-
-
-  def activateRequestBody(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean) = JsonContentEncoder(JsonEncoder { o =>
-    method.fold(p => o.put("phone", p.str), e => o.put("email",  e.str)) //TODO common trait for Email/Password?
-    o.put("code",   code.str)
-    o.put("dryrun", dryRun)
-  })
 }

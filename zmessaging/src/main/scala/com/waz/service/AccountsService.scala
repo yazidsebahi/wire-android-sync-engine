@@ -31,7 +31,6 @@ import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.returning
-import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
 import scala.collection.mutable
@@ -69,17 +68,14 @@ trait AccountsService {
 
   def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
 
-  //TODO change KindOfAccess to Boolean
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): Future[ActivateResult]
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): Future[ActivateResult]
-
-  def requestEmailConfirmationCode(email: EmailAddress): Future[ActivateResult]
+  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): Future[ActivateResult]
+  def requestEmailCode(email: EmailAddress): Future[ActivateResult]
 
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
   def login(loginCredentials: Credentials): ErrorOr[UserId]
-  def register(registerCredentials: Credentials): ErrorOr[UserId]
+  def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[UserId]
 
 }
 
@@ -313,35 +309,28 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   def requestVerificationEmail(email: EmailAddress) =
     loginClient.requestVerificationEmail(email).future
 
-  override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess) = {
-    verbose(s"requestPhoneConfirmationCode: $phone, $kindOfAccess")
+  override def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false) = {
+    verbose(s"requestPhoneConfirmationCode: $phone, login=$login, call=$call")
     phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
-      regClient.requestPhoneConfirmationCode(normalizedPhone.getOrElse(phone), kindOfAccess).future
+      regClient.requestPhoneCode(normalizedPhone.getOrElse(phone), login, call)
     }
   }
 
-  override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess) = {
-    verbose(s"requestPhoneConfirmationCall: $phone, $kindOfAccess")
-    phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
-      regClient.requestPhoneConfirmationCall(normalizedPhone.getOrElse(phone), kindOfAccess).future
-    }
-  }
-
-  override def requestEmailConfirmationCode(email: EmailAddress) = {
+  override def requestEmailCode(email: EmailAddress) = {
     verbose(s"requestEmailConfirmationCode: $email")
-    regClient.requestEmailConfirmationCode(email).future //TODO should this email address be normalised?
+    regClient.requestEmailCode(email) //TODO should this email address be normalised?
   }
 
   override def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean) = {
     verbose(s"verifyPhoneNumber: $phone, $code, $dryRun")
     phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
-      regClient.verifyRegistrationMethod(Left(normalizedPhone.getOrElse(phone)), code, dryRun).future
+      regClient.verifyRegistrationMethod(Left(normalizedPhone.getOrElse(phone)), code, dryRun)
     }
   }
 
   override def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true) = {
     verbose(s"verifyEmailAddress: $email, $code, $dryRun")
-    regClient.verifyRegistrationMethod(Right(email), code, dryRun).future //TODO normalise email?
+    regClient.verifyRegistrationMethod(Right(email), code, dryRun) //TODO normalise email?
   }
 
   override def login(loginCredentials: Credentials) = {
@@ -394,35 +383,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 //      _ <- if (req.isRight) storageOld.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
 //      _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
 //    } yield req
-  }
-
-  def createTeamAccount(teamName: String): Future[AccountId] = {
-    throw new Exception("Not yet implemented!") //TODO
-//    for {
-//      acc <- storageOld.findByPendingTeamName(teamName).flatMap {
-//        case Some(a) => Future.successful(a)
-//        case None    => storageOld.insert(AccountDataOld(pendingTeamName = Some(teamName)))
-//      }
-//      _   <- setAccount(Some(acc.id))
-//    } yield acc.id
-  }
-
-  //For team flow only (for now) - applies to current active account
-  def verify(code: ConfirmationCode): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-
-//    withActiveAccount { acc =>
-//      acc.pendingEmail match {
-//        case Some(e) => for {
-//          res <- regClient.verifyEmail(e, code).future
-//          _   <- res match {
-//            case Right(()) => updateCurrentAccount(_.copy(code = Some(code)))
-//            case _ => Future.successful(())
-//          }
-//        } yield res
-//        case _ => Future.successful(Left(internalError(s"Current account: ${acc.id} does not have a pending email address. First request an activation code and provide an email address")))
-//      }
-//    }
   }
 
   //For team flow only (for now) - applies to current active account

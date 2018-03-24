@@ -25,7 +25,7 @@ sealed trait Credentials {
   def addToLoginJson(o: JSONObject): Unit
 }
 
-case class EmailCredentials(email: EmailAddress, password: String) extends Credentials {
+case class EmailCredentials(email: EmailAddress, password: String, code: Option[ConfirmationCode]) extends Credentials {
   override def addToRegistrationJson(o: JSONObject): Unit = {
     o.put("email", email.str)
     o.put("password", password)

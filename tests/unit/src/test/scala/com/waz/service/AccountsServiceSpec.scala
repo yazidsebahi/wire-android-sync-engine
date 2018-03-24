@@ -326,7 +326,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
         Future.successful(Some((account, account)))
       }
 
-      (regClient.requestEmailConfirmationCode _).expects(email).returning(CancellableFuture.successful(ActivateResult.Success))
+      (regClient.requestEmailCode _).expects(email).returning(CancellableFuture.successful(ActivateResult.Success))
       result(service.requestActivationCode(email)) shouldEqual Right(())
 
       account.pendingEmail should contain(email)
