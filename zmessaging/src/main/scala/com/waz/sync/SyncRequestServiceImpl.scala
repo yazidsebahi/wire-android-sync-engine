@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{SyncState, ZmsVersion}
 import com.waz.model.sync._
-import com.waz.model.{AccountId, ConvId, SyncId}
+import com.waz.model.{AccountId, ConvId, SyncId, UserId}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService, ReportingService}
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler, SyncSchedulerImpl}
@@ -39,26 +39,25 @@ trait SyncRequestService {
 
 
 class SyncRequestServiceImpl(context:   Context,
-                             accountId: AccountId,
+                             userId:    UserId,
                              content:   SyncContentUpdater,
                              network:   NetworkModeService,
                              sync: =>   SyncHandler,
                              reporting: ReportingService,
                              accounts:  AccountsService,
                              tracking:  TrackingService
-                            )
-                            (implicit accountContext: AccountContext) extends SyncRequestService {
+                            )(implicit accountContext: AccountContext) extends SyncRequestService {
 
   import SyncRequestServiceImpl._
 
   private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
-  override val scheduler: SyncScheduler = new SyncSchedulerImpl(context, accountId, content, network, this, sync, accounts, tracking)
+  override val scheduler: SyncScheduler = new SyncSchedulerImpl(context, userId, content, network, this, sync, accounts, tracking)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>
-      pw.println(s"SyncJobs for account $accountId:")
+      pw.println(s"SyncJobs for account $userId:")
       jobs.toSeq.sortBy(_.timestamp) foreach { job =>
         pw.println(job.toString)
       }

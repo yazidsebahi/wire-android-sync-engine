@@ -46,11 +46,11 @@ import scala.concurrent.duration._
 
 trait GlobalNotificationsService {
   //To be set by the UI
-  val notificationsSourceVisible = Signal(Map[AccountId, Set[ConvId]]())
+  val notificationsSourceVisible = Signal(Map[UserId, Set[ConvId]]())
 
-  def groupedNotifications: Signal[Map[AccountId, (Boolean, Seq[NotificationInfo])]]
+  def groupedNotifications: Signal[Map[UserId, (Boolean, Seq[NotificationInfo])]]
 
-  def markAsDisplayed(accountId: AccountId, nots: Seq[NotId]): Future[Any]
+  def markAsDisplayed(userId: UserId, nots: Seq[NotId]): Future[Any]
 }
 
 class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
@@ -58,7 +58,7 @@ class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
   import ZLog.ImplicitTag.implicitLogTag
   import com.waz.threading.Threading.Implicits.Background
 
-  lazy val groupedNotifications: Signal[Map[AccountId, (Boolean, Seq[NotificationInfo])]] = //Boolean = shouldBeSilent
+  lazy val groupedNotifications: Signal[Map[UserId, (Boolean, Seq[NotificationInfo])]] = //Boolean = shouldBeSilent
     Option(ZMessaging.currentAccounts) match {
       case Some(accountsService) =>
         accountsService.zmsInstances.flatMap { zs =>
@@ -76,8 +76,8 @@ class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
               silent <- shouldBeSilent.orElse(Signal.const(false))
               nots <- notifications
             } yield {
-              verbose(s"groupedNotifications for account: ${z.accountId} -> (silent: $silent, notsCount: ${nots.size})")
-              z.accountId -> (silent, nots)
+              verbose(s"groupedNotifications for account: ${z.selfUserId} -> (silent: $silent, notsCount: ${nots.size})")
+              z.selfUserId -> (silent, nots)
             }
           }.toSeq
 
@@ -88,10 +88,10 @@ class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
         Signal.empty
     }
 
-  def markAsDisplayed(accountId: AccountId, nots: Seq[NotId]): Future[Any] = {
+  def markAsDisplayed(userId: UserId, nots: Seq[NotId]): Future[Any] = {
     Option(ZMessaging.currentAccounts) match {
       case Some(accountsService) =>
-        accountsService.getZms(accountId).flatMap {
+        accountsService.getZms(userId).flatMap {
           case Some(zms) => zms.notifications.markAsDisplayed(nots)
           case None      => Future.successful({})
         }
@@ -103,8 +103,7 @@ class GlobalNotificationsServiceImpl extends GlobalNotificationsService {
 }
 
 class NotificationService(context:         Context,
-                          accountId:       AccountId,
-                          selfUserId:      UserId,
+                          userId:          UserId,
                           messages:        MessagesStorage,
                           lifeCycle:       UiLifeCycle,
                           storage:         NotificationStorage,
@@ -121,7 +120,7 @@ class NotificationService(context:         Context,
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "NotificationService")
-  implicit lazy val logTag: LogTag = accountTag[NotificationService](accountId)
+  implicit lazy val logTag: LogTag = accountTag[NotificationService](userId)
 
   val alarmService = Option(context) match {
     case Some(c) => Some(c.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager])
@@ -139,14 +138,14 @@ class NotificationService(context:         Context,
     events.foreach {
       case GenericMessageEvent(_, _, _, GenericMessage(_, LastRead(conv, time))) =>
         otherDeviceActiveTime ! clock.instant
-        alarmService.foreach(_.set(AlarmManager.RTC, (clock.instant + checkNotificationsTimeout).toEpochMilli, checkNotificationsIntent(accountId, context)))
+        alarmService.foreach(_.set(AlarmManager.RTC, (clock.instant + checkNotificationsTimeout).toEpochMilli, checkNotificationsIntent(userId, context)))
       case _ =>
     }
     Future.successful(())
   }
 
   globalNots.notificationsSourceVisible { sources =>
-    sources.get(accountId).foreach { convs =>
+    sources.get(userId).foreach { convs =>
       removeNotifications(nd => convs.contains(nd.conv))
     }
   }
@@ -218,11 +217,11 @@ class NotificationService(context:         Context,
   }
 
   reactionStorage.onChanged { reactions =>
-    val reactionsFromOthers = reactions.filterNot(_.user == selfUserId)
+    val reactionsFromOthers = reactions.filterNot(_.user == userId)
 
     messages.getAll(reactionsFromOthers.map(_.message)).flatMap { msgs =>
       val convsByMsg = msgs.iterator.flatten.by[MessageId, Map](_.id).mapValues(_.convId)
-      val myMsgs = msgs.collect { case Some(m) if m.userId == selfUserId => m.id }(breakOut): Set[MessageId]
+      val myMsgs = msgs.collect { case Some(m) if m.userId == userId => m.id }(breakOut): Set[MessageId]
       val rs = reactionsFromOthers.filter(r => myMsgs contains r.message).sortBy(_.timestamp)
       val (toRemove, toAdd) = rs.foldLeft((Set.empty[(MessageId, UserId)], Map.empty[(MessageId, UserId), Liking])) {
         case ((rs, as), r @ Liking(m, u, t, Liking.Action.Like))  => (rs - r.id, as + (r.id -> r))
@@ -256,8 +255,8 @@ class NotificationService(context:         Context,
         //Filter notifications for those coming from other users, and that have come after the last-read time for their respective conversations.
         //Note that for muted conversations, the last-read time is set to Instant.MAX, so they can never come after.
         val lastRead = lrMap.get(n.conv)
-        val sourceVisible = notificationSourceVisible.get(accountId).exists(_.contains(n.conv))
-        val filter = n.user != selfUserId && lastRead.forall(_.isBefore(n.time)) && !sourceVisible
+        val sourceVisible = notificationSourceVisible.get(userId).exists(_.contains(n.conv))
+        val filter = n.user != userId && lastRead.forall(_.isBefore(n.time)) && !sourceVisible
         verbose(s"Inserting notif(${n.id}) if conv lastRead: $lastRead isBefore ${n.time}?: $filter")
 
         filter
@@ -307,7 +306,7 @@ class NotificationService(context:         Context,
                 userPicture = userPicture,
                 isEphemeral = data.ephemeral,
                 isGroupConv = groupConv,
-                isUserMentioned = data.mentions.contains(selfUserId),
+                isUserMentioned = data.mentions.contains(userId),
                 likedContent = maybeLikedContent,
                 hasBeenDisplayed = data.hasBeenDisplayed)
             }

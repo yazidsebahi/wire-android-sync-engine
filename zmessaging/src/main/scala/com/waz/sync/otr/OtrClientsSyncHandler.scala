@@ -53,7 +53,6 @@ trait OtrClientsSyncHandler {
 }
 
 class OtrClientsSyncHandlerImpl(context: Context,
-                                accountId: AccountId,
                                 userId: UserId,
                                 clientId: Signal[Option[ClientId]],
                                 netClient: OtrClient,
@@ -78,7 +77,7 @@ class OtrClientsSyncHandlerImpl(context: Context,
     cryptoBox.createClient() flatMap {
       case None => Future successful Left(ErrorResponse.internalError("CryptoBox missing"))
       case Some((c, lastKey, keys)) =>
-        netClient.postClient(accountId, c, lastKey, keys, password).future flatMap {
+        netClient.postClient(userId, c, lastKey, keys, password).future flatMap {
           case Right(cl) =>
             for {
               _ <- clientRegVersion := ZmsVersion.ZMS_MAJOR_VERSION

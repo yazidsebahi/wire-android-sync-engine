@@ -51,10 +51,10 @@ import scala.util.control.NonFatal
 
 class GlobalCallingService() {
 
-  lazy val services: Signal[Set[(AccountId, CallingService)]] = ZMessaging.currentAccounts.zmsInstances.map(_.map(z => z.accountId -> z.calling))
+  lazy val services: Signal[Set[(UserId, CallingService)]] = ZMessaging.currentAccounts.zmsInstances.map(_.map(z => z.selfUserId -> z.calling))
 
   //If there is an active call in one or more of the logged in accounts, returns the account id for the one with the oldest call
-  lazy val activeAccount: Signal[Option[AccountId]] = services.flatMap { ss =>
+  lazy val activeAccount: Signal[Option[UserId]] = services.flatMap { ss =>
     val signals = ss.toSeq.map { case (id, s) =>
       s.currentCall.map {
         case Some(call) => Some((id, call))
@@ -70,9 +70,8 @@ class GlobalCallingService() {
   }
 }
 
-class CallingService(val selfUserId:      UserId,
+class CallingService(val userId:          UserId,
                      val clientId:        ClientId,
-                     account:             AccountId,
                      context:             Context,
                      avs:                 Avs,
                      convs:               ConversationsContentUpdater,
@@ -104,21 +103,21 @@ class CallingService(val selfUserId:      UserId,
 
   //track call on all state changes - except for when the state becomes None, this will be handled in onClosedCall
   currentCall.map(_.flatMap(_.state)).onChanged {
-    case Some(_) => currentCall.currentValue.flatten.foreach(tracking.trackCallState(account, _))
+    case Some(_) => currentCall.currentValue.flatten.foreach(tracking.trackCallState(userId, _))
     case _ => //
   }
 
   //exposed for tests only
   lazy val wCall = returningF(avs.registerAccount(this)) { call =>
     call.onFailure {
-      case NonFatal(e) => error(s"Failed to initialise WCall for user: $selfUserId", e)
+      case NonFatal(e) => error(s"Failed to initialise WCall for user: $userId", e)
     }
   }
 
   Option(ZMessaging.currentAccounts).foreach(
-    _.loggedInAccounts.map(_.map(_.id)).map(_.contains(account)) {
+    _.loggedInAccounts.map(_.map(_.id)).map(_.contains(userId)) {
       case false =>
-        verbose(s"Account $account logged out, unregistering from AVS")
+        verbose(s"Account $userId logged out, unregistering from AVS")
         wCall.map(avs.unregisterAccount)
       case true =>
     }(EventContext.Global)
@@ -126,7 +125,7 @@ class CallingService(val selfUserId:      UserId,
 
   callProfile.onChanged { p =>
     verbose(s"Call profile changed. active call: ${p.activeCall}, non active calls: ${p.nonActiveCalls}")
-    p.activeCall.foreach(i => if (i.state.contains(SelfCalling)) CallWakeService(context, account, i.convId))
+    p.activeCall.foreach(i => if (i.state.contains(SelfCalling)) CallWakeService(context, userId, i.convId))
   }
 
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
@@ -183,7 +182,7 @@ class CallingService(val selfUserId:      UserId,
       setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
       setCallMuted(c.muted) //Need to set muted only after call is established
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
-      val others = c.others + userId - selfUserId
+      val others = c.others + userId - userId
       c.updateState(SelfConnected).copy(others = others, maxParticipants = others.size + 1)
     }("onEstablishedCall")
   }
@@ -208,7 +207,7 @@ class CallingService(val selfUserId:      UserId,
             case Some(SelfCalling) =>
               //TODO do we want a small timeout before placing a "You called" message, in case of accidental calls? maybe 5 secs
               verbose("Call timed out out the other didn't answer - add a \"you called\" message")
-              messagesService.addMissedCallMessage(conv.id, selfUserId, clock.instant)
+              messagesService.addMissedCallMessage(conv.id, userId, clock.instant)
             case Some(OtherCalling) | Some(SelfJoining) if reason == StillOngoing => // do nothing - call is still ongoing in the background
             case Some(OtherCalling) | Some(SelfJoining) | Some(Ongoing) =>
               verbose("Call timed out out and we didn't answer - mark as missed call")
@@ -220,7 +219,7 @@ class CallingService(val selfUserId:      UserId,
               warn(s"unexpected call state: ${call.state}")
           }
           //need to track here manually, since the current call will either change or be set to None
-          tracking.trackCallState(account, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
+          tracking.trackCallState(userId, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
           //Switch to any available calls that are still incoming and should ring
           p.nonActiveCalls.filter(_.state.contains(OtherCalling)).sortBy(_.startTime).headOption.map(_.convId)
         case Some(call) =>
@@ -240,7 +239,7 @@ class CallingService(val selfUserId:      UserId,
   }
 
   def onMetricsReady(convId: RConvId, metricsJson: String): Unit =
-    tracking.track(AVSMetricsEvent(metricsJson), Some(account))
+    tracking.track(AVSMetricsEvent(metricsJson), Some(userId))
 
   def onConfigRequest(wcall: WCall): Int = {
     verbose("onConfigRequest")
@@ -299,9 +298,9 @@ class CallingService(val selfUserId:      UserId,
       profile <- callProfile.head
       isGroup <- convsService.isGroupConversation(convId)
       others <-
-      if (isGroup) Future.successful(Set(selfUserId))
+      if (isGroup) Future.successful(Set(userId))
       else if (conv.team.isEmpty) Future.successful(Set(UserId(conv.id.str)))
-      else members.getByConvs(Set(conv.id)).map(_.map(_.userId).filter(_ != selfUserId).toSet)
+      else members.getByConvs(Set(conv.id)).map(_.map(_.userId).filter(_ != userId).toSet)
       vbr <- userPrefs.preference(UserPreferences.VBREnabled).apply()
     } yield {
       profile.activeCall match {
@@ -330,7 +329,7 @@ class CallingService(val selfUserId:      UserId,
                   //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
                   val newCall = CallInfo(
                     conv.id,
-                    selfUserId,
+                    userId,
                     Some(SelfCalling),
                     others = others,
                     isVideoCall = isVideo,

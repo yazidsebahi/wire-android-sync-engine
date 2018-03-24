@@ -52,7 +52,6 @@ trait TeamsService {
 }
 
 class TeamsServiceImpl(selfUser:           UserId,
-                       selfAccount:        AccountId,
                        teamId:             Option[TeamId],
                        teamStorage:        TeamsStorage,
                        accStorage:         AccountsStorageOld,
@@ -168,8 +167,12 @@ class TeamsServiceImpl(selfUser:           UserId,
   }
 
   override def onMemberSynced(userId: UserId, permissions: PermissionsMasks) = {
+    import UserPreferences._
     if (userId == selfUser)
-      accStorage.update(selfAccount, _.copy(_selfPermissions = permissions._1, _copyPermissions = permissions._2)).map(_ => {})
+      for {
+        _ <- userPrefs(SelfPermissions) := permissions._1
+        _ <- userPrefs(CopyPermissions) := permissions._2
+      } yield {}
     else Future.successful({})
   }
 

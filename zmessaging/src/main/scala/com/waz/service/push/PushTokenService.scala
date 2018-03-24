@@ -23,8 +23,8 @@ import com.waz.ZLog
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.content.GlobalPreferences.{CurrentAccountPrefOld, PushEnabledKey}
-import com.waz.content.{AccountsStorageOld, GlobalPreferences}
-import com.waz.model.{AccountId, PushToken, PushTokenRemoveEvent}
+import com.waz.content.{AccountStorage, GlobalPreferences}
+import com.waz.model.{PushToken, PushTokenRemoveEvent, UserId}
 import com.waz.service.AccountsService.{Active, InForeground}
 import com.waz.service.ZMessaging.accountTag
 import com.waz.service._
@@ -41,16 +41,16 @@ import scala.util.control.NonFatal
 /**
   * Responsible for deciding when to generate and register push tokens and whether they should be active at all.
   */
-class PushTokenService(googleApi:    GoogleApi,
+class PushTokenService(userId:       UserId,
+                       googleApi:    GoogleApi,
                        backend:      BackendConfig,
                        globalToken:  GlobalTokenService,
                        prefs:        GlobalPreferences,
-                       accountId:    AccountId,
                        accounts:     AccountsService,
-                       accStorage:   AccountsStorageOld,
+                       accStorage:   AccountStorage,
                        sync:         SyncServiceHandle)(implicit accountContext: AccountContext) {
 
-  implicit lazy val logTag: LogTag = accountTag[PushTokenService](accountId)
+  implicit lazy val logTag: LogTag = accountTag[PushTokenService](userId)
 
   implicit val dispatcher = globalToken.dispatcher
 
@@ -58,19 +58,19 @@ class PushTokenService(googleApi:    GoogleApi,
   val currentAccount = prefs.preference(CurrentAccountPrefOld)
   val currentToken   = globalToken.currentToken
 
-  private val account = accStorage.signal(accountId)
+  private val account = accStorage.signal(userId)
 
-  private val isLoggedIn = accounts.accountState(accountId).map {
+  private val isLoggedIn = accounts.accountState(userId).map {
     case _: Active => true
     case _         => false
   }
-  private val userToken = account.map(_.registeredPush)
+  private val userToken = account.map(_.pushToken)
 
   val pushActive = (for {
-    push           <- pushEnabled.signal                                      if push
-    play           <- googleApi.isGooglePlayServicesAvailable                 if play
-    inForeground   <- accounts.accountState(accountId).map(_ == InForeground) if !inForeground
-    current        <- currentToken.signal                                     if current.isDefined
+    push           <- pushEnabled.signal if push
+    play           <- googleApi.isGooglePlayServicesAvailable if play
+    inForeground   <- accounts.accountState(userId).map(_ == InForeground) if !inForeground
+    current        <- currentToken.signal if current.isDefined
     userRegistered <- userToken.map(_ == current)
   } yield userRegistered)
     .orElse(Signal.const(false))
@@ -96,10 +96,10 @@ class PushTokenService(googleApi:    GoogleApi,
   }
 
   def onTokenRegistered(token: PushToken): Future[Unit] = {
-    verbose(s"onTokenRegistered: $accountId, $token")
+    verbose(s"onTokenRegistered: $userId, $token")
     (for {
       true <- isLoggedIn.head
-      _    <- accStorage.update(accountId, _.copy(registeredPush = Some(token)))
+      _    <- accStorage.update(userId, _.copy(pushToken = Some(token)))
     } yield {}).recover {
       case _ => warn("account was not logged in after token sync completed")
     }

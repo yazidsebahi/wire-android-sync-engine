@@ -25,7 +25,7 @@ import com.koushikdutta.async.http.WebSocket.{PongCallback, StringCallback}
 import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket}
 import com.koushikdutta.async.{ByteBufferList, DataEmitter}
 import com.waz.ZLog._
-import com.waz.model.AccountId
+import com.waz.model.UserId
 import com.waz.service.ZMessaging.accountTag
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
@@ -48,14 +48,14 @@ import scala.util.{Failure, Left, Try}
   */
 
 class WebSocketClient(context: Context,
-                      accountId: AccountId,
+                      userId: UserId,
                       client: AsyncClient,
                       uri: => Uri,
                       auth: AccessTokenProvider,
                       backoff: ExponentialBackoff = WebSocketClient.defaultBackoff,
                       pongTimeout: FiniteDuration = 15.seconds) {
 
-  implicit val logTag: LogTag = accountTag[WebSocketClient](accountId)
+  implicit val logTag: LogTag = accountTag[WebSocketClient](userId)
   implicit val dispatcher = new SerialDispatchQueue(Threading.ThreadPool)
 
   protected lazy val wakeLock: WakeLock = new WakeLockImpl(context) // to be overriden in tests
@@ -246,8 +246,8 @@ object WebSocketClient {
 
   val defaultBackoff = new ExponentialBackoff(250.millis, 5.minutes)
 
-  def apply(context: Context, accountId: AccountId, client: ZNetClient, auth: AuthenticationManager, pushUri: => Uri) =
-    new WebSocketClient(context, accountId, client.client.asInstanceOf[AsyncClientImpl], pushUri, auth)
+  def apply(context: Context, userId: UserId, client: ZNetClient, auth: AuthenticationManager, pushUri: => Uri) =
+    new WebSocketClient(context, userId, client.client.asInstanceOf[AsyncClientImpl], pushUri, auth)
 
   trait Disconnect
   object Disconnect {

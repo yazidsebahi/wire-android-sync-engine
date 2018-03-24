@@ -20,27 +20,23 @@ package com.waz.zms
 import android.content.{Context, Intent}
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.model.AccountId
+import com.waz.model.UserId
 import com.waz.utils.returning
 
 import scala.concurrent.Future
 
 class SyncService extends FutureService with ZMessagingService {
 
-  import com.waz.threading.Threading.Implicits.Background
-
   override protected def onIntent(intent: Intent, id: Int): Future[Any] =
     onAccountIntent(intent) { acc =>
       debug(s"onIntent $intent")
-      acc.userModule.head flatMap {
-        _.syncRequests.scheduler.awaitRunning
-      }
+      acc.syncRequests.scheduler.awaitRunning
     }
 }
 
 object SyncService {
 
-  def intent(context: Context, user: AccountId) = {
+  def intent(context: Context, user: UserId) = {
     returning(new Intent(context, classOf[SyncService])) {
       _.putExtra(ZMessagingService.ZmsUserIdExtra, user.str)
     }

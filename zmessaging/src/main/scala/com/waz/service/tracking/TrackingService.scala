@@ -51,7 +51,7 @@ trait TrackingService {
   def integrationAdded(integrationId: IntegrationId, convId: ConvId, method: IntegrationAdded.Method): Unit
   def integrationRemoved(integrationId: IntegrationId): Unit
 
-  def trackCallState(account: AccountId, callInfo: CallInfo): Unit
+  def trackCallState(userId: UserId, callInfo: CallInfo): Unit
 }
 
 class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingService.defaultZmsProvider) extends TrackingService {
@@ -122,7 +122,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
 
   def integrationRemoved(integrationId: IntegrationId) = track(IntegrationRemoved(integrationId))
 
-  override def trackCallState(account: AccountId, callInfo: CallInfo) =
+  override def trackCallState(userId: UserId, callInfo: CallInfo) =
     ((callInfo.prevState, callInfo.state) match {
       case (None, Some(SelfCalling))      => Some("initiated")
       case (None, Some(OtherCalling))     => Some("received")
@@ -134,7 +134,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
         None
     }).foreach { eventName =>
       for {
-        Some(z)  <- zmsProvider(account)
+        Some(z)  <- zmsProvider(userId)
         isGroup  <- z.conversations.isGroupConversation(callInfo.convId)
         memCount <- z.membersStorage.activeMembers(callInfo.convId).map(_.size).head
         withService <- z.conversations.isWithService(callInfo.convId)

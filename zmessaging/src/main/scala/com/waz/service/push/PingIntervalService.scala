@@ -23,7 +23,7 @@ import com.waz.api.{NetworkMode, ZmsVersion}
 import com.waz.content.Preferences.PrefKey
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.UserPreferences
-import com.waz.model.AccountId
+import com.waz.model.UserId
 import com.waz.service.AccountsService.InForeground
 import com.waz.service.push.PingIntervalService.NetworkStats.NetworkStatsCodec
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
@@ -43,7 +43,7 @@ import scala.util.Try
   *
   * @see com.waz.service.WebSocketClientService.ConnectionStats ConnectionStats
   */
-class PingIntervalService(accountId: AccountId,
+class PingIntervalService(userId:    UserId,
                           accounts:  AccountsService,
                           network:   NetworkModeService,
                           wsService: WebSocketClientService,
@@ -69,7 +69,7 @@ class PingIntervalService(accountId: AccountId,
 
   for {
     ws           <- wsService.client
-    inForeground <- accounts.accountState(accountId).map(_ == InForeground)
+    inForeground <- accounts.accountState(userId).map(_ == InForeground)
     interval     <- interval
   } {
     ws.foreach { _.scheduleRecurringPing(if (inForeground) PING_INTERVAL_FOREGROUND else interval) }

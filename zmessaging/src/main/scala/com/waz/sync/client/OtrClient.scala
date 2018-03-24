@@ -23,7 +23,7 @@ import android.util.Base64
 import com.waz.ZLog._
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.model.otr._
-import com.waz.model.{AccountId, UserId}
+import com.waz.model.UserId
 import com.waz.sync.otr.OtrMessage
 import com.waz.utils._
 import com.waz.znet.Response.{HttpStatus, SuccessHttpStatus}
@@ -88,7 +88,7 @@ class OtrClient(netClient: ZNetClient) {
     }
   }
 
-  def postClient(userId: AccountId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
+  def postClient(userId: UserId, client: Client, lastKey: PreKey, keys: Seq[PreKey], password: Option[String]): ErrorOrResponse[Client] = {
     val data = JsonEncoder { o =>
       o.put("lastkey", JsonEncoder.encode(lastKey)(PreKeyEncoder))
       client.signalingKey foreach { sk => o.put("sigkeys", JsonEncoder.encode(sk)) }
@@ -97,7 +97,7 @@ class OtrClient(netClient: ZNetClient) {
       o.put("label", client.label)
       o.put("model", client.model)
       o.put("class", client.devType.deviceClass)
-      o.put("cookie", userId.str)
+      o.put("cookie", userId.str) //TODO check to see that we don't need to keep track of AccountIds
       password.foreach(o.put("password", _))
     }
     netClient.withErrorHandling("postClient", Request.Post(clientsPath, data)) {

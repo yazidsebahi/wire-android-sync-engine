@@ -26,7 +26,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
 import com.waz.model.sync.SyncJob
-import com.waz.model.{AccountId, ConvId, SyncId}
+import com.waz.model.{ConvId, SyncId, UserId}
 import com.waz.service.AccountsService.{Active, LoggedOut}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService}
@@ -60,7 +60,7 @@ trait SyncScheduler {
 }
 
 class SyncSchedulerImpl(context:     Context,
-                        accountId:   AccountId,
+                        userId:      UserId,
                         val content: SyncContentUpdater,
                         val network: NetworkModeService,
                         service:     SyncRequestServiceImpl,
@@ -73,9 +73,9 @@ class SyncSchedulerImpl(context:     Context,
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncSchedulerQueue")
 
-  private[sync] lazy val alarmSyncIntent = Option(Context.unwrap(context)).map(PendingIntent.getService(_, SyncScheduler.AlarmRequestCode, SyncService.intent(context, accountId), PendingIntent.FLAG_UPDATE_CURRENT))
+  private[sync] lazy val alarmSyncIntent = Option(Context.unwrap(context)).map(PendingIntent.getService(_, SyncScheduler.AlarmRequestCode, SyncService.intent(context, userId), PendingIntent.FLAG_UPDATE_CURRENT))
   private[sync] lazy val alarmManager    = Option(Context.unwrap(context)).map(_.getSystemService(ALARM_SERVICE).asInstanceOf[AlarmManager])
-  private[sync] lazy val syncIntent      = Option(Context.unwrap(context)).map(SyncService.intent(_, accountId))
+  private[sync] lazy val syncIntent      = Option(Context.unwrap(context)).map(SyncService.intent(_, userId))
 
   override val queue                = new SyncSerializer
   private[sync] val executor        = new SyncExecutor(this, content, network, handler, tracking)
@@ -112,7 +112,7 @@ class SyncSchedulerImpl(context:     Context,
       }
   }
 
-  accounts.accountState(accountId).on(dispatcher) {
+  accounts.accountState(userId).on(dispatcher) {
     case _: Active => waitEntries.foreach(_._2.onRestart())
     case _ =>
   }
@@ -169,7 +169,7 @@ class SyncSchedulerImpl(context:     Context,
     waitEntries.put(job.id, entry)
 
     val jobReady = for {
-      _ <- accounts.accountState(accountId).filter(_ != LoggedOut).head
+      _ <- accounts.accountState(userId).filter(_ != LoggedOut).head
       _ <- entry.future
     } yield {}
 

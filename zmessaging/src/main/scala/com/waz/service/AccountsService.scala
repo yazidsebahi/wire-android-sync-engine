@@ -258,7 +258,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
     zs  <- Signal.sequence(ams.map(_.zmessaging).toSeq: _*)
   } yield
-    returning(zs.toSet) { v =>
+    returning(zs.flatten.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
 

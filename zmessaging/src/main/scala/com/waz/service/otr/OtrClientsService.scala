@@ -37,8 +37,7 @@ import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class OtrClientsService(accountId: AccountId,
-                        userId:    UserId,
+class OtrClientsService(userId:    UserId,
                         clientId:  Signal[Option[ClientId]],
                         netClient: OtrClient,
                         userPrefs: UserPreferences,
@@ -51,7 +50,7 @@ class OtrClientsService(accountId: AccountId,
 
   private lazy val lastSelfClientsSyncPref = userPrefs.preference(LastSelfClientsSyncRequestedTime)
 
-  accounts.accountState(accountId) {
+  accounts.accountState(userId) {
     case _: Active => requestSyncIfNeeded()
     case _ =>
   }

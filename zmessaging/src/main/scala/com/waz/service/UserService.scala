@@ -48,7 +48,6 @@ trait UserService {
   def userDeleteEventsStage: Stage.Atomic
 
   def selfUser: Signal[UserData]
-  def selfUserId: UserId
 
   def getSelfUserId: Future[Option[UserId]]
   def getSelfUser: Future[Option[UserData]]
@@ -77,8 +76,7 @@ trait UserService {
   def clearSelfPicture(): Future[Option[UserData]]
 }
 
-class UserServiceImpl(val selfUserId:    UserId,
-                      account:       AccountId,
+class UserServiceImpl(selfUserId:    UserId,
                       accounts:      AccountsService,
                       usersStorage:  UsersStorage,
                       userPrefs:     UserPreferences,
@@ -109,7 +107,7 @@ class UserServiceImpl(val selfUserId:    UserId,
 
   //Update user data for other accounts
   //TODO remove this and move the necessary user data up to the account storage
-  accounts.loggedInAccounts.map(_.flatMap(_.userId).toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
+  accounts.loggedInAccounts.map(_.map(_.id).toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
 
   push.onHistoryLost { time =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")

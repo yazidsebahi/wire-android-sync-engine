@@ -22,7 +22,7 @@ import com.evernote.android.job._
 import com.evernote.android.job.util.support.PersistableBundleCompat
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{error, verbose}
-import com.waz.model.AccountId
+import com.waz.model.{AccountId, UserId}
 import com.waz.service.AccountsService.InBackground
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading
@@ -39,11 +39,11 @@ class FetchJob extends Job {
   import Threading.Implicits.Background
 
   override def onRunJob(params: Job.Params) = {
-    val account = Option(params.getExtras.getString(AccountExtra, null)).map(AccountId)
+    val account = Option(params.getExtras.getString(AccountExtra, null)).map(UserId)
     verbose(s"onStartJob, account: $account")
-    def syncAccount(accountId: AccountId): Future[Unit] =
+    def syncAccount(userId: UserId): Future[Unit] =
       for {
-        Some(zms) <- ZMessaging.accountsService.flatMap(_.getZms(accountId))
+        Some(zms) <- ZMessaging.accountsService.flatMap(_.getZms(userId))
         _ <- zms.push.syncHistory("fetch job", withRetries = false)
       } yield {}
 
@@ -75,8 +75,8 @@ object FetchJob {
   val MaxExecutionDelay = 30.seconds
   val InitialBackoffDelay = 500.millis
 
-  def apply(account: AccountId): Unit = {
-    val tag = s"$Tag#${account.str}"
+  def apply(userId: UserId): Unit = {
+    val tag = s"$Tag#${userId.str}"
 
     val manager = JobManager.instance()
     val currentJobs = manager.getAllJobsForTag(tag).asScala.toSet
@@ -85,13 +85,13 @@ object FetchJob {
     }
 
     val hasPendingRequest = returning(JobManager.instance().getAllJobRequestsForTag(tag).asScala.toSet) { v =>
-      if (v.size > 1) error(s"Shouldn't be more than one fetch job for account: $account")
+      if (v.size > 1) error(s"Shouldn't be more than one fetch job for account: $userId")
     }.nonEmpty
 
     if (!(hasPendingRequest || currentJob.isDefined)) {
       new JobRequest.Builder(tag)
         .setBackoffCriteria(InitialBackoffDelay.toMillis, JobRequest.BackoffPolicy.EXPONENTIAL)
-        .setExtras(returning(new PersistableBundleCompat())(_.putString(AccountExtra, account.str)))
+        .setExtras(returning(new PersistableBundleCompat())(_.putString(AccountExtra, userId.str)))
         .startNow()
         .build()
         .schedule()
