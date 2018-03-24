@@ -21,14 +21,18 @@ import com.waz.model.{ConfirmationCode, EmailAddress, Handle, PhoneNumber}
 import org.json.JSONObject
 
 sealed trait Credentials {
+  def autoLogin: Boolean
   def addToRegistrationJson(o: JSONObject): Unit
   def addToLoginJson(o: JSONObject): Unit
 }
 
 case class EmailCredentials(email: EmailAddress, password: String, code: Option[ConfirmationCode]) extends Credentials {
+  override val autoLogin = false
+
   override def addToRegistrationJson(o: JSONObject): Unit = {
     o.put("email", email.str)
     o.put("password", password)
+    code.foreach(c => o.put("email_code", c.str))
   }
 
   override def addToLoginJson(o: JSONObject): Unit = addToRegistrationJson(o)
@@ -37,8 +41,10 @@ case class EmailCredentials(email: EmailAddress, password: String, code: Option[
 }
 
 case class PhoneCredentials(phone: PhoneNumber, code: ConfirmationCode) extends Credentials { //TODO obfuscate code?
+  override val autoLogin = true
 
   override def addToRegistrationJson(o: JSONObject): Unit = addToJson(o, "phone_code")
+
   override def addToLoginJson(o: JSONObject): Unit = addToJson(o, "code")
 
   private def addToJson(o: JSONObject, codeName: String): Unit = {
@@ -48,6 +54,8 @@ case class PhoneCredentials(phone: PhoneNumber, code: ConfirmationCode) extends 
 }
 
 case class HandleCredentials(handle: Handle, password: String) extends Credentials {
+  override val autoLogin = false
+
   override def addToRegistrationJson(o: JSONObject): Unit = {
     o.put("email", handle.string)
     o.put("password", password)

@@ -307,7 +307,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   def requestVerificationEmail(email: EmailAddress) =
-    loginClient.requestVerificationEmail(email).future
+    regClient.requestVerificationEmail(email)
 
   override def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false) = {
     verbose(s"requestPhoneConfirmationCode: $phone, login=$login, call=$call")
@@ -324,7 +324,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   override def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean) = {
     verbose(s"verifyPhoneNumber: $phone, $code, $dryRun")
     phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
-      regClient.verifyRegistrationMethod(Left(normalizedPhone.getOrElse(phone)), code, dryRun)
+      regClient.verifyRegistrationMethod(Left(normalizedPhone.getOrElse(phone)), code, dryRun).map(_.fold(Left(_), _ => Right({}))) //TODO handle label and cookie!
     }
   }
 
@@ -336,10 +336,10 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   override def login(loginCredentials: Credentials) = {
     verbose(s"login: $loginCredentials")
     loginClient.login(loginCredentials).future.flatMap {
-      case Right((token, Some(cookie))) =>
+      case Right((token, Some(cookie), _)) => //TODO handle label
         for {
-          resp <- loginClient.getSelfId(token) //TODO maybe the whole UserInfo should be passed to the AccountManager...
-          _    <- resp.fold(_ => Future.successful({}), id => storage.insert(AccountData(id, cookie, Some(token), None)).map(_ => {}))
+          resp <- loginClient.getSelfUserInfo(token) //TODO maybe the whole UserInfo should be passed to the AccountManager...
+          _    <- resp.fold(_ => Future.successful({}), u => storage.insert(AccountData(u.id, cookie, Some(token), None)).map(_ => {}))
         } yield resp
       case Left(error) =>
         verbose(s"login failed: $error")

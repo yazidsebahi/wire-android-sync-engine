@@ -22,6 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
+import com.waz.model.AccountData.Label
 import com.waz.model.AccountDataOld.{PermissionsMasks, TriTeamId}
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
@@ -29,7 +30,7 @@ import com.waz.utils.scrypt.SCrypt
 import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor, DBProgram}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.AuthenticationManager
-import com.waz.znet.AuthenticationManager.{Cookie, AccessToken}
+import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import org.json.JSONObject
 
 import scala.collection.mutable
@@ -44,6 +45,24 @@ case class AccountData(id:           UserId,
                        cookie:       Cookie,
                        accessToken:  Option[AccessToken] = None,
                        pushToken:    Option[PushToken]   = None)
+
+object AccountData {
+
+  //Labels can be used to revoke all cookies for a given client
+  //TODO save labels and use them for cleanup later
+  case class Label(str: String) {
+    override def toString: String = str
+  }
+
+  object Label extends (String => Label) {
+    def apply(): Label = Id.random()
+
+    implicit object Id extends Id[Label] {
+      override def random(): Label = Label(Uid().toString)
+      override def decode(str: String): Label = Label(str)
+    }
+  }
+}
 
 /**
  * This account data needs to be maintained for migration purposes - it can be deleted after a while (1 year?)

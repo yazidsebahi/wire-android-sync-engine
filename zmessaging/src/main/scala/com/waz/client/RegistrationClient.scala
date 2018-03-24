@@ -22,16 +22,17 @@ import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl.ActivateResult
+import com.waz.model.AccountData.Label
 import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.UsersClient.UserResponseExtractor
-import com.waz.threading.{CancellableFuture, Threading}
+import com.waz.threading.Threading
 import com.waz.utils.JsonEncoder
 import com.waz.utils.Locales._
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
+import com.waz.znet.ZNetClient.ErrorOr
 import com.waz.znet._
 
 import scala.concurrent.Future
@@ -41,73 +42,44 @@ trait RegistrationClient {
   def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): Future[ActivateResult]
   def requestEmailCode(email: EmailAddress): Future[ActivateResult] //for now only used for registration
 
-  def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
+  def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
 
-  def register(credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
-  def registerTeamAccount(account: AccountDataOld): ErrorOrResponse[(UserInfo, Option[Cookie])]
+  def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean): ErrorOr[Option[(Cookie, Label)]]
+
+  def register(credentials: Credentials, name: String, teamName: Option[String]): ErrorOr[(UserInfo, Option[(Cookie, Label)])]
 }
 
 class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extends RegistrationClient {
   import Threading.Implicits.Background
   import com.waz.client.RegistrationClientImpl._
 
-  def register(credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])] = {
-    val json = JsonEncoder { o =>
+  def register(credentials: Credentials, name: String, teamName: Option[String]) = {
+    val label = Label()
+    val params = JsonEncoder { o =>
       o.put("name", name)
-      accentId foreach (o.put("accent_id", _))
       o.put("locale", bcp47.languageTagOf(currentLocale))
       credentials.addToRegistrationJson(o)
+      teamName.foreach { t =>
+        o.put("team", JsonEncoder { o2 =>
+          o2.put("icon", "abc") //TODO proper icon
+          o2.put("name", t)
+        })
+      }
+      o.put("label", label.str)
     }
 
-    val request = Request.Post(RegisterPath, JsonContentEncoder(json), baseUri = Some(backend.baseUrl), timeout = timeout)
-    client(request) map {
+    val request = Request.Post(RegisterPath, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)
+    client(request).map {
       case resp @ Response(SuccessHttpStatus(), UserResponseExtractor(user), headers) =>
         debug(s"registration succeeded: $resp")
-        Right((user, LoginClient.getCookieFromHeaders(headers))) //cookie will be optional depending on login method
+        Right((user, LoginClient.getCookieFromHeaders(headers).map(c => (c, label)))) //cookie (and label) will be optional depending on login method
       case Response(_, ErrorResponse(code, msg, label), headers) =>
         info(s"register failed with error: ($code, $msg, $label), headers: $headers")
         Left(ErrorResponse(code, msg, label))
       case resp =>
         error(s"Unexpected response from register: $resp")
         Left(ErrorResponse(resp.status.status, resp.toString, "unknown"))
-    }
-  }
-
-  //TODO merge this method with the above register method when safe to do so
-  override def registerTeamAccount(account: AccountDataOld) = {
-    import account._
-    (name, pendingTeamName, pendingEmail, password, code) match {
-      case (Some(n), Some(teamName), Some(e), Some(p), Some(c)) =>
-        val json = JsonEncoder { o =>
-          o.put("name", n)
-          o.put("locale", bcp47.languageTagOf(currentLocale))
-          o.put("label", account.id.str)  // this label can be later used for cookie revocation
-          o.put("email", e.str)
-          o.put("password", p)
-          o.put("email_code", c.str)
-          o.put("team", JsonEncoder { o2 =>
-            o2.put("icon", "abc")
-            o2.put("name", teamName)
-          })
-        }
-
-        val request = Request.Post(RegisterPath, JsonContentEncoder(json), baseUri = Some(backend.baseUrl), timeout = timeout)
-        client(request) map {
-          case resp @ Response(SuccessHttpStatus(), UserResponseExtractor(user), headers) =>
-            debug(s"registration succeeded: $resp")
-            Right((user, LoginClient.getCookieFromHeaders(headers)))
-          case Response(_, ErrorResponse(code, msg, label), headers) =>
-            info(s"register failed with error: ($code, $msg, $label), headers: $headers")
-            Left(ErrorResponse(code, msg, label))
-          case resp =>
-            error(s"Unexpected response from register: $resp")
-            Left(ErrorResponse(resp.status.status, resp.toString, "unknown"))
-        }
-      case _ => CancellableFuture.successful(Left(ErrorResponse(
-        ErrorResponse.InternalErrorCode,
-        "Email, name, password, confirmation code and a team name are needed to complete account registration for a team",
-        "insufficient team account information")))
-    }
+    }.future
   }
 
   override def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean) =
@@ -128,28 +100,46 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"confirmation code requested: $resp")
         ActivateResult.Success
-      case Response(_, ErrorResponse(Status.Forbidden, _, "password-exists"), headers) =>
+      case Response(_, ErrorResponse(Status.Forbidden, _, "password-exists"), _) =>
         ActivateResult.PasswordExists
       case Response(_, ErrorResponse(code, msg, label), headers) =>
-        warn(s"postActivateSend: login=$login failed with error: ($code, $msg, $label), headers: $headers")
+        warn(s"requestCode: login=$login failed with error: ($code, $msg, $label), headers: $headers")
         ActivateResult.Failure(ErrorResponse(code, msg, label))
       case other =>
-        error(s"Unexpected response from postActivateSend: login=$login: $other")
+        error(s"Unexpected response from requestCode: login=$login: $other")
         ActivateResult.Failure(ErrorResponse(other.status.status, other.toString, "unknown"))
     }.future
   }
 
+  override def requestVerificationEmail(email: EmailAddress) = {
+    val params = JsonEncoder { o =>
+      o.put("email", email.str)
+    }
+    val request = Request.Post(ActivateSendPath, JsonContentEncoder(params), baseUri = Some(backend.baseUrl))
+    client(request).map {
+      case Response(SuccessHttpStatus(), _, _) => Right(())
+      case Response(_, ErrorResponse(code, msg, label), _) =>
+        info(s"requestVerificationEmail failed with error: ($code, $msg, $label)")
+        Left(ErrorResponse(code, msg, label))
+      case resp =>
+        error(s"Unexpected response from resendVerificationEmail: $resp")
+        Left(ErrorResponse(400, resp.toString, "unknown"))
+    }.future
+  }
+
   override def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean) = {
+    val label = Label()
     val params = JsonEncoder { o =>
       method.fold(p => o.put("phone", p.str), e => o.put("email",  e.str))
       o.put("code",   code.str)
       o.put("dryrun", dryRun)
+      if (!dryRun) o.put("label", label.str)
     }
 
     client(Request.Post(ActivatePath, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)).map {
-      case resp @ Response(SuccessHttpStatus(), _, _) =>
+      case resp @ Response(SuccessHttpStatus(), _, headers) =>
         debug(s"verifyRegistrationMethod: verified: $resp")
-        Right(())
+        Right(LoginClient.getCookieFromHeaders(headers).map(c => (c, label))) //cookie (and label) may be returned on dryRun = false
       case Response(_, ErrorResponse(code, msg, label), headers) =>
         warn(s"verifyRegistrationMethod: failed with error: ($code, $msg, $label), headers: $headers")
         Left(ErrorResponse(code, msg, label))

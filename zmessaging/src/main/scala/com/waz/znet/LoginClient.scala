@@ -22,7 +22,8 @@ import com.waz.ZLog._
 import com.waz.api.Credentials
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl
-import com.waz.model.{EmailAddress, UserId}
+import com.waz.model.AccountData.Label
+import com.waz.model.{UserId, UserInfo}
 import com.waz.service.BackendConfig
 import com.waz.service.ZMessaging.clock
 import com.waz.service.tracking.TrackingService
@@ -34,7 +35,7 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
+import com.waz.znet.ZNetClient.ErrorOr
 import org.json.JSONObject
 import org.threeten.bp
 
@@ -44,8 +45,7 @@ import scala.util.Try
 trait LoginClient {
   def access(cookie: Cookie, token: Option[AccessToken]): CancellableFuture[LoginResult]
   def login(credentials: Credentials): CancellableFuture[LoginResult]
-  def requestVerificationEmail(email: EmailAddress): ErrorOrResponse[Unit]
-  def getSelfId(token: AccessToken): ErrorOr[UserId]
+  def getSelfUserInfo(token: AccessToken): ErrorOr[UserInfo]
 }
 
 class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: TrackingService) extends LoginClient {
@@ -97,53 +97,45 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
 
   def loginNow(credentials: Credentials) = {
     debug(s"trying to login with credentials: $credentials")
-    val request = Request.Post(LoginUriStr, loginRequestBody(credentials), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
-    client(request).map(responseHandler)
+    val label = Label()
+    val params = JsonEncoder { o =>
+      credentials.addToLoginJson(o)
+      o.put("label", label.str)
+    }
+    val request = Request.Post(LoginUriStr, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = RegistrationClientImpl.timeout)
+    client(request).map(responseHandler(Some(label)))
   }
 
   def accessNow(cookie: Cookie, token: Option[AccessToken]) = {
     val headers = token.fold(Request.EmptyHeaders)(_.headers) ++ cookie.headers
     val request = Request.Post[Unit](AccessPath, data = EmptyRequestContent, baseUri = Some(backend.baseUrl), headers = headers, timeout = RegistrationClientImpl.timeout)
-    client(request) map responseHandler
+    client(request).map(responseHandler(None))
   }
 
-  override def requestVerificationEmail(email: EmailAddress) = {
-    val request = Request.Post(ActivateSendPath, JsonContentEncoder(JsonEncoder(_.put("email", email.str))), baseUri = Some(backend.baseUrl))
-    client(request) map {
-      case Response(SuccessHttpStatus(), resp, _) => Right(())
-      case Response(_, ErrorResponse(code, msg, label), _) =>
-        info(s"requestVerificationEmail failed with error: ($code, $msg, $label)")
-        Left(ErrorResponse(code, msg, label))
-      case resp =>
-        error(s"Unexpected response from resendVerificationEmail: $resp")
-        Left(ErrorResponse(400, resp.toString, "unknown"))
-    }
-  }
-
-  private val responseHandler: PartialFunction[Response, LoginResult] = {
+  private def responseHandler(cookieLabel: Option[Label]): PartialFunction[Response, LoginResult] = {
     case Response(SuccessHttpStatus(), JsonObjectResponse(TokenResponse(token)), responseHeaders) =>
       debug(s"receivedAccessToken: '$token', headers: $responseHeaders")
-      Right((token, getCookieFromHeaders(responseHeaders)))
+      Right((token, getCookieFromHeaders(responseHeaders), cookieLabel))
     case r @ Response(_, ErrorResponse(code, msg, label), _) =>
       warn(s"failed login attempt: $r")
       Left(ErrorResponse(code, msg, label))
     case r @ Response(status, _, _) => Left(ErrorResponse(status.status, s"unexpected login response: $r", ""))
   }
 
-  override def getSelfId(token: AccessToken) = {
+  override def getSelfUserInfo(token: AccessToken) = {
     val request = Request.Get(UsersClient.SelfPath, baseUri = Some(backend.baseUrl), headers = token.headers)
-    client(request) map {
-      case Response(SuccessHttpStatus(), UsersClient.UserResponseExtractor(user), _) => user.id
+    client(request).map {
+      case Response(SuccessHttpStatus(), UsersClient.UserResponseExtractor(user), _) => Right(user)
       case resp =>
         info(s"Failed to get self user id")
         Left(ErrorResponse(resp.status.status, resp.status.msg, "unknown"))
-    }
+    }.future
   }
 
 }
 
 object LoginClient {
-  type LoginResult = Either[ErrorResponse, (AccessToken, Option[Cookie])]
+  type LoginResult = Either[ErrorResponse, (AccessToken, Option[Cookie], Option[Label])]
 
   val InsufficientCredentials = "insufficient credentials"
 
@@ -156,8 +148,6 @@ object LoginClient {
   val LoginUriStr = Request.query(LoginPath, ("persist", true))
 
   val Throttling = new ExponentialBackoff(1000.millis, 10.seconds)
-
-  def loginRequestBody(credentials: Credentials) = JsonContentEncoder(JsonEncoder(credentials.addToLoginJson))
 
   def getCookieFromHeaders(headers: Response.Headers): Option[Cookie] = headers(SetCookie) flatMap {
     case header @ CookieHeader(cookie) =>
