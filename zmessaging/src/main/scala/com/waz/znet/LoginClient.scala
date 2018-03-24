@@ -22,10 +22,11 @@ import com.waz.ZLog._
 import com.waz.api.Credentials
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl
-import com.waz.model.EmailAddress
+import com.waz.model.{EmailAddress, UserId}
 import com.waz.service.BackendConfig
 import com.waz.service.ZMessaging.clock
 import com.waz.service.tracking.TrackingService
+import com.waz.sync.client.UsersClient
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.{ExponentialBackoff, JsonEncoder, _}
@@ -33,7 +34,7 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.ErrorOrResponse
+import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import org.json.JSONObject
 import org.threeten.bp
 
@@ -44,6 +45,7 @@ trait LoginClient {
   def access(cookie: Cookie, token: Option[AccessToken]): CancellableFuture[LoginResult]
   def login(credentials: Credentials): CancellableFuture[LoginResult]
   def requestVerificationEmail(email: EmailAddress): ErrorOrResponse[Unit]
+  def getSelfId(token: AccessToken): ErrorOr[UserId]
 }
 
 class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: TrackingService) extends LoginClient {
@@ -126,6 +128,16 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
       warn(s"failed login attempt: $r")
       Left(ErrorResponse(code, msg, label))
     case r @ Response(status, _, _) => Left(ErrorResponse(status.status, s"unexpected login response: $r", ""))
+  }
+
+  override def getSelfId(token: AccessToken) = {
+    val request = Request.Get(UsersClient.SelfPath, baseUri = Some(backend.baseUrl), headers = token.headers)
+    client(request) map {
+      case Response(SuccessHttpStatus(), UsersClient.UserResponseExtractor(user), _) => user.id
+      case resp =>
+        info(s"Failed to get self user id")
+        Left(ErrorResponse(resp.status.status, resp.status.msg, "unknown"))
+    }
   }
 
 }

@@ -22,7 +22,7 @@ import java.io.File
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
-import com.waz.api.{Credentials, KindOfAccess, KindOfVerification, PhoneCredentials}
+import com.waz.api.{ErrorResponse => _, _}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.GlobalPreferences.{ActiveAccountPef, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
 import com.waz.content.UserPreferences
@@ -31,6 +31,7 @@ import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
 import com.waz.utils.returning
+import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
 import scala.collection.mutable
@@ -66,7 +67,14 @@ trait AccountsService {
 
   def logout(userId: UserId): Future[Unit]
 
-  //TODO
+  def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
+
+  //TODO change KindOfAccess to Boolean
+  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): Future[ActivateResult]
+  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): Future[ActivateResult]
+
+  def verifyPhoneNumber(phone: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOr[Unit]
+
   def login(loginCredentials: Credentials): ErrorOr[UserId]
   def register(registerCredentials: Credentials): ErrorOr[UserId]
 
@@ -298,62 +306,36 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
-  def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
+  def requestVerificationEmail(email: EmailAddress) =
+    loginClient.requestVerificationEmail(email).future
 
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = {
-    throw new Exception("Not yet implemented!") //TODO
-//    CancellableFuture.lift(phoneNumbers.normalize(phone)) flatMap { normalizedPhone =>
-//      regClient.requestPhoneConfirmationCode(normalizedPhone.getOrElse(phone), kindOfAccess)
-//    }
+  override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess) =
+    phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
+      regClient.requestPhoneConfirmationCode(normalizedPhone.getOrElse(phone), kindOfAccess).future
+    }
+
+  override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess) =
+    phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
+      regClient.requestPhoneConfirmationCall(normalizedPhone.getOrElse(phone), kindOfAccess).future
+    }
+
+  override def verifyPhoneNumber(phone: PhoneCredentials, kindOfVerification: KindOfVerification) = {
+    phoneNumbers.normalize(phone.phone).flatMap { normalizedPhone =>
+      regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification).future
+    }
   }
 
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] = {
-    throw new Exception("Not yet implemented!") //TODO
-//    CancellableFuture.lift(phoneNumbers.normalize(phone)) flatMap { normalizedPhone =>
-//      regClient.requestPhoneConfirmationCall(normalizedPhone.getOrElse(phone), kindOfAccess)
-//    }
-  }
-
-  def verifyPhoneNumber(phone: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = {
-    CancellableFuture.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    CancellableFuture.lift(phoneNumbers.normalize(phone.phone)) flatMap { normalizedPhone =>
-//      regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification)
-//    }
-  }
-
-  def loginPhone(number: PhoneNumber): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    def requestCode(): Future[Either[ErrorResponse, Unit]] =
-//      requestPhoneConfirmationCode(number, KindOfAccess.LOGIN).future.map {
-//        case Failure(error) => Left(error)
-//        case PasswordExists => Left(ErrorResponse.PasswordExists)
-//        case _ => Right(())
-//      }
-//
-//    for {
-//      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
-//      acc <- storageOld.findByPhone(normalizedPhone).map(_.getOrElse(AccountDataOld()))
-//      req <- requestCode()
-//      updatedAcc  = acc.copy(pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
-//      _ <- if (req.isRight) storageOld.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
-//      _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
-//    } yield req
-  }
-
-  def registerPhone(number: PhoneNumber): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    for {
-//      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
-//      acc <- storageOld.findByPhone(normalizedPhone).map(_.getOrElse(AccountDataOld()))
-//      req <- requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
-//      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), code = None, regWaiting = true)
-//      _ <- if (req == ActivateResult.Success) storageOld.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
-//      _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
-//    } yield req match {
-//      case Failure(error) => Left(error)
-//      case PasswordExists => Left(ErrorResponse.PasswordExists)
-//      case _ => Right(())
-//    }
+  override def login(loginCredentials: Credentials) = {
+    loginClient.login(loginCredentials).future.flatMap {
+      case Right((token, Some(cookie))) =>
+        for {
+          resp <- loginClient.getSelfId(token) //TODO maybe the whole UserInfo should be passed to the AccountManager...
+          _    <- resp.fold(_ => Future.successful({}), id => storage.insert(AccountData(id, cookie, Some(token), None)).map(_ => {}))
+        } yield resp
+      case Left(error) =>
+        verbose(s"login failed: $error")
+        Future.successful(Left(error))
+    }
   }
 
   def activatePhoneOnRegister(accountId: AccountId, code: ConfirmationCode): ErrorOr[Unit] = {
@@ -379,39 +361,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 //    for {
 //      acc <- storageOld.get(accountId)
 //      req <- acc.fold2(Future.successful(Left(ErrorResponse.InternalError)), accountData => registerOnBackend(accountData, name))
-//    } yield req
-  }
-
-  def loginPhone(accountId: AccountId, code: ConfirmationCode): Future[Either[ErrorResponse, Unit]] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    for {
-//      Some(acc) <- storageOld.get(accountId)
-//      req <- loginOnBackend(acc.copy(code = Some(code)))
-//      _ <- req match {
-//        case Right(_) =>
-//          storageOld.update(accountId, _.copy(phone = acc.pendingPhone, pendingPhone = None))
-//        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-//          storageOld.update(accountId, _.copy(phone = None, pendingPhone = acc.pendingPhone)).map(_ => ())
-//        case _ =>
-//          Future.successful(())
-//      }
-//    } yield req
-  }
-
-  def loginEmail(emailAddress: EmailAddress, password: String): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    for {
-//      acc <- storageOld.findByEmail(emailAddress).map(_.getOrElse(AccountDataOld()))
-//      loginAcc = acc.copy(email = Some(emailAddress), password = Some(password))
-//      _ <- storageOld.updateOrCreate(loginAcc.id, _ => loginAcc, loginAcc)
-//      req <- loginOnBackend(loginAcc)
-//      _ <- req match {
-//        case Right (_) =>
-//          switchAccount(acc.id)
-//        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-//          storageOld.update(loginAcc.id, _.copy(pendingEmail = Some(emailAddress))).map(_ => ())
-//        case _ => Future.successful(())
-//      }
 //    } yield req
   }
 
@@ -490,20 +439,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 //          info(s"register($acc.id) failed: $error")
 //          Future successful Left(error)
 //    }}
-  }
-
-  private def loginOnBackend(accountData: AccountDataOld): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    loginClient.login(accountData).future.flatMap {
-//      case Right((token, cookie)) =>
-//        storageOld.update(accountData.id, _.copy(accessToken = Some(token), cookie = cookie, code = None)).map(_ => Right(()))
-//      case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-//        verbose(s"account pending activation: ($accountData), $error")
-//        storageOld.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
-//      case Left((_, error)) =>
-//        verbose(s"login failed: $error")
-//        storageOld.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
-//    }
   }
 
   private def registerOnBackend(accountData: AccountDataOld, name: String): ErrorOr[Unit] = {

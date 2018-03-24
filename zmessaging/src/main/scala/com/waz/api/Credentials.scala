@@ -47,7 +47,7 @@ case class PhoneCredentials(phone: PhoneNumber, code: ConfirmationCode) extends 
   }
 }
 
-case class UsernameCredentials(handle: Handle, password: String) extends Credentials {
+case class HandleCredentials(handle: Handle, password: String) extends Credentials {
   override def addToRegistrationJson(o: JSONObject): Unit = {
     o.put("email", handle.string)
     o.put("password", password)
