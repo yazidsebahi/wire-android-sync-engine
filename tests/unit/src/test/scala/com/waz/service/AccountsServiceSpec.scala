@@ -99,7 +99,7 @@ class AccountsServiceSpec extends AndroidFreeSpec with Inside {
       var account = AccountDataOld(pendingPhone = Some(phoneNumber))
 
       (storage.get _).expects(*).once().returning(Future.successful(Some(account)))
-      (regClient.verifyPhoneNumber _).expects(*, KindOfVerification.PREVERIFY_ON_REGISTRATION).once().returning(CancellableFuture.successful(Right(())))
+      (regClient.verifyPhoneNumber _).expects(*, *, true).once().returning(CancellableFuture.successful(Right(())))
       (storage.update _).expects(*, *).once().onCall{ (_, updater) =>
         account = updater(account)
         Future.successful(Some(account, account))

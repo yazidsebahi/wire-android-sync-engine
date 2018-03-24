@@ -73,7 +73,10 @@ trait AccountsService {
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): Future[ActivateResult]
   def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): Future[ActivateResult]
 
-  def verifyPhoneNumber(phone: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOr[Unit]
+  def requestEmailConfirmationCode(email: EmailAddress): Future[ActivateResult]
+
+  def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
+  def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
   def login(loginCredentials: Credentials): ErrorOr[UserId]
   def register(registerCredentials: Credentials): ErrorOr[UserId]
@@ -276,6 +279,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   //TODO optional delete history
   def logout(userId: UserId) = {
+    verbose(s"logout: $userId")
     for {
       current       <- getActiveAccountId
       otherAccounts <- getLoggedInAccountIds.map(_.filter(userId != _))
@@ -289,7 +293,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     * (no cookie) or if anything else goes wrong, we leave the user logged out
     */
   override def setAccount(userId: Option[UserId]) = {
-    verbose(s"switchAccount: $userId")
+    verbose(s"setAccount: $userId")
     userId match {
       case Some(id) =>
         for {
@@ -309,23 +313,39 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   def requestVerificationEmail(email: EmailAddress) =
     loginClient.requestVerificationEmail(email).future
 
-  override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess) =
+  override def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess) = {
+    verbose(s"requestPhoneConfirmationCode: $phone, $kindOfAccess")
     phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
       regClient.requestPhoneConfirmationCode(normalizedPhone.getOrElse(phone), kindOfAccess).future
     }
+  }
 
-  override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess) =
+  override def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess) = {
+    verbose(s"requestPhoneConfirmationCall: $phone, $kindOfAccess")
     phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
       regClient.requestPhoneConfirmationCall(normalizedPhone.getOrElse(phone), kindOfAccess).future
     }
+  }
 
-  override def verifyPhoneNumber(phone: PhoneCredentials, kindOfVerification: KindOfVerification) = {
-    phoneNumbers.normalize(phone.phone).flatMap { normalizedPhone =>
-      regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification).future
+  override def requestEmailConfirmationCode(email: EmailAddress) = {
+    verbose(s"requestEmailConfirmationCode: $email")
+    regClient.requestEmailConfirmationCode(email).future //TODO should this email address be normalised?
+  }
+
+  override def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean) = {
+    verbose(s"verifyPhoneNumber: $phone, $code, $dryRun")
+    phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
+      regClient.verifyRegistrationMethod(Left(normalizedPhone.getOrElse(phone)), code, dryRun).future
     }
   }
 
+  override def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true) = {
+    verbose(s"verifyEmailAddress: $email, $code, $dryRun")
+    regClient.verifyRegistrationMethod(Right(email), code, dryRun).future //TODO normalise email?
+  }
+
   override def login(loginCredentials: Credentials) = {
+    verbose(s"login: $loginCredentials")
     loginClient.login(loginCredentials).future.flatMap {
       case Right((token, Some(cookie))) =>
         for {
@@ -385,16 +405,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 //      }
 //      _   <- setAccount(Some(acc.id))
 //    } yield acc.id
-  }
-
-  //For team flow only (for now) - applies to current active account
-  def requestActivationCode(email: EmailAddress): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    regClient.requestEmailConfirmationCode(email).future.flatMap {
-//      case ActivateResult.Success => updateCurrentAccount(_.copy(pendingEmail = Some(email))).map(_ => Right(()))
-//      case ActivateResult.PasswordExists => Future.successful(Left(internalError("password exists for email activation - this shouldn't happen")))
-//      case ActivateResult.Failure(err) => Future.successful(Left(err))
-//    }
   }
 
   //For team flow only (for now) - applies to current active account

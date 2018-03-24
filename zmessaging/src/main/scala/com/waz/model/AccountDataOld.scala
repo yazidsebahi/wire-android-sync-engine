@@ -36,7 +36,7 @@ import scala.collection.mutable
 
 /**
   * Each AccountData row in the ZGlobal database represents one logged in user. To be logged in, they must have a cookie. Upon being forcefully
-  * logged out, this entry should just be removed.
+  * logged out, this entry should be removed.
   *
   * Any information that needs to be deregistered can be kept here (e.g., de-registered cookies, tokens, clients etc)
   */

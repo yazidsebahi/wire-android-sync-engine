@@ -41,8 +41,8 @@ trait RegistrationClient {
   def register(credentials: Credentials, name: String, accentId: Option[Int]): ErrorOrResponse[(UserInfo, Option[Cookie])]
   def registerTeamAccount(account: AccountDataOld): ErrorOrResponse[(UserInfo, Option[Cookie])]
 
-  def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit]
-  def verifyEmail(email: EmailAddress, code: ConfirmationCode): ErrorOrResponse[Unit]
+  def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean): ErrorOrResponse[Unit]
+
   def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
   def requestEmailConfirmationCode(email: EmailAddress): CancellableFuture[ActivateResult]
   def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult]
@@ -161,44 +161,19 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
     }
   }
 
-  override def verifyPhoneNumber(credentials: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] = {
-    val request = Request.Post(ActivatePath, activateRequestBody(credentials, kindOfVerification), baseUri = Some(backend.baseUrl), timeout = timeout)
-    client(request) map {
+  override def verifyRegistrationMethod(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean) = {
+    client(Request.Post(ActivatePath, activateRequestBody(method, code, dryRun), baseUri = Some(backend.baseUrl), timeout = timeout)) map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
-        debug(s"phone number verified: $resp")
+        debug(s"verifyRegistrationMethod: verified: $resp")
         Right(())
       case Response(_, ErrorResponse(code, msg, label), headers) =>
-        warn(s"verifyPhoneNumber failed with error: ($code, $msg, $label), headers: $headers")
+        warn(s"verifyRegistrationMethod: failed with error: ($code, $msg, $label), headers: $headers")
         Left(ErrorResponse(code, msg, label))
       case other =>
-        error(s"Unexpected response from verifyPhoneNumber: $other")
+        error(s"verifyRegistrationMethod: Unexpected response: $other")
         Left(ErrorResponse(other.status.status, other.toString, "unknown"))
     }
   }
-
-  //TODO merge with phone verification to avoid duplication
-  override def verifyEmail(email: EmailAddress, code: ConfirmationCode) = {
-
-    val body = JsonContentEncoder(JsonEncoder { o =>
-      o.put("email", email.str)
-      o.put("code", code.str)
-      o.put("dryrun", true)
-    })
-
-    val request = Request.Post(ActivatePath, body, baseUri = Some(backend.baseUrl), timeout = timeout)
-    client(request) map {
-      case resp @ Response(SuccessHttpStatus(), _, _) =>
-        debug(s"Email number verified: $resp")
-        Right(())
-      case Response(_, ErrorResponse(code, msg, label), headers) =>
-        warn(s"verifyEmail failed with error: ($code, $msg, $label), headers: $headers")
-        Left(ErrorResponse(code, msg, label))
-      case other =>
-        error(s"Unexpected response from verifyEmail: $other")
-        Left(ErrorResponse(other.status.status, other.toString, "unknown"))
-    }
-  }
-
 }
 
 object RegistrationClientImpl {
@@ -217,9 +192,9 @@ object RegistrationClientImpl {
   }
 
 
-  def activateRequestBody(credentials: PhoneCredentials, kindOfVerification: KindOfVerification) = JsonContentEncoder(JsonEncoder { o =>
-    o.put("phone", credentials.phone.str)
-    o.put("code", credentials.code.str)
-    o.put("dryrun", kindOfVerification == KindOfVerification.PREVERIFY_ON_REGISTRATION)
+  def activateRequestBody(method: Either[PhoneNumber, EmailAddress], code: ConfirmationCode, dryRun: Boolean) = JsonContentEncoder(JsonEncoder { o =>
+    method.fold(p => o.put("phone", p.str), e => o.put("email",  e.str)) //TODO common trait for Email/Password?
+    o.put("code",   code.str)
+    o.put("dryrun", dryRun)
   })
 }

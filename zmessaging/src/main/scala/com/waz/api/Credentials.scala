@@ -57,3 +57,4 @@ case class HandleCredentials(handle: Handle, password: String) extends Credentia
 
   override def toString: String = s"UsernameBasedCredentials($handle, $password)" //TODO obfuscate
 }
+
