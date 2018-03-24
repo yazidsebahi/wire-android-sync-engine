@@ -26,7 +26,7 @@ import com.waz.content.ZmsDatabase
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
 import com.waz.db.migrate.AccountDataMigration
-import com.waz.model.AccountDataOld.AccountDataDao
+import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}

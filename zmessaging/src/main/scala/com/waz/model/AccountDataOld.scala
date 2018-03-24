@@ -22,7 +22,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
-import com.waz.model.AccountData.Label
 import com.waz.model.AccountDataOld.{PermissionsMasks, TriTeamId}
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
@@ -61,6 +60,19 @@ object AccountData {
       override def random(): Label = Label(Uid().toString)
       override def decode(str: String): Label = Label(str)
     }
+  }
+
+  implicit object AccountDataDao extends Dao[AccountData, UserId] {
+    val Id = id[UserId]('_id, "PRIMARY KEY").apply(_.id)
+
+    val Cookie = text[Cookie]('cookie, _.str, AuthenticationManager.Cookie)(_.cookie)
+    val Token = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))(_.accessToken)
+    val RegisteredPush = opt(id[PushToken]('registered_push))(_.pushToken)
+
+    override val idCol = Id
+    override val table = Table("ActiveAccounts", Id, Cookie, Token, RegisteredPush)
+
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Cookie, Token, RegisteredPush)
   }
 }
 
@@ -244,7 +256,7 @@ object AccountDataOld {
       }
     }
 
-  implicit object AccountDataDao extends Dao[AccountDataOld, AccountId] {
+  implicit object AccountDataOldDao extends Dao[AccountDataOld, AccountId] {
     val Id = id[AccountId]('_id, "PRIMARY KEY").apply(_.id)
 
     val Team = Col[TriTeamId]("teamId", "TEXT")(new DbTranslator[TriTeamId] {
