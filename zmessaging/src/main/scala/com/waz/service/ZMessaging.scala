@@ -94,7 +94,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
 
   val global     = account.global
-  val selfUserId = account.id
+  val selfUserId = account.userId
 
   val auth       = account.auth
   val zNetClient = account.netClient

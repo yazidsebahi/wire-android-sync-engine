@@ -24,7 +24,7 @@ import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model.UserId
-import com.waz.service.{AccountManager, ZMessaging}
+import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.WakeLockImpl
 
@@ -70,10 +70,10 @@ trait ZMessagingService extends Service {
 
   private def accounts = ZMessaging.currentAccounts
 
-  def onAccountIntent[Result](intent: Intent)(execute: AccountManager => Future[Result]): Future[Result] =
+  def onZmsIntent[Result](intent: Intent)(execute: ZMessaging => Future[Result]): Future[Result] =
     if (intent != null && intent.hasExtra(ZmsUserIdExtra)) {
       val userId = UserId(intent.getStringExtra(ZmsUserIdExtra))
-      accounts.getAccountManager(userId) flatMap {
+      accounts.getZms(userId) flatMap {
         case Some(acc) => execute(acc)
         case None =>
           error(s"zmessaging not available")
@@ -82,16 +82,6 @@ trait ZMessagingService extends Service {
     } else {
       error("intent has no ZUserId extra")
       Future.failed(InvalidIntentException)
-    }
-
-  def onZmsIntent[Result](intent: Intent)(execute: ZMessaging => Future[Result]): Future[Result] =
-    onAccountIntent(intent) { acc =>
-      acc.getZMessaging flatMap {
-        case Some(zms) => execute(zms)
-        case None =>
-          error(s"zmessaging not available")
-          Future.failed(NoZMessagingException(acc.id))
-      }
     }
 }
 

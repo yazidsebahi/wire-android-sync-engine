@@ -73,7 +73,7 @@ class MockAccountsService(global: GlobalModuleImpl = new MockGlobalModule) exten
 }
 
 class MockAccountManager(override val accounts: AccountsServiceImpl = new MockAccountsService)(implicit ec: EventContext = EventContext.Global) extends AccountManager(AccountId(), accounts.global, accounts) {
-  accounts.accountMap.put(id, this)
+  accounts.accountMap.put(userId, this)
 
   val _zmessaging = Signal[Option[ZMessaging]]()
 
@@ -81,7 +81,7 @@ class MockAccountManager(override val accounts: AccountsServiceImpl = new MockAc
 
   def set(zms: MockZMessaging) = {
     _zmessaging ! Some(zms)
-    accounts.activeAccountPref := Some(id)
+    accounts.activeAccountPref := Some(userId)
   }
 }
 

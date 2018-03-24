@@ -30,10 +30,11 @@ import com.waz.model._
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
-import com.waz.utils.returning
+import com.waz.utils.{RichOption, returning}
+import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import com.waz.znet.ZNetClient._
 
-import scala.collection.mutable
+import scala.collection.immutable.HashMap
 import scala.concurrent.Future
 
 trait AccountsService {
@@ -74,8 +75,8 @@ trait AccountsService {
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
-  def login(loginCredentials: Credentials): ErrorOr[UserId]
-  def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[UserId]
+  def login(loginCredentials: Credentials): ErrorOr[Unit]
+  def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
 }
 
@@ -96,10 +97,9 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   import AccountsService._
 
   implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
+  implicit val ec: EventContext = EventContext.Global
 
-  private[waz] implicit val ec: EventContext = EventContext.Global
-
-  private[waz] val accountMap = new mutable.HashMap[UserId, AccountManager]()
+  @volatile private var accountMap = HashMap[UserId, AccountManager]()
 
   val context       = global.context
   val prefs         = global.prefs
@@ -222,7 +222,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   lazy val activeAccountManager = activeAccountPref.signal.flatMap {
-    case Some(id) => Signal.future(getOrCreateAccountManager(id).map(Some(_)))
+    case Some(id) => Signal.future(getOrCreateAccountManager(id))
     case None     => Signal.const(None)
   }
 
@@ -237,7 +237,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   def getActiveAccountManager = getActiveAccountId.flatMap {
-    case Some(id) => getOrCreateAccountManager(id) map (Some(_))
+    case Some(id) => getOrCreateAccountManager(id)
     case _        => Future.successful(None)
   }
 
@@ -246,32 +246,35 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None      => Future.successful(None)
   }
 
-  private[service] def getOrCreateAccountManager(userId: UserId) = migration.map { _ =>
+  private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] = {
     verbose(s"getOrCreateAccountManager: $userId")
-    accountMap.getOrElseUpdate(userId, new AccountManager(userId, global, this))
-  }
-
-  //TODO - why would we ever NOT want to create the account manager if there is a AccountId available for it?
-  def getAccountManager(id: UserId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
-    case Some(acc) =>
-      verbose(s"getAccountManager($acc)")
-      getOrCreateAccountManager(id) map (Some(_))
-    case _ =>
-      Future successful None
+    accountMap.get(userId) match {
+      case Some(am) => Future.successful(Some(am))
+      case _ =>
+        storage.get(userId).map {
+          case Some(_) =>
+            Some(returning(new AccountManager(userId, global, this))(am => accountMap += (userId -> am)))
+          case _ =>
+            warn(s"No logged in account for user: $userId, not creating account manager")
+            None
+        }
+    }
   }
 
   override lazy val zmsInstances = (for {
     ids <- loggedInAccounts.map(_.map(_.id))
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
-    zs  <- Signal.sequence(ams.map(_.zmessaging).toSeq: _*)
+    zs  <- Signal.sequence(ams.flatten.map(_.zmessaging).toSeq: _*)
   } yield
     returning(zs.flatten.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
 
-  override def zms(userId: UserId): Signal[Option[ZMessaging]] = zmsInstances.map(_.find(_.selfUserId == userId))
+  override def zms(userId: UserId): Signal[Option[ZMessaging]] =
+    zmsInstances.map(_.find(_.selfUserId == userId))
 
-  override def getZms(userId: UserId): Future[Option[ZMessaging]] = getOrCreateAccountManager(userId).flatMap(_.getZMessaging)
+  override def getZms(userId: UserId): Future[Option[ZMessaging]] =
+    getOrCreateAccountManager(userId).flatMap(_.fold2(Future.successful(Option.empty[ZMessaging]), _.getZMessaging))
 
   //TODO optional delete history
   def logout(userId: UserId) = {
@@ -330,7 +333,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   override def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true) = {
     verbose(s"verifyEmailAddress: $email, $code, $dryRun")
-    regClient.verifyRegistrationMethod(Right(email), code, dryRun) //TODO normalise email?
+    //TODO normalise email?
+    regClient.verifyRegistrationMethod(Right(email), code, dryRun).map(_.fold(Left(_), _ => Right({}))) //TODO handle label and cookie!
   }
 
   override def login(loginCredentials: Credentials) = {
@@ -338,97 +342,39 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     loginClient.login(loginCredentials).future.flatMap {
       case Right((token, Some(cookie), _)) => //TODO handle label
         for {
-          resp <- loginClient.getSelfUserInfo(token) //TODO maybe the whole UserInfo should be passed to the AccountManager...
-          _    <- resp.fold(_ => Future.successful({}), u => storage.insert(AccountData(u.id, cookie, Some(token), None)).map(_ => {}))
-        } yield resp
+          resp <- loginClient.getSelfUserInfo(token)
+          _    <- resp.fold(_ => Future.successful({}), u => createAndEnterAccount(u, cookie, Some(token), loginCredentials))
+        } yield resp.fold(Left(_), _ => Right({}))
+      case Right(_) =>
+        warn("login didn't return with a cookie, aborting")
+        Future.successful(Left(ErrorResponse.internalError("No cookie for user after login - can't create account")))
       case Left(error) =>
         verbose(s"login failed: $error")
         Future.successful(Left(error))
     }
   }
 
-  def activatePhoneOnRegister(accountId: AccountId, code: ConfirmationCode): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    def verifyCodeRequest(credentials: PhoneCredentials, accountId: AccountId): Future[Either[ErrorResponse, Unit]] = {
-//      verifyPhoneNumber(credentials, KindOfVerification.PREVERIFY_ON_REGISTRATION).future.flatMap {
-//        case Left(errorResponse) =>
-//          Future.successful(Left(errorResponse))
-//        case Right(()) =>
-//          storageOld.update(accountId, _.copy(phone = Some(credentials.phone), pendingPhone = None, code = Some(code), regWaiting = true)).map(_ => Right(()))
-//      }
-//    }
-//
-//    for {
-//      Some(acc) <- storageOld.get(accountId)
-//      Some(creds) <- acc.pendingPhone.fold2(Future.successful(None), phone => Future.successful(PhoneCredentials(phone, Some(code))).map(Option(_)))
-//      req <- verifyCodeRequest(creds.asInstanceOf[PhoneCredentials], acc.id)
-//    } yield req
+  override def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None) = {
+    verbose(s"register: $registerCredentials, name: $name, teamName: $teamName")
+    regClient.register(registerCredentials, name, teamName).flatMap {
+      case Right((user, Some((cookie, _)))) =>
+        createAndEnterAccount(user, cookie, None, registerCredentials).map(Right(_))
+      case Right(_) =>
+        warn("Register didn't return a cookie")
+        Future.successful(Left(ErrorResponse.internalError("No cookie for user after registration - can't create account")))
+      case Left(error) =>
+        verbose(s"register failed: $error")
+        Future.successful(Left(error))
+    }
   }
 
-  def registerNameOnPhone(accountId: AccountId, name: String): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    for {
-//      acc <- storageOld.get(accountId)
-//      req <- acc.fold2(Future.successful(Left(ErrorResponse.InternalError)), accountData => registerOnBackend(accountData, name))
-//    } yield req
+  private def createAndEnterAccount(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): Future[Unit] = {
+    verbose(s"createAndEnterAccount: $user, $cookie, $token, $credentials")
+    for {
+      _ <- storage.updateOrCreate(user.id, _.copy(cookie = cookie, accessToken = token), AccountData(user.id, cookie, token))
+      _ =  accountMap += (user.id -> new AccountManager(user.id, global, this, Some(credentials), Some(user)))
+      _ <- setAccount(Some(user.id))
+    } yield {}
   }
-
-  def registerEmail(emailAddress: EmailAddress, password: String, name: String): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    for {
-//      acc <- storageOld.findByEmail(emailAddress).map(_.getOrElse(AccountDataOld()))
-//      registerAcc = acc.copy(pendingEmail = Some(emailAddress), password = Some(password), name = Some(name))
-//      _ <- storageOld.updateOrCreate(registerAcc.id, _ => registerAcc, registerAcc)
-//      req <- registerOnBackend(registerAcc, name)
-//      _ <- if (req.isRight) storageOld.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
-//      _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
-//    } yield req
-  }
-
-  //For team flow only (for now) - applies to current active account
-  def register(): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//
-//    withActiveAccount { acc =>
-//      regClient.registerTeamAccount(acc).future.flatMap {
-//        case Right((userInfo, cookie)) =>
-//          verbose(s"register($acc) done, id: ${acc.id}, user: $userInfo, cookie: $cookie")
-//          storageOld.update(acc.id,
-//            _.updated(userInfo).copy(
-//              cookie          = cookie,
-//              regWaiting      = false,
-//              code            = None,
-//              firstLogin      = false,
-//              email           = acc.pendingEmail,
-//              pendingEmail    = None
-//            )).map(_ => Right(()))
-//        case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
-//          info(s"register($acc.id) failed: invalid-code")
-//          storageOld.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))
-//        case Left(error) =>
-//          info(s"register($acc.id) failed: $error")
-//          Future successful Left(error)
-//    }}
-  }
-
-  private def registerOnBackend(accountData: AccountDataOld, name: String): ErrorOr[Unit] = {
-    Future.successful(Left(ErrorResponse.internalError("Not yet implemented!!"))) //TODO
-//    regClient.register(accountData, name, None).future.flatMap {
-//      case Right((userInfo, Some(cookie))) =>
-//        verbose(s"register($accountData) done, id: ${accountData.id}, user: $userInfo, cookie: $cookie")
-//        storageOld.update(accountData.id, _.updated(userInfo).copy(cookie = Some(cookie), regWaiting = false, name = Some(name), code = None, firstLogin = false)).map(_ => Right(()))
-//      case Right((userInfo, None)) =>
-//        verbose(s"register($accountData) done, id: ${accountData.id}, user: $userInfo")
-//        storageOld.update(accountData.id, _.updated(userInfo).copy(cookie = None, regWaiting = false,  name = Some(name), code = None, firstLogin = false)).map(_ => Right(()))
-//      case Left(error) =>
-//        info(s"register($accountData, $name) failed: $error")
-//        Future successful Left(error)
-//    }
-  }
-
-  def setLoggedIn(accountId: AccountId): Future[Unit] = {
-    throw new Exception("Not yet implemented!") //TODO
-//    storageOld.update(accountId, _.copy(firstLogin = false)).map(_ => ())
-  }
-
 }
+
