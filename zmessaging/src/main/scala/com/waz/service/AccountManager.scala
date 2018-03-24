@@ -134,7 +134,7 @@ class AccountManager(val userId:   UserId,
       _       <- updateSelfTeam(userId)
       cId     <- clientId.collect { case Some(id) => id }.head
       Some(_) <- checkCryptoBox()
-      tId     <- userPrefs(UserPreferences.TeamId).signal.collect { case Right(t) => t }
+      tId     <- userPrefs(UserPreferences.TeamId).signal.collect { case Right(t) => t }.head
     } yield {
       verbose(s"Creating new ZMessaging instance for $userId, $cId, $tId, service: $this")
       global.factory.zmessaging(tId, cId, this, storage, cryptoBox)
@@ -197,7 +197,7 @@ class AccountManager(val userId:   UserId,
         case Right(teamOpt) =>
           val updateUsers = teamOpt match {
             case Some(t) => storage.usersStorage.update(userId, _.updated(Some(t.id)))
-            case _ => Future.successful()
+            case _ => Future.successful({})
           }
 
           val updateTeams = teamOpt match {

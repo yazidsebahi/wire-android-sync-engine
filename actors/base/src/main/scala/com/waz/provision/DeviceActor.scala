@@ -28,12 +28,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.LogTag
 import com.waz.api._
 import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
-import android.database.sqlite.SQLiteDatabase
-import com.waz.api.OtrClient.DeleteCallback
-import com.waz.api._
-import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
-import com.waz.content.Preferences.PrefKey
-import com.waz.content.{Database, GlobalDatabase}
+import com.waz.content.{Database, GlobalDatabase, GlobalPreferences}
 import com.waz.log.{InternalLog, LogOutput}
 import com.waz.media.manager.context.IntensityLevel
 import com.waz.model.ConversationData.ConversationType
@@ -43,11 +38,9 @@ import com.waz.model.{ConvId, Liking, RConvId, MessageContent => _, _}
 import com.waz.provision.DeviceActor.responseTimeout
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
-import com.waz.testutils.Implicits._
-import com.waz.threading._
 import com.waz.service.otr.CryptoBoxService
-import com.waz.testutils.Implicits.{CoreListAsScala, _}
-import com.waz.threading.{CancellableFuture, DispatchQueueStats, Threading}
+import com.waz.testutils.Implicits._
+import com.waz.threading.{DispatchQueueStats, _}
 import com.waz.ui.UiModule
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
@@ -124,21 +117,16 @@ class DeviceActor(val deviceName: String,
 
     override lazy val flowmanager = new FlowManagerService {
       override def flowManager = None
-
-    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(this) {
-      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, user: UserModule, st: StorageModule, cb: CryptoBoxService): ZMessaging =
-        new ZMessaging(teamId, clientId, user, st, cb) {
-
       override def getVideoCaptureDevices = Future.successful(Vector())
-
       override def setVideoCaptureDevice(id: RConvId, deviceId: String) = Future.successful(())
-
       override def setVideoPreview(view: View) = Future.successful(())
-
       override def setVideoView(id: RConvId, partId: Option[UserId], view: View) = Future.successful(())
-  implicit def zmsDb: SQLiteDatabase = api.account.get.storage.currentValue("actors").get.db.dbHelper.getWritableDatabase
-
       override val cameraFailedSig = Signal[Boolean](false)
+    }
+
+    override lazy val factory: ZMessagingFactory = new ZMessagingFactory(global) {
+      override def zmessaging(teamId: Option[TeamId], clientId: ClientId, accountManager: AccountManager, storage: StorageModule, cryptoBox: CryptoBoxService): ZMessaging =
+        new ZMessaging(teamId, clientId, accountManager, storage, cryptoBox)
     }
 
     override lazy val mediaManager = new MediaManagerService {
@@ -147,11 +135,14 @@ class DeviceActor(val deviceName: String,
       override def isSpeakerOn = Signal.empty[Boolean]
       override def setSpeaker(enable: Boolean) = Future.successful({})
     }
+
+
   }
 
   val accountsService = new AccountsServiceImpl(globalModule) {
     ZMessaging.currentAccounts = this
-    Await.ready(firstTimePref := false, 5.seconds)
+    Await.ready(prefs(GlobalPreferences.FirstTimeWithTeams) := false, 5.seconds)
+    Await.ready(prefs(GlobalPreferences.DatabasesRenamed) := true, 5.seconds)
   }
 
   val ui = returning(new UiModule(accountsService)) { ui =>
@@ -192,9 +183,9 @@ class DeviceActor(val deviceName: String,
 
     case Login(email, pass) => accountsService.getActiveAccount.flatMap {
       case Some(accountData) =>
-        Future.successful(Failed(s"Process is already logged in as user: ${accountData.email}"))
+        Future.successful(Failed(s"Process is already logged in as user: ${accountData.id}"))
       case None =>
-        accountsService.loginEmail(EmailAddress(email), pass).map {
+        accountsService.login(EmailCredentials(EmailAddress(email), pass, None)).map {
           case Right(()) => Successful
           case Left(ErrorResponse(code, message, label)) => Failed(s"Failed login: $code, $message, $label")
         }
@@ -399,7 +390,7 @@ class DeviceActor(val deviceName: String,
         .map(_ => Successful)
 
     case UpdateProfileUserName(userName) =>
-      zms.head.flatMap(_.account.updateHandle(Handle(userName)))
+      am.head.flatMap(_.updateHandle(Handle(userName)))
         .map(_.fold(err => Failed(s"unable to update user name: ${err.code}, ${err.message}, ${err.label}"), _ => Successful))
 
     case SetStatus(status) =>
@@ -413,7 +404,7 @@ class DeviceActor(val deviceName: String,
         .map(_ => Successful)
 
     case UpdateProfileEmail(email) =>
-      zms.head.flatMap(_.account.updateEmail(EmailAddress(email)))
+      am.head.flatMap(_.updateEmail(EmailAddress(email)))
         .map(_ => Successful)
 
     case SetMessageReaction(remoteId, messageId, action) =>
