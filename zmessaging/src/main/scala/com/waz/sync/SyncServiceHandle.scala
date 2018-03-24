@@ -18,21 +18,19 @@
 package com.waz.sync
 
 import com.waz.api.EphemeralExpiration
+import com.waz.api.IConversation.{Access, AccessRole}
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.ShouldSyncInitial
 import com.waz.model.UserData.ConnectionStatus
-import com.waz.model.{Availability, _}
 import com.waz.model.otr.ClientId
 import com.waz.model.sync.SyncJob.Priority
 import com.waz.model.sync._
+import com.waz.model.{Availability, _}
 import com.waz.service._
 import com.waz.sync.otr.OtrClientsSyncHandler
 import com.waz.sync.queue.ConvLock
 import com.waz.threading.Threading
-import com.waz.utils.events.Signal
 import org.threeten.bp.Instant
-import com.waz.ZLog.ImplicitTag._
-import com.waz.api.IConversation.{Access, AccessRole}
-import com.waz.content.UserPreferences
-import com.waz.content.UserPreferences.ShouldSyncInitial
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -97,8 +95,8 @@ trait SyncServiceHandle {
 
 class AndroidSyncServiceHandle(service: SyncRequestService, timeouts: Timeouts, userPreferences: UserPreferences) extends SyncServiceHandle {
 
-  import com.waz.model.sync.SyncRequest._
   import Threading.Implicits.Background
+  import com.waz.model.sync.SyncRequest._
 
   val shouldSyncPref = userPreferences.preference(ShouldSyncInitial)
 
@@ -182,12 +180,11 @@ trait SyncHandler {
   def apply(req: SerialExecutionWithinConversation, lock: ConvLock): Future[SyncResult]
 }
 
-class AccountSyncHandler(zms: Signal[ZMessaging], otrClients: OtrClientsSyncHandler) extends SyncHandler {
+class AccountSyncHandler(zms: Future[ZMessaging], otrClients: OtrClientsSyncHandler) extends SyncHandler {
   import Threading.Implicits.Background
-
   import com.waz.model.sync.SyncRequest._
 
-  private def withZms(body: ZMessaging => Future[SyncResult]): Future[SyncResult] = zms.head flatMap body
+  private def withZms(body: ZMessaging => Future[SyncResult]): Future[SyncResult] = zms.flatMap(body)
 
   val accountHandler: PartialFunction[SyncRequest, Future[SyncResult]] = {
     case SyncSelfClients            => otrClients.syncSelfClients()

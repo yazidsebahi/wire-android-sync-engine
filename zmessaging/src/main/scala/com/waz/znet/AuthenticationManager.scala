@@ -117,7 +117,7 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
 
   private def dispatchRequest(request: => Future[LoginResult], retryCount: Int = 0)(handler: ResponseHandler): ErrorOr[AccessToken] =
     request.flatMap(handler.orElse {
-      case Right((token, cookie)) =>
+      case Right((token, cookie, _)) =>
         debug(s"receivedAccessToken: '$token'")
         updateCredentials(Some(token), cookie).map(_ => Right(token))
 
@@ -129,7 +129,7 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
         info(s"Received error from request: $err, will retry")
         dispatchRequest(request, retryCount + 1)(handler)
 
-      case Left((_, err)) =>
+      case Left(err) =>
         val msg = s"Login request failed after $retryCount retries, last status: $err"
         error(msg)
         Future.successful(Left(err))

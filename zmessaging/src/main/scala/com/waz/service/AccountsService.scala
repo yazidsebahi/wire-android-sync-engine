@@ -49,7 +49,7 @@ trait AccountsService {
   def getLoggedInAccounts: Future[Set[AccountData]]
 
   def loggedInAccountIds: Signal[Set[UserId]] = loggedInAccounts.map(_.map(_.id))
-  def getLoggedInAccountIds: Future[Set[UserId]] = getLoggedInAccounts.map(_.map(_.id))
+  def getLoggedInAccountIds: Future[Set[UserId]]
 
   def activeAccount: Signal[Option[AccountData]]
   def getActiveAccount: Future[Option[AccountData]]
@@ -126,8 +126,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       for {
         active <- prefs.preference(CurrentAccountPrefOld).apply()
         accs <- storageOld.list()
-        _    <- accs.foreach { acc =>
-          Future.sequence(acc.userId.map { userId =>
+        _    <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
+            val userId = acc.userId.get
             //migrate the databases
             verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
 
@@ -151,7 +151,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
             //Ensure that the current active account remains active
             if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
           })
-        }
         //copy the client ids
         _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
           import com.waz.service.AccountManager.ClientRegistrationState._
@@ -183,6 +182,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   })
 
   override def getLoggedInAccounts = storage.list().map(_.toSet)
+
+  override def getLoggedInAccountIds = getLoggedInAccounts.map(_.map(_.id))
 
   override val loggedInAccounts = migrationDone.flatMap {
     case true =>
@@ -216,18 +217,18 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   override def getActiveAccountId = activeAccountPref()
 
-  override lazy val activeAccount = activeAccountId.flatMap {
+  override lazy val activeAccount = activeAccountId.flatMap[Option[AccountData]] {
     case Some(id) => storage.optSignal(id)
     case None     => Signal.const(None)
   }
 
-  lazy val activeAccountManager = activeAccountPref.signal.flatMap {
+  lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
     case Some(id) => Signal.future(getOrCreateAccountManager(id))
     case None     => Signal.const(None)
   }
 
-  lazy val activeZms = activeAccountManager.flatMap {
-    case Some(am) => am.zmessaging
+  lazy val activeZms = activeAccountManager.flatMap[Option[ZMessaging]] {
+    case Some(am) => Signal.future(am.zmessaging.map(Some(_)))
     case None     => Signal.const(None)
   }
 
@@ -242,7 +243,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   override def getActiveZms = getActiveAccountManager.flatMap {
-    case Some(acc) => acc.getZMessaging
+    case Some(acc) => acc.zmessaging.map(Some(_))
     case None      => Future.successful(None)
   }
 
@@ -264,9 +265,9 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   override lazy val zmsInstances = (for {
     ids <- loggedInAccounts.map(_.map(_.id))
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
-    zs  <- Signal.sequence(ams.flatten.map(_.zmessaging).toSeq: _*)
+    zs  <- Signal.sequence(ams.flatten.map(am => Signal.future(am.zmessaging)).toSeq: _*)
   } yield
-    returning(zs.flatten.toSet) { v =>
+    returning(zs.toSet) { v =>
       verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
     }).disableAutowiring()
 
@@ -274,7 +275,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     zmsInstances.map(_.find(_.selfUserId == userId))
 
   override def getZms(userId: UserId): Future[Option[ZMessaging]] =
-    getOrCreateAccountManager(userId).flatMap(_.fold2(Future.successful(Option.empty[ZMessaging]), _.getZMessaging))
+    getOrCreateAccountManager(userId).flatMap(_.fold2(Future.successful(Option.empty[ZMessaging]), _.zmessaging.map(Some(_))))
 
   //TODO optional delete history
   def logout(userId: UserId) = {
@@ -284,7 +285,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       otherAccounts <- getLoggedInAccountIds.map(_.filter(userId != _))
       _ <- if (current.contains(userId)) setAccount(otherAccounts.headOption) else Future.successful(())
       _ <- storage.remove(userId) //TODO pass Id to some sort of clean up service before removing
-    } yield {}
+    } yield accountMap -= userId
   }
 
   /**

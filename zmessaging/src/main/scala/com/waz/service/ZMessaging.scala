@@ -110,6 +110,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val otrClientsSync       = account.clientsSync
 
   def context           = global.context
+  def accountStorage    = global.accountsStorage
   def contextWrapper    = new AndroidContext(context)
   def googleApi         = global.googleApi
   def globalToken       = global.tokenService

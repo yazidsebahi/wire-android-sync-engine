@@ -36,7 +36,7 @@ import com.waz.sync.otr.{OtrClientsSyncHandler, OtrClientsSyncHandlerImpl}
 import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
-import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet.ZNetClient._
 
@@ -50,19 +50,17 @@ class AccountManager(val userId:   UserId,
 
                     //"first data" should not be relied on too long after construction!
                      firstCredentials: Option[Credentials] = None,
-                     firstData:        Option[UserInfo]    = None)
-                    (implicit ec: EventContext) {
+                     firstData:        Option[UserInfo]    = None) {
 
   implicit val dispatcher = new SerialDispatchQueue()
   verbose(s"Creating for: $userId")
 
   val password = Signal(Option.empty[String]) // TODO obfuscate... (head/currentValue)
 
-  lazy val accountContext: AccountContext = new AccountContext(userId, accounts)
+  implicit val accountContext: AccountContext = new AccountContext(userId, accounts)
 
-  val storage: StorageModule = global.factory.baseStorage(userId)
-  val userPrefs = storage.userPrefs
-  val accountData = global.accountsStorage.signal(userId)
+  val storage     = global.factory.baseStorage(userId)
+  val userPrefs   = storage.userPrefs
 
   val clientState = userPrefs(SelfClient).signal
   val clientId = clientState.map(_.clientId)
@@ -81,6 +79,8 @@ class AccountManager(val userId:   UserId,
   lazy val network            = global.network
   lazy val lifecycle          = global.lifecycle
   lazy val reporting          = global.reporting
+  lazy val tracking           = global.trackingService
+  lazy val db                 = storage.db
   lazy val usersStorage       = storage.usersStorage
   lazy val convsStorage       = storage.convsStorage
   lazy val membersStorage     = storage.membersStorage
@@ -88,11 +88,11 @@ class AccountManager(val userId:   UserId,
 
   lazy val otrClient:           OtrClient               = new OtrClient(netClient)
   lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
-  lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl]
+  lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl] //TODO - just use otrClient directly?
   lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdaterImpl]
   lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
   lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
-  lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(zmessaging.collect { case Some(z) => z }, clientsSync)
+  lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(zmessaging, clientsSync)
 
   firstCredentials.foreach {
     case c: EmailCredentials =>
@@ -128,22 +128,18 @@ class AccountManager(val userId:   UserId,
     hasClient = exists
   }
 
-  // logged in zmessaging instance
-  @volatile private var _zmessaging = Option.empty[ZMessaging]
-
-  val zmessaging: Signal[Option[ZMessaging]] = (for {
-    _          <- Signal.future(firstData.fold2(Future.successful({}), info => usersStorage.updateOrCreate(userId, _.updated(info), UserData(info).copy(connection = UserData.ConnectionStatus.Self))))
-    _          <- Signal.future(updateSelfTeam(userId))
-    Some(cId)  <- clientId
-    Some(_)    <- Signal.future(checkCryptoBox)
-    Right(tId) <- userPrefs(UserPreferences.TeamId).signal
-  } yield {
-    verbose(s"Creating new ZMessaging instance for $userId, $cId, $tId, service: $this")
-    _zmessaging = _zmessaging orElse LoggedTry(global.factory.zmessaging(tId, cId, this, storage, cryptoBox)).toOption
-    _zmessaging
-  }).orElse(Signal.const(Option.empty[ZMessaging]))
-
-  def getZMessaging: Future[Option[ZMessaging]] = zmessaging.head
+  val zmessaging: Future[ZMessaging] = {
+    for {
+      _       <- firstData.fold2(Future.successful({}), u => usersStorage.updateOrCreate(userId, _.updated(u), UserData(u).copy(connection = UserData.ConnectionStatus.Self)))
+      _       <- updateSelfTeam(userId)
+      cId     <- clientId.collect { case Some(id) => id }.head
+      Some(_) <- checkCryptoBox()
+      tId     <- userPrefs(UserPreferences.TeamId).signal.collect { case Right(t) => t }
+    } yield {
+      verbose(s"Creating new ZMessaging instance for $userId, $cId, $tId, service: $this")
+      global.factory.zmessaging(tId, cId, this, storage, cryptoBox)
+    }
+  }
 
   //TODO update locally
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] =
@@ -169,7 +165,7 @@ class AccountManager(val userId:   UserId,
   def updatePassword(newPassword: String, currentPassword: Option[String]) =
     credentialsClient.updatePassword(newPassword, currentPassword).future.map {
       case Left(err) => Left(err)
-      case Right(_)  => Right(firstCredentials ! currentPassword)
+      case Right(_)  => Right(password ! currentPassword)
     }
 
   def updateHandle(handle: Handle): ErrorOr[Unit] =
@@ -254,11 +250,10 @@ class AccountManager(val userId:   UserId,
     } yield resp
   }
 
-  private def checkCryptoBox =
+  private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {
-      case Some(cb) => Future successful Some(cb)
+      case Some(cb) => Future.successful(Some(cb))
       case None =>
-        _zmessaging = None
         for {
           _ <- userPrefs(SelfClient) := Unregistered
           _ <- cryptoBox.deleteCryptoBox()
@@ -270,7 +265,6 @@ class AccountManager(val userId:   UserId,
     for {
       _ <- accounts.logout(userId)
       _ <- cryptoBox.deleteCryptoBox()
-      _ =  _zmessaging = None // drop zmessaging instance, we need to create fresh one with new clientId // FIXME: dropped instance will still be active and using the same ZmsLifecycle instance
       _ <- userPrefs(SelfClient) := Unregistered
     } yield ()
 }
