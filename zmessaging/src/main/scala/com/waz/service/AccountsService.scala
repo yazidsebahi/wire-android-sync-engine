@@ -54,6 +54,8 @@ trait AccountsService {
   def activeAccount: Signal[Option[AccountData]]
   def getActiveAccount: Future[Option[AccountData]]
 
+  def getActiveAccountManager: Future[Option[AccountManager]]
+
   def zmsInstances: Signal[Set[ZMessaging]]
 
   def activeZms: Signal[Option[ZMessaging]]
@@ -74,6 +76,9 @@ trait AccountsService {
 
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
+
+  //TODO other convenience methods
+  def loginEmail(validEmail: String, validPassword: String) = login(EmailCredentials(EmailAddress(validEmail), validPassword))
 
   def login(loginCredentials: Credentials): ErrorOr[Unit]
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
@@ -237,7 +242,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None     => Future.successful(None)
   }
 
-  def getActiveAccountManager = getActiveAccountId.flatMap {
+  override def getActiveAccountManager = getActiveAccountId.flatMap {
     case Some(id) => getOrCreateAccountManager(id)
     case _        => Future.successful(None)
   }
@@ -250,8 +255,11 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] = {
     verbose(s"getOrCreateAccountManager: $userId")
     accountMap.get(userId) match {
-      case Some(am) => Future.successful(Some(am))
+      case Some(am) =>
+        verbose(s"AccountManager for: $userId already created")
+        Future.successful(Some(am))
       case _ =>
+        verbose(s"No AccountManager for: $userId, creating new one")
         storage.get(userId).map {
           case Some(_) =>
             Some(returning(new AccountManager(userId, global, this))(am => accountMap += (userId -> am)))
