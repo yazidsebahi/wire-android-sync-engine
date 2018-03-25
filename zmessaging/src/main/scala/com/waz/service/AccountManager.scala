@@ -53,13 +53,13 @@ class AccountManager(val userId:   UserId,
                      firstData:        Option[UserInfo]    = None) {
 
   implicit val dispatcher = new SerialDispatchQueue()
-  verbose(s"Creating for: $userId")
-
-  val password = Signal(Option.empty[String]) // TODO obfuscate... (head/currentValue)
-
   implicit val accountContext: AccountContext = new AccountContext(userId, accounts)
 
+  verbose(s"Creating for: $userId")
+  val password = Signal(Option.empty[String]) // TODO obfuscate... (head/currentValue)
+
   val storage     = global.factory.baseStorage(userId)
+  val db          = storage.db
   val userPrefs   = storage.userPrefs
 
   val clientState = userPrefs(SelfClient).signal
@@ -80,7 +80,6 @@ class AccountManager(val userId:   UserId,
   lazy val lifecycle          = global.lifecycle
   lazy val reporting          = global.reporting
   lazy val tracking           = global.trackingService
-  lazy val db                 = storage.db
   lazy val usersStorage       = storage.usersStorage
   lazy val convsStorage       = storage.convsStorage
   lazy val membersStorage     = storage.membersStorage
@@ -93,6 +92,8 @@ class AccountManager(val userId:   UserId,
   lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
   lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
   lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(zmessaging, clientsSync)
+
+  val firstLogin: Signal[Boolean] = db.dbHelper.wasCreated
 
   firstCredentials.foreach {
     case c: EmailCredentials =>

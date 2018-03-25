@@ -20,10 +20,13 @@ package com.waz.db
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase.CursorFactory
 import android.database.sqlite.{SQLiteDatabase, SQLiteOpenHelper}
+import com.waz.utils.events.Signal
 import com.waz.utils.returning
 
 class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int, daos: Seq[BaseDao[_]], migrations: Seq[Migration])
   extends SQLiteOpenHelper(context, name, factory, version) {
+
+  val wasCreated = Signal[Boolean]()
 
   override def getWritableDatabase: SQLiteDatabase = synchronized(returning(super.getWritableDatabase)(db => if (! db.isWriteAheadLoggingEnabled) db.enableWriteAheadLogging()))
 
@@ -34,10 +37,12 @@ class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int
     */
   getWritableDatabase
 
-  override def onCreate(db: SQLiteDatabase): Unit =
+  override def onCreate(db: SQLiteDatabase): Unit = {
+    wasCreated ! true
     daos.foreach { dao =>
       dao.onCreate(db)
     }
+  }
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit =
     new Migrations(migrations: _*).migrate(this, from, to)(db)
@@ -46,5 +51,10 @@ class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int
     daos.foreach { dao =>
       db.execSQL(s"DROP TABLE IF EXISTS ${dao.table.name};")
     }
+
+  override def onOpen(db: SQLiteDatabase) = {
+    super.onOpen(db)
+    wasCreated.mutateOrDefault(identity, false)
+  }
 }
 
