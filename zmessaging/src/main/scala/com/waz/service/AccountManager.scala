@@ -161,7 +161,7 @@ class AccountManager(val userId:   UserId,
   def updatePassword(newPassword: Password, currentPassword: Option[Password]) =
     credentialsClient.updatePassword(newPassword, currentPassword).future.flatMap {
       case Left(err) => Future.successful(Left(err))
-      case Right(_)  => global.accountsStorage.update(userId, _.copy(password = Some(newPassword)))
+      case Right(_)  => global.accountsStorage.update(userId, _.copy(password = Some(newPassword))).map(_ => Right({}))
     }
 
   def updateHandle(handle: Handle): ErrorOr[Unit] =

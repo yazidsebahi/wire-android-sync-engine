@@ -56,6 +56,7 @@ trait AccountsService {
   def activeAccount: Signal[Option[AccountData]]
   def getActiveAccount: Future[Option[AccountData]]
 
+  def activeAccountManager: Signal[Option[AccountManager]]
   def getActiveAccountManager: Future[Option[AccountManager]]
 
   def zmsInstances: Signal[Set[ZMessaging]]
@@ -229,7 +230,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None     => Signal.const(None)
   }
 
-  lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
+  override lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
     case Some(id) => Signal.future(getOrCreateAccountManager(id))
     case None     => Signal.const(None)
   }
