@@ -17,6 +17,7 @@
  */
 package com.waz.api
 
+import com.waz.model.AccountData.Password
 import com.waz.model.{ConfirmationCode, EmailAddress, Handle, PhoneNumber}
 import org.json.JSONObject
 
@@ -24,14 +25,19 @@ sealed trait Credentials {
   def autoLogin: Boolean
   def addToRegistrationJson(o: JSONObject): Unit
   def addToLoginJson(o: JSONObject): Unit
+
+  def maybePassword = this match {
+    case e: EmailCredentials => Some(e.password)
+    case _ => None
+  }
 }
 
-case class EmailCredentials(email: EmailAddress, password: String, code: Option[ConfirmationCode] = None) extends Credentials {
+case class EmailCredentials(email: EmailAddress, password: Password, code: Option[ConfirmationCode] = None) extends Credentials {
   override val autoLogin = false
 
   override def addToRegistrationJson(o: JSONObject): Unit = {
     o.put("email", email.str)
-    o.put("password", password)
+    o.put("password", password.str)
     code.foreach(c => o.put("email_code", c.str))
   }
 

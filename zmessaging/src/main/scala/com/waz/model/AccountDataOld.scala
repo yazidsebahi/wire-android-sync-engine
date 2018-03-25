@@ -22,6 +22,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.db.Col._
 import com.waz.db.{Col, Dao, DbTranslator}
+import com.waz.model.AccountData.Password
 import com.waz.model.AccountDataOld.{PermissionsMasks, TriTeamId}
 import com.waz.model.otr.ClientId
 import com.waz.utils.Locales.currentLocaleOrdering
@@ -44,9 +45,14 @@ case class AccountData(id:           UserId,
                        teamId:       Option[TeamId],
                        cookie:       Cookie,
                        accessToken:  Option[AccessToken] = None,
-                       pushToken:    Option[PushToken]   = None)
+                       pushToken:    Option[PushToken]   = None,
+                       password:     Option[Password]    = None) //password never saved to database
 
 object AccountData {
+
+  case class Password(str: String) {
+    override def toString = str.map(_ => '*')
+  }
 
   //Labels can be used to revoke all cookies for a given client
   //TODO save labels and use them for cleanup later
@@ -214,6 +220,7 @@ object AccountDataOld {
     AccountDataOld(id, Left({}), email = Some(email), password = Some(password), phone = None, handle = None)
   }
 
+  //TODO move to AccountData, and ensure they are copied across in migration...
   type Permission = Permission.Value
   object Permission extends Enumeration {
     val

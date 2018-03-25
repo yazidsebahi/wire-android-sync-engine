@@ -25,6 +25,7 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.api.{Verification, ZmsVersion}
 import com.waz.content.UserPreferences.ClientRegVersion
 import com.waz.content.{OtrClientsStorage, UserPreferences}
+import com.waz.model.AccountData.Password
 import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
 import com.waz.model.{AccountId, UserId}
 import com.waz.service.AccountManager.ClientRegistrationState
@@ -42,7 +43,7 @@ import scala.concurrent.Future
 
 trait OtrClientsSyncHandler {
   def syncSelfClients(): Future[SyncResult]
-  def registerClient(password: Option[String]): Future[Either[ErrorResponse, ClientRegistrationState]]
+  def registerClient(password: Option[Password]): Future[Either[ErrorResponse, ClientRegistrationState]]
   def syncClients(user: UserId): Future[SyncResult]
   def postLabel(id: ClientId, label: String): Future[SyncResult]
   def syncPreKeys(clients: Map[UserId, Seq[ClientId]]): Future[SyncResult]
@@ -73,7 +74,7 @@ class OtrClientsSyncHandlerImpl(context: Context,
   // this can be used to detect problematic version updates
   private lazy val clientRegVersion = userPrefs.preference(ClientRegVersion)
 
-  def registerClient(password: Option[String]): Future[Either[ErrorResponse, ClientRegistrationState]] = Serialized.future("sync-self-clients", this) {
+  def registerClient(password: Option[Password]): Future[Either[ErrorResponse, ClientRegistrationState]] = Serialized.future("sync-self-clients", this) {
     cryptoBox.createClient() flatMap {
       case None => Future successful Left(ErrorResponse.internalError("CryptoBox missing"))
       case Some((c, lastKey, keys)) =>

@@ -26,7 +26,7 @@ import com.waz.api.{ErrorResponse => _, _}
 import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.GlobalPreferences.{ActiveAccountPef, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
 import com.waz.content.UserPreferences
-import com.waz.model.AccountData.Label
+import com.waz.model.AccountData.{Label, Password}
 import com.waz.model._
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -80,7 +80,7 @@ trait AccountsService {
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
   //TODO other convenience methods
-  def loginEmail(validEmail: String, validPassword: String) = login(EmailCredentials(EmailAddress(validEmail), validPassword))
+  def loginEmail(validEmail: String, validPassword: String) = login(EmailCredentials(EmailAddress(validEmail), Password(validPassword)))
 
   def login(loginCredentials: Credentials): ErrorOr[Unit]
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
@@ -387,7 +387,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         case Right(at)  => getTeam(at).flatMap {
           case Right(tId) =>
             for {
-             _ <- storage.updateOrCreate(user.id, _.copy(teamId = tId, cookie = cookie, accessToken = token), AccountData(user.id, tId, cookie, token) )
+             _ <- storage.updateOrCreate(user.id, _.copy(teamId = tId, cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, tId, cookie, token, password = credentials.maybePassword) )
              _ =  accountMap += (user.id -> new AccountManager(user.id, tId, global, this, Some(credentials), Some(user)))
              _ <- setAccount(Some(user.id))
             } yield Right({})

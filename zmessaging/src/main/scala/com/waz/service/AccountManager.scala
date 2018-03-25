@@ -20,9 +20,10 @@ package com.waz.service
 import com.softwaremill.macwire._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.{Credentials, EmailCredentials, HandleCredentials, PhoneCredentials}
+import com.waz.api.{Credentials, EmailCredentials, PhoneCredentials}
 import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences.SelfClient
+import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service.AccountManager.ClientRegistrationState
@@ -57,12 +58,12 @@ class AccountManager(val userId:   UserId,
   implicit val accountContext: AccountContext = new AccountContext(userId, accounts)
 
   verbose(s"Creating for: $userId")
-  val password = Signal(Option.empty[String]) // TODO obfuscate... (head/currentValue)
 
   val storage     = global.factory.baseStorage(userId)
   val db          = storage.db
   val userPrefs   = storage.userPrefs
 
+  val account = global.accountsStorage.signal(userId)
   val clientState = userPrefs(SelfClient).signal
   val clientId = clientState.map(_.clientId)
 
@@ -98,15 +99,10 @@ class AccountManager(val userId:   UserId,
 
   firstCredentials.foreach {
     case c: EmailCredentials =>
-      password ! Some(c.password)
       userPrefs(UserPreferences.Email) := Some(c.email)
-
     case c: PhoneCredentials =>
       userPrefs(UserPreferences.Phone) := Some(c.phone)
-
-    case c: HandleCredentials =>
-      password ! Some(c.password)
-      //handle should be in user info
+    case _ =>
   }
 
   private val otrClients =
@@ -162,10 +158,10 @@ class AccountManager(val userId:   UserId,
     }
 
   //TODO do we have to re-authenticate?
-  def updatePassword(newPassword: String, currentPassword: Option[String]) =
-    credentialsClient.updatePassword(newPassword, currentPassword).future.map {
-      case Left(err) => Left(err)
-      case Right(_)  => Right(password ! currentPassword)
+  def updatePassword(newPassword: Password, currentPassword: Option[Password]) =
+    credentialsClient.updatePassword(newPassword, currentPassword).future.flatMap {
+      case Left(err) => Future.successful(Left(err))
+      case Right(_)  => global.accountsStorage.update(userId, _.copy(password = Some(newPassword)))
     }
 
   def updateHandle(handle: Handle): ErrorOr[Unit] =
@@ -207,7 +203,7 @@ class AccountManager(val userId:   UserId,
     verbose(s"ensureClientRegistered: $userId")
     for {
       curState <- clientState.head
-      pw   <- password.head
+      pw   <- account.map(_.password).head
       resp <- curState match {
         case Registered(_) => Future.successful(Right(curState))
         case _ =>
