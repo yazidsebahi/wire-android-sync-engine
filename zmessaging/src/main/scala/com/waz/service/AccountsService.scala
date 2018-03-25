@@ -37,7 +37,8 @@ import com.waz.znet.ZNetClient._
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.Future
-import scala.util.Right
+import scala.util.{Failure, Right, Success}
+import scala.util.control.NonFatal
 
 trait AccountsService {
   import AccountsService._
@@ -128,46 +129,46 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val activeAccountPref = prefs.preference(ActiveAccountPef)
 
   //TODO can be removed after a (very long) while
-  private val migration = databasesRenamedPref().flatMap {
+  databasesRenamedPref().flatMap {
     case true => Future.successful({}) //databases have been renamed - nothing to do.
     case false =>
       for {
         active <- prefs.preference(CurrentAccountPrefOld).apply()
         accs <- storageOld.list()
-        _    <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
-            val userId = acc.userId.get
-            //migrate the databases
-            verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
+        _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
+          val userId = acc.userId.get
+          //migrate the databases
+          verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
 
-            val dbFileOld = context.getDatabasePath(acc.id.str)
+          val dbFileOld = context.getDatabasePath(acc.id.str)
 
-            val exts = Seq("", "-wal", "-shm", "-journal")
+          val exts = Seq("", "-wal", "-shm", "-journal")
 
-            val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
+          val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
 
-            val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
-              f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
-            }.forall(identity)
+          val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
+            f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
+          }.forall(identity)
 
-            //migrate cryptobox dirs
-            val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
-            val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
-            val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
+          //migrate cryptobox dirs
+          val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
+          val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
+          val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
 
-            verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
+          verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
 
-            //Ensure that the current active account remains active
-            if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
-          })
+          //Ensure that the current active account remains active
+          if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
+        })
         //copy the client ids
         _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
           import com.waz.service.AccountManager.ClientRegistrationState._
           val state = (acc.clientId, acc.clientRegState) match {
-            case (Some(id), _)           => Registered(id)
-            case (_, "UNKNOWN")          => Unregistered
+            case (Some(id), _) => Registered(id)
+            case (_, "UNKNOWN") => Unregistered
             case (_, "PASSWORD_MISSING") => PasswordMissing
-            case (_, "LIMIT_REACHED")    => LimitReached
-            case _                       =>
+            case (_, "LIMIT_REACHED") => LimitReached
+            case _ =>
               error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
               Unregistered
           }
@@ -180,9 +181,17 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
           case true => accs.map(_.id).filterNot(active.contains)
         }.flatMap(storageOld.removeAll)
         //migration done! set the prefs so it doesn't happen again
-        _ <- firstTimeWithTeamsPref := false
-        _ <- databasesRenamedPref   := true
       } yield {}
+  }.andThen {
+    case Failure(NonFatal(e)) =>
+      warn("Failed to migrate databases, aborting operation", e)
+    case Success(_) =>
+      verbose("Migration completed")
+  }.map { _ =>
+    for {
+      _ <- firstTimeWithTeamsPref := false
+      _ <- databasesRenamedPref   := true
+    } yield {}
   }
 
   storage.onDeleted(_.foreach { user =>
