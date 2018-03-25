@@ -23,10 +23,11 @@ import com.waz.api.Credentials
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl
 import com.waz.model.AccountData.Label
-import com.waz.model.{UserId, UserInfo}
+import com.waz.model.{TeamData, TeamId, UserId, UserInfo}
 import com.waz.service.BackendConfig
 import com.waz.service.ZMessaging.clock
 import com.waz.service.tracking.TrackingService
+import com.waz.sync.client.TeamsClient.{TeamBindingResponse, teamsPaginatedQuery}
 import com.waz.sync.client.UsersClient
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -35,10 +36,11 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.ErrorOr
+import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
 import org.json.JSONObject
 import org.threeten.bp
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Try
 
@@ -46,6 +48,9 @@ trait LoginClient {
   def access(cookie: Cookie, token: Option[AccessToken]): CancellableFuture[LoginResult]
   def login(credentials: Credentials): CancellableFuture[LoginResult]
   def getSelfUserInfo(token: AccessToken): ErrorOr[UserInfo]
+
+  def findSelfTeam(accessToken: AccessToken, start: Option[TeamId] = None): ErrorOr[Option[TeamData]]
+  def getTeams(accessToken: AccessToken, start: Option[TeamId]): ErrorOr[TeamBindingResponse]
 }
 
 class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: TrackingService) extends LoginClient {
@@ -126,6 +131,27 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
     val request = Request.Get(UsersClient.SelfPath, baseUri = Some(backend.baseUrl), headers = token.headers)
     client(request).map {
       case Response(SuccessHttpStatus(), UsersClient.UserResponseExtractor(user), _) => Right(user)
+      case resp =>
+        info(s"Failed to get self user id")
+        Left(ErrorResponse(resp.status.status, resp.status.msg, "unknown"))
+    }.future
+  }
+
+  override def findSelfTeam(accessToken: AccessToken, start: Option[TeamId] = None) =
+    getTeams(accessToken, start).flatMap {
+      case Left(err) => Future.successful(Left(err))
+      case Right(TeamBindingResponse(teams, hasMore)) =>
+        teams.find(_._2).map(_._1) match {
+          case Some(teamId) => Future.successful(Right(Some(teamId)))
+          case None if hasMore => findSelfTeam(accessToken, teams.lastOption.map(_._1.id))
+          case None => Future.successful(Right(None))
+        }
+    }
+
+  override def getTeams(token: AccessToken, start: Option[TeamId]) = {
+    val request = Request.Get(teamsPaginatedQuery(start), baseUri = Some(backend.baseUrl), headers = token.headers)
+    client(request).map {
+      case Response(SuccessHttpStatus(), TeamBindingResponse(teams, hasMore), _) => Right(TeamBindingResponse(teams, hasMore))
       case resp =>
         info(s"Failed to get self user id")
         Left(ErrorResponse(resp.status.status, resp.status.msg, "unknown"))

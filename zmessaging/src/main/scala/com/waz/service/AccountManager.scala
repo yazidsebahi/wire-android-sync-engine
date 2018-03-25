@@ -45,6 +45,7 @@ import scala.concurrent.duration._
 import scala.util.Right
 
 class AccountManager(val userId:   UserId,
+                     val teamId:   Option[TeamId],
                      val global:   GlobalModule,
                      val accounts: AccountsService,
 
@@ -132,13 +133,11 @@ class AccountManager(val userId:   UserId,
   val zmessaging: Future[ZMessaging] = {
     for {
       _       <- firstData.fold2(Future.successful({}), u => usersStorage.updateOrCreate(userId, _.updated(u), UserData(u).copy(connection = UserData.ConnectionStatus.Self)))
-      _       <- updateSelfTeam(userId)
       cId     <- clientId.collect { case Some(id) => id }.head
       Some(_) <- checkCryptoBox()
-      tId     <- userPrefs(UserPreferences.TeamId).signal.collect { case Right(t) => t }.head
     } yield {
-      verbose(s"Creating new ZMessaging instance for $userId, $cId, $tId, service: $this")
-      global.factory.zmessaging(tId, cId, this, storage, cryptoBox)
+      verbose(s"Creating new ZMessaging instance for $userId, $cId, $teamId, service: $this")
+      global.factory.zmessaging(teamId, cId, this, storage, cryptoBox)
     }
   }
 
@@ -185,48 +184,24 @@ class AccountManager(val userId:   UserId,
           cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
 
-  private def updateSelfTeam(userId: UserId): Future[Unit] = {
+  //TODO move to team service - no need to have here any more
+  private def updateSelfPermissions(): Future[Unit] = {
     import UserPreferences._
-    userPrefs(TeamId).flatMutate {
-      case t@Right(teamId) => teamId match {
-        case Some(_) => //team members should be un-searchable (i.e., in privateMode) which is already set by default on BE
-          (userPrefs(UserPreferences.PrivateMode) := true).map(_ => t)
-        case None => Future.successful(t) //no team account - don't worry about privateMode
-      }
-
-      case Left(_) => teamsClient.findSelfTeam().future.flatMap {
-        case Right(teamOpt) =>
-          val updateUsers = teamOpt match {
-            case Some(t) => storage.usersStorage.update(userId, _.updated(Some(t.id)))
-            case _ => Future.successful({})
-          }
-
-          val updateTeams = teamOpt match {
-            case Some(t) => global.teamsStorage.updateOrCreate(t.id, _ => t, t)
-            case _ => Future.successful({})
-          }
-
-          val fetchPermissions = teamOpt match {
-            case Some(t) => teamsClient.getPermissions(t.id, userId).map {
-              case Right(p) => Some(p)
-              case Left(_) => None
-            }.future
-            case _ => Future.successful(None)
-          }
-
-          for {
-            _ <- updateUsers
-            _ <- updateTeams
-            p <- fetchPermissions
-            _ <- userPrefs(SelfPermissions) := p.map(_._1).getOrElse(0)
-            _ <- userPrefs(CopyPermissions) := p.map(_._2).getOrElse(0)
-          } yield Right(teamOpt.map(_.id))
-        case Left(err) =>
-          warn(s"Failed to update team information: ${err.message}")
-          Future.successful(Left({}))
-      }
+    val fetchPermissions = teamId match {
+      case Some(t) => teamsClient.getPermissions(t, userId).map {
+        case Right(p) => Some(p)
+        case Left(_) => None
+      }.future
+      case _ => Future.successful(None)
     }
+
+    for {
+      p <- fetchPermissions
+      _ <- userPrefs(SelfPermissions) := p.map(_._1).getOrElse(0)
+      _ <- userPrefs(CopyPermissions) := p.map(_._2).getOrElse(0)
+    } yield {}
   }
+  updateSelfPermissions()
 
   def registerClient(): ErrorOr[ClientRegistrationState] = {
     verbose(s"ensureClientRegistered: $userId")

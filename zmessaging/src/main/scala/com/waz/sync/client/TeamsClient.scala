@@ -35,8 +35,6 @@ trait TeamsClient {
   def getTeamMembers(id: TeamId): ErrorOrResponse[Map[UserId, PermissionsMasks]]
   def getTeamData(id: TeamId): ErrorOrResponse[TeamData]
 
-  def findSelfTeam(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamData]]
-  def getTeams(start: Option[TeamId]): ErrorOrResponse[TeamBindingResponse]
   def getPermissions(teamId: TeamId, userId: UserId): ErrorOrResponse[PermissionsMasks]
 }
 
@@ -52,21 +50,6 @@ class TeamsClientImpl(zNetClient: ZNetClient) extends TeamsClient {
   override def getTeamData(id: TeamId) =
     zNetClient.withErrorHandling("loadTeamData", Request.Get(teamPath(id))) {
       case Response(SuccessHttpStatus(), TeamResponse(data), _) => data
-    }
-
-  override def findSelfTeam(start: Option[TeamId] = None): ErrorOrResponse[Option[TeamData]] = getTeams(start).flatMap {
-    case Left(err) => CancellableFuture.successful(Left(err))
-    case Right(TeamBindingResponse(teams, hasMore)) =>
-      teams.find(_._2).map(_._1) match {
-        case Some(teamId) => CancellableFuture.successful(Right(Some(teamId)))
-        case None if hasMore => findSelfTeam(teams.lastOption.map(_._1.id))
-        case None => CancellableFuture.successful(Right(None))
-      }
-  }
-
-  override def getTeams(start: Option[TeamId]) =
-    zNetClient.withErrorHandling("loadAllTeams", Request.Get(teamsPaginatedQuery(start))) {
-      case Response(SuccessHttpStatus(), TeamBindingResponse(teams, hasMore), _) => TeamBindingResponse(teams, hasMore)
     }
 
   override def getPermissions(teamId: TeamId, userId: UserId) =

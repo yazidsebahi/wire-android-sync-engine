@@ -135,14 +135,6 @@ object Preferences {
         case id                => Registered(ClientId(id))
       }, Unregistered)
 
-      implicit lazy val TeamIdCodec = apply[Either[Unit, Option[TeamId]]] ({
-        case Left(_) => "TEAM_ID_UNDEFINED"
-        case Right(t) => implicitly[PrefCodec[Option[TeamId]]].encode(t)
-      }, {
-        case "TEAM_ID_UNDEFINED" => Left({})
-        case v => Right(implicitly[PrefCodec[Option[TeamId]]].decode(v))
-      }, Left({}))
-
       implicit lazy val EmailAddressCodec = apply[EmailAddress](_.str, EmailAddress(_), EmailAddress(""))
       implicit lazy val PhoneNumberCodec = apply[PhoneNumber](_.str, PhoneNumber(_), PhoneNumber(""))
     }
@@ -379,14 +371,13 @@ object UserPreferences {
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
   lazy val SelfClient               = PrefKey[ClientRegistrationState]("self_client")
-  lazy val TeamId                   = PrefKey[Either[Unit, Option[TeamId]]]("team_id") //TODO codec
   lazy val PrivateMode              = PrefKey[Boolean]("private_mode")
   lazy val SelfPermissions          = PrefKey[Long]("self_permissions")
   lazy val CopyPermissions          = PrefKey[Long]("copy_permissions")
 
   //TODO we probably still need pending emails and phones
-  lazy val Email                    = PrefKey[Option[EmailAddress]]("email") //TODO codec
-  lazy val Phone                    = PrefKey[Option[PhoneNumber]]("phone") //TODO codec
+  lazy val Email                    = PrefKey[Option[EmailAddress]]("email")
+  lazy val Phone                    = PrefKey[Option[PhoneNumber]]("phone")
   //Note, Handle is taken from user storage
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")

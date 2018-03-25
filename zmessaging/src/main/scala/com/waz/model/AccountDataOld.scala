@@ -41,6 +41,7 @@ import scala.collection.mutable
   * Any information that needs to be deregistered can be kept here (e.g., de-registered cookies, tokens, clients etc)
   */
 case class AccountData(id:           UserId,
+                       teamId:       Option[TeamId],
                        cookie:       Cookie,
                        accessToken:  Option[AccessToken] = None,
                        pushToken:    Option[PushToken]   = None)
@@ -65,14 +66,15 @@ object AccountData {
   implicit object AccountDataDao extends Dao[AccountData, UserId] {
     val Id = id[UserId]('_id, "PRIMARY KEY").apply(_.id)
 
+    val TeamId = opt(id[TeamId]('user_id)).apply(_.teamId)
     val Cookie = text[Cookie]('cookie, _.str, AuthenticationManager.Cookie)(_.cookie)
     val Token = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))(_.accessToken)
     val RegisteredPush = opt(id[PushToken]('registered_push))(_.pushToken)
 
     override val idCol = Id
-    override val table = Table("ActiveAccounts", Id, Cookie, Token, RegisteredPush)
+    override val table = Table("ActiveAccounts", Id, TeamId, Cookie, Token, RegisteredPush)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Cookie, Token, RegisteredPush)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, TeamId, Cookie, Token, RegisteredPush)
   }
 }
 
