@@ -53,14 +53,14 @@ trait OtrClientsSyncHandler {
   def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]]
 }
 
-class OtrClientsSyncHandlerImpl(context: Context,
-                                userId: UserId,
-                                clientId: Signal[Option[ClientId]],
-                                netClient: OtrClient,
+class OtrClientsSyncHandlerImpl(context:    Context,
+                                userId:     UserId,
+                                clientId:   Signal[Option[ClientId]],
+                                netClient:  OtrClient,
                                 otrClients: OtrClientsService,
-                                storage: OtrClientsStorage,
-                                cryptoBox: CryptoBoxService,
-                                userPrefs: UserPreferences) extends OtrClientsSyncHandler {
+                                storage:    OtrClientsStorage,
+                                cryptoBox:  CryptoBoxService,
+                                userPrefs:  UserPreferences) extends OtrClientsSyncHandler {
   import com.waz.threading.Threading.Implicits.Background
 
   private lazy val sessions = cryptoBox.sessions
@@ -140,14 +140,18 @@ class OtrClientsSyncHandlerImpl(context: Context,
           else
             clients
 
-        otrClients.updateUserClients(user, userClients, replace = true) flatMap { ucs =>
-          syncSessionsIfNeeded(ucs.clients.keys).flatMap { _ =>
-            current match {
+        for {
+          ucs <- otrClients.updateUserClients(user, userClients, replace = true)
+          _   <- syncSessionsIfNeeded(ucs.clients.keys)
+          res <- current match {
               case Some(currentClient) => updatePreKeys(currentClient)
               case _ => Future.successful(SyncResult.Success)
             }
+          _   <- res match {
+            case SyncResult.Success => otrClients.lastSelfClientsSyncPref := System.currentTimeMillis()
+            case _ => Future.successful({})
           }
-        }
+        } yield res
     }
   }
 

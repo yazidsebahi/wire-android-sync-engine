@@ -23,6 +23,7 @@ import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastSelfClientsSyncRequestedTime
 import com.waz.content._
+import com.waz.model.AccountData.Password
 import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.model._
 import com.waz.service.AccountsService.Active
@@ -48,7 +49,7 @@ class OtrClientsService(userId:    UserId,
   import com.waz.threading.Threading.Implicits.Background
   import com.waz.utils.events.EventContext.Implicits.global
 
-  private lazy val lastSelfClientsSyncPref = userPrefs.preference(LastSelfClientsSyncRequestedTime)
+  lazy val lastSelfClientsSyncPref = userPrefs.preference(LastSelfClientsSyncRequestedTime)
 
   accounts.accountState(userId) {
     case _: Active => requestSyncIfNeeded()
@@ -73,7 +74,7 @@ class OtrClientsService(userId:    UserId,
         }
     }
 
-  def deleteClient(id: ClientId, password: String) =
+  def deleteClient(id: ClientId, password: Password) =
     storage.get(userId) flatMap {
       case Some(cs) if cs.clients.contains(id) =>
         netClient.deleteClient(id, password).future flatMap {
@@ -143,10 +144,6 @@ class OtrClientsService(userId:    UserId,
     storage.update(user, { cs =>
       cs.copy(clients = cs.clients -- clients)
     })
-
-  def updateSelfClients(clients: Seq[Client], replace: Boolean = true) = clientId.head flatMap { current =>
-    updateUserClients(userId, clients.map(c => if (current.contains(c.id)) c.copy(verified = Verification.VERIFIED) else c), replace)
-  }
 
   def updateClientLabel(id: ClientId, label: String) =
     storage.update(userId, { cs =>

@@ -82,8 +82,8 @@ class OtrClient(netClient: ZNetClient) {
       case Response(SuccessHttpStatus(), RemainingPreKeysResponse(ids), _) => ids
     }
 
-  def deleteClient(id: ClientId, password: String): ErrorOrResponse[Unit] = {
-    val data = JsonEncoder { o => o.put("password", password) }
+  def deleteClient(id: ClientId, password: Password): ErrorOrResponse[Unit] = {
+    val data = JsonEncoder { o => o.put("password", password.str) }
     netClient.withErrorHandling("deleteClient", Request.Delete(clientPath(id), Some(data))) {
       case Response(SuccessHttpStatus(), _, _) => ()
     }
