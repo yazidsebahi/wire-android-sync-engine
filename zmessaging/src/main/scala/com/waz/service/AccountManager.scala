@@ -179,26 +179,7 @@ class AccountManager(val userId:   UserId,
         else
           cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
-
-  //TODO move to team service - no need to have here any more
-  private def updateSelfPermissions(): Future[Unit] = {
-    import UserPreferences._
-    val fetchPermissions = teamId match {
-      case Some(t) => teamsClient.getPermissions(t, userId).map {
-        case Right(p) => Some(p)
-        case Left(_) => None
-      }.future
-      case _ => Future.successful(None)
-    }
-
-    for {
-      p <- fetchPermissions
-      _ <- userPrefs(SelfPermissions) := p.map(_._1).getOrElse(0)
-      _ <- userPrefs(CopyPermissions) := p.map(_._2).getOrElse(0)
-    } yield {}
-  }
-  updateSelfPermissions()
-
+  
   def registerClient(): ErrorOr[ClientRegistrationState] = {
     verbose(s"ensureClientRegistered: $userId")
     for {

@@ -76,6 +76,7 @@ object SyncRequest {
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
+  case object SyncSelfPermissions extends BaseRequest(Cmd.SyncSelfPermissions)
   case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
   case object SyncTeam extends BaseRequest(Cmd.SyncTeam)
 
@@ -366,6 +367,7 @@ object SyncRequest {
           case Cmd.PostAddressBook       => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
           case Cmd.PostInvitation        => PostInvitation(JsonDecoder[Invitation]('invitation))
           case Cmd.SyncSelfClients       => SyncSelfClients
+          case Cmd.SyncSelfPermissions   => SyncSelfPermissions
           case Cmd.SyncClients           => SyncClients(userId)
           case Cmd.SyncClientLocation    => SyncClientsLocation
           case Cmd.SyncPreKeys           => SyncPreKeys(userId, decodeClientIdSeq('clients).toSet)
@@ -485,7 +487,7 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
-        case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
+        case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncSelfPermissions | SyncClientsLocation | Unknown => () // nothing to do
       }
     }
   }

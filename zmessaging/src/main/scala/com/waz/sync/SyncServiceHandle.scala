@@ -83,6 +83,7 @@ trait SyncServiceHandle {
   def deletePushToken(token: PushToken): Future[SyncId]
 
   def syncSelfClients(): Future[SyncId]
+  def syncSelfPermissions(): Future[SyncId]
   def postClientLabel(id: ClientId, label: String): Future[SyncId]
   def syncClients(user: UserId): Future[SyncId]
   def syncClientsLocation(): Future[SyncId]
@@ -159,6 +160,7 @@ class AndroidSyncServiceHandle(service: SyncRequestService, timeouts: Timeouts, 
   def deletePushToken(token: PushToken) = addRequest(DeletePushToken(token), priority = Priority.Low)
 
   def syncSelfClients() = addRequest(SyncSelfClients, priority = Priority.Critical)
+  def syncSelfPermissions() = addRequest(SyncSelfPermissions, priority = Priority.High)
   def postClientLabel(id: ClientId, label: String) = addRequest(PostClientLabel(id, label))
   def syncClients(user: UserId) = addRequest(SyncClients(user))
   def syncClientsLocation() = addRequest(SyncClientsLocation)
@@ -169,9 +171,10 @@ class AndroidSyncServiceHandle(service: SyncRequestService, timeouts: Timeouts, 
   override def performFullSync(): Future[Unit] = for {
     id1 <- syncConversations()
     id2 <- syncTeam()
-    id3 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
-    id4 <- syncSelfClients()
-    _ <- service.scheduler.await(Set(id1, id2, id3, id4))
+    id3 <- syncSelfPermissions()
+    id4 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
+    id5 <- syncSelfClients()
+    _ <- service.scheduler.await(Set(id1, id2, id3, id4, id5))
   } yield ()
 }
 
@@ -216,6 +219,7 @@ class AccountSyncHandler(zms: Future[ZMessaging], otrClients: OtrClientsSyncHand
     case SyncConnectedUsers                    => zms.usersSync.syncConnectedUsers()
     case SyncConnections                       => zms.connectionsSync.syncConnections()
     case SyncSelf                              => zms.usersSync.syncSelfUser()
+    case SyncSelfPermissions                   => zms.teamsSync.syncSelfPermissions()
     case DeleteAccount                         => zms.usersSync.deleteAccount()
     case PostSelf(info)                        => zms.usersSync.postSelfUser(info)
     case PostSelfPicture(_)                    => zms.usersSync.postSelfPicture()

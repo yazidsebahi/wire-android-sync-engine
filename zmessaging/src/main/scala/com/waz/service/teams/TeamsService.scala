@@ -34,6 +34,7 @@ import com.waz.utils.events.{AggregatingSignal, EventStream, RefreshingSignal, S
 
 import scala.collection.Seq
 import scala.concurrent.Future
+import scala.util.Right
 
 //TODO - return Signals of the search results for UI??
 trait TeamsService {

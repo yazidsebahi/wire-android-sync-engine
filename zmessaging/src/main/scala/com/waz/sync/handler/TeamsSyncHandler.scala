@@ -18,6 +18,8 @@
 package com.waz.sync.handler
 
 import com.waz.api.impl.ErrorResponse
+import com.waz.content.UserPreferences
+import com.waz.content.UserPreferences.{CopyPermissions, SelfPermissions}
 import com.waz.model._
 import com.waz.service.teams.TeamsService
 import com.waz.sync.SyncResult
@@ -25,14 +27,20 @@ import com.waz.sync.client.TeamsClient
 import com.waz.threading.Threading
 
 import scala.concurrent.Future
+import scala.util.Right
 import scala.util.control.NoStackTrace
 
 trait TeamsSyncHandler {
   def syncTeam(): Future[SyncResult]
   def syncMember(id: UserId): Future[SyncResult]
+  def syncSelfPermissions(): Future[SyncResult]
 }
 
-class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service: TeamsService) extends TeamsSyncHandler {
+class TeamsSyncHandlerImpl(userId:    UserId,
+                           userPrefs: UserPreferences,
+                           teamId:    Option[TeamId],
+                           client:    TeamsClient,
+                           service:   TeamsService) extends TeamsSyncHandler {
 
   import Threading.Implicits.Background
 
@@ -56,6 +64,19 @@ class TeamsSyncHandlerImpl(teamId: Option[TeamId], client: TeamsClient, service:
     case _ => Future.successful(SyncResult.Success)
   }
 
+  override def syncSelfPermissions() =
+    teamId match {
+      case Some(t) =>
+        client.getPermissions(t, userId).future.flatMap {
+          case Right((self, copy)) =>
+            for {
+              _ <- userPrefs(SelfPermissions) := self
+              _ <- userPrefs(CopyPermissions) := copy
+            } yield SyncResult.Success
+          case Left(err) => Future.successful(SyncResult(err))
+        }
+      case None => Future.successful(SyncResult.Success) // no team - nothing to do
+    }
 }
 
 object TeamsSyncHandler {
