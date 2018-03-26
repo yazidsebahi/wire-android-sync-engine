@@ -107,7 +107,7 @@ class UserServiceImpl(selfUserId:    UserId,
 
   //Update user data for other accounts
   //TODO remove this and move the necessary user data up to the account storage
-  accounts.loggedInAccounts.map(_.map(_.id).toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
+  accounts.loggedInAccountIds.map(_.toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
 
   push.onHistoryLost { time =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")

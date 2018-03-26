@@ -61,8 +61,8 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
         case Some(glob) if glob.backend.pushSenderId == remoteMessage.getFrom =>
           data.get(UserKey).map(UserId) match {
             case Some(target) =>
-              accounts.loggedInAccounts.head.flatMap { accs =>
-                accs.find(_.id == target).map(_.id) match {
+              accounts.loggedInAccountIds.head.flatMap { accs =>
+                accs.find(_ == target) match {
                   case Some(acc) =>
                     accounts.getZms(acc).flatMap {
                       case Some(zms) => FCMHandler(zms, data, Instant.ofEpochMilli(remoteMessage.getSentTime))

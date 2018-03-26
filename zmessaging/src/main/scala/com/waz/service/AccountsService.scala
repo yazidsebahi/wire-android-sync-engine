@@ -51,7 +51,7 @@ trait AccountsService {
   def loggedInAccounts: Signal[Set[AccountData]]
   def getLoggedInAccounts: Future[Set[AccountData]]
 
-  def loggedInAccountIds: Signal[Set[UserId]] = loggedInAccounts.map(_.map(_.id))
+  def loggedInAccountIds: Signal[Set[UserId]]
   def getLoggedInAccountIds: Future[Set[UserId]]
 
   def activeAccount: Signal[Option[AccountData]]
@@ -124,81 +124,86 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   private val migrationDone = for {
     first   <- firstTimeWithTeamsPref.signal
     renamed <- databasesRenamedPref.signal
-  } yield !first && renamed
+  } yield //!first && renamed TODO
+    true
 
   val activeAccountPref = prefs.preference(ActiveAccountPef)
 
   //TODO can be removed after a (very long) while
-  databasesRenamedPref().flatMap {
-    case true => Future.successful({}) //databases have been renamed - nothing to do.
-    case false =>
-      for {
-        active <- prefs.preference(CurrentAccountPrefOld).apply()
-        accs <- storageOld.list()
-        _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
-          val userId = acc.userId.get
-          //migrate the databases
-          verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
+//  databasesRenamedPref().flatMap {
+//    case true => Future.successful({}) //databases have been renamed - nothing to do.
+//    case false =>
+//      for {
+//        active <- prefs.preference(CurrentAccountPrefOld).apply()
+//        accs <- storageOld.list()
+//        _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
+//          val userId = acc.userId.get
+//          //migrate the databases
+//          verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
+//
+//          val dbFileOld = context.getDatabasePath(acc.id.str)
+//
+//          val exts = Seq("", "-wal", "-shm", "-journal")
+//
+//          val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
+//
+//          val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
+//            f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
+//          }.forall(identity)
+//
+//          //migrate cryptobox dirs
+//          val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
+//          val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
+//          val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
+//
+//          verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
+//
+//          //Ensure that the current active account remains active
+//          if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
+//        })
+//        //copy the client ids
+//        _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
+//          import com.waz.service.AccountManager.ClientRegistrationState._
+//          val state = (acc.clientId, acc.clientRegState) match {
+//            case (Some(id), _) => Registered(id)
+//            case (_, "UNKNOWN") => Unregistered
+//            case (_, "PASSWORD_MISSING") => PasswordMissing
+//            case (_, "LIMIT_REACHED") => LimitReached
+//            case _ =>
+//              error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
+//              Unregistered
+//          }
+//
+//          global.factory.baseStorage(acc.userId.get).userPrefs.preference(UserPreferences.SelfClient) := state
+//        })
+//        //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
+//        _ <- firstTimeWithTeamsPref().map {
+//          case false => accs.collect { case acc if acc.cookie.isEmpty => acc.id }
+//          case true => accs.map(_.id).filterNot(active.contains)
+//        }.flatMap(storageOld.removeAll)
+//        _ <- markMigrationDone()
+//      } yield {}
+//  }.recoverWith {
+//    case NonFatal(e) =>
+//      warn("Failed to migrate databases, aborting operation", e)
+//      markMigrationDone()
+//  }
 
-          val dbFileOld = context.getDatabasePath(acc.id.str)
-
-          val exts = Seq("", "-wal", "-shm", "-journal")
-
-          val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
-
-          val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
-            f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
-          }.forall(identity)
-
-          //migrate cryptobox dirs
-          val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
-          val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
-          val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
-
-          verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
-
-          //Ensure that the current active account remains active
-          if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
-        })
-        //copy the client ids
-        _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
-          import com.waz.service.AccountManager.ClientRegistrationState._
-          val state = (acc.clientId, acc.clientRegState) match {
-            case (Some(id), _) => Registered(id)
-            case (_, "UNKNOWN") => Unregistered
-            case (_, "PASSWORD_MISSING") => PasswordMissing
-            case (_, "LIMIT_REACHED") => LimitReached
-            case _ =>
-              error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
-              Unregistered
-          }
-
-          global.factory.baseStorage(acc.userId.get).userPrefs.preference(UserPreferences.SelfClient) := state
-        })
-        //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
-        _ <- firstTimeWithTeamsPref().map {
-          case false => accs.collect { case acc if acc.cookie.isEmpty => acc.id }
-          case true => accs.map(_.id).filterNot(active.contains)
-        }.flatMap(storageOld.removeAll)
-        //migration done! set the prefs so it doesn't happen again
-      } yield {}
-  }.andThen {
-    case Failure(NonFatal(e)) =>
-      warn("Failed to migrate databases, aborting operation", e)
-    case Success(_) =>
-      verbose("Migration completed")
-  }.map { _ =>
+  private def markMigrationDone() =
     for {
       _ <- firstTimeWithTeamsPref := false
       _ <- databasesRenamedPref   := true
     } yield {}
-  }
 
   storage.onDeleted(_.foreach { user =>
     global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
   })
 
-  override def getLoggedInAccounts = storage.list().map(_.toSet)
+  override def getLoggedInAccounts = storage.list().map { as =>
+    returning(as.toSet) { as =>
+      verbose(s"getLoggedInAccounts: $as")
+    }
+  }
 
   override def getLoggedInAccountIds = getLoggedInAccounts.map(_.map(_.id))
 
@@ -212,17 +217,22 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case false => Signal.const(Set.empty[AccountData])
   }
 
+  override val loggedInAccountIds = loggedInAccounts.map(_.map(_.id))
+  loggedInAccountIds(as => verbose(s"Logged in accounts: $as"))
+
   @volatile private var accountStateSignals = Map.empty[UserId, Signal[AccountState]]
 
   override def accountState(userId: UserId) = {
 
-    lazy val newSignal: Signal[AccountState] = for {
-      selected <- activeAccountPref.signal.map(_.contains(userId))
-      loggedIn <- loggedInAccountIds.map(_.contains(userId))
-      uiActive <- global.lifecycle.uiActive
-    } yield
-      returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
-        verbose(s"account state changed: $userId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
+    lazy val newSignal: Signal[AccountState] =
+      for {
+        selected <- activeAccountPref.signal.map(_.contains(userId))
+        loggedIn <- loggedInAccountIds.map(_.contains(userId))
+        uiActive <- global.lifecycle.uiActive
+      } yield {
+        returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
+          verbose(s"account state changed: $userId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
+        }
       }
 
     accountStateSignals.getOrElse(userId, returning(newSignal) { sig =>
@@ -283,7 +293,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   override lazy val zmsInstances = (for {
-    ids <- loggedInAccounts.map(_.map(_.id))
+    ids <- loggedInAccountIds
     ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
     zs  <- Signal.sequence(ams.flatten.map(am => Signal.future(am.zmessaging)).toSeq: _*)
   } yield

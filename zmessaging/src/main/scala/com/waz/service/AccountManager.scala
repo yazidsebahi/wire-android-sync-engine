@@ -59,9 +59,9 @@ class AccountManager(val userId:   UserId,
 
   verbose(s"Creating for: $userId")
 
-  val storage     = global.factory.baseStorage(userId)
-  val db          = storage.db
-  val userPrefs   = storage.userPrefs
+  val storage   = global.factory.baseStorage(userId)
+  val db        = storage.db
+  val userPrefs = storage.userPrefs
 
   val account = global.accountsStorage.signal(userId)
   val clientState = userPrefs(SelfClient).signal
@@ -87,13 +87,13 @@ class AccountManager(val userId:   UserId,
   lazy val membersStorage     = storage.membersStorage
   lazy val clientsStorage     = storage.otrClientsStorage
 
-  lazy val otrClient:           OtrClient               = new OtrClient(netClient)
-  lazy val clientsService:      OtrClientsService       = wire[OtrClientsService]
-  lazy val clientsSync:         OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl] //TODO - just use otrClient directly?
-  lazy val syncContent:         SyncContentUpdater      = wire[SyncContentUpdaterImpl]
-  lazy val syncRequests:        SyncRequestServiceImpl  = wire[SyncRequestServiceImpl]
-  lazy val sync:                SyncServiceHandle       = wire[AndroidSyncServiceHandle]
-  lazy val syncHandler:         SyncHandler             = new AccountSyncHandler(zmessaging, clientsSync)
+  val otrClient:      OtrClient              = new OtrClient(netClient)
+  val clientsService: OtrClientsService      = wire[OtrClientsService]
+  val clientsSync:    OtrClientsSyncHandler  = wire[OtrClientsSyncHandlerImpl] //TODO - just use otrClient directly?
+  val syncContent:    SyncContentUpdater     = wire[SyncContentUpdaterImpl]
+  val syncRequests:   SyncRequestServiceImpl = wire[SyncRequestServiceImpl]
+  val sync:           SyncServiceHandle      = wire[AndroidSyncServiceHandle]
+  val syncHandler:    SyncHandler            = new AccountSyncHandler(zmessaging, clientsSync)
 
   val firstLogin: Signal[Boolean] = db.dbHelper.wasCreated
 
@@ -210,9 +210,7 @@ class AccountManager(val userId:   UserId,
           clientsSync.registerClient(pw).flatMap {
             case Right(state) =>
               verbose(s"Client registration complete: $state")
-              if (state.clientId.isEmpty) {
-                sync.syncSelfClients()
-              }
+              if (state.clientId.isEmpty) sync.syncSelfClients()
               (userPrefs(SelfClient) := state).map(_ => Right(state))
             case Left(err) =>
               error(s"client registration failed: $err")
