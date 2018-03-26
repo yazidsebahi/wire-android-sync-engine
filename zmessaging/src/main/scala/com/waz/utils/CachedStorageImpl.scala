@@ -244,8 +244,9 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
 
         if (updated.isEmpty) Future.successful(Vector.empty)
         else
-          returning (db { save(updated.map(_._2))(_) } .future.map { _ => updated }) { _ =>
+          db(save(updated.map(_._2))(_)).future.map { _ =>
             onUpdated ! updated
+            updated
           }
       }
 
@@ -287,17 +288,19 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
         val addedResult = added.result
         val updatedResult = updated.result
 
-        returning (db { save(toSave.result)(_) } .future.map { _ => result }) { _ =>
+        db(save(toSave.result)(_)).future.map { _ =>
           if (addedResult.nonEmpty) onAdded ! addedResult
           if (updatedResult.nonEmpty) onUpdated ! updatedResult
+          result
         }
       }
     }
 
   private def addInternal(key: K, value: V): Future[V] = {
     cache.put(key, Some(value))
-    returning(db { save(Seq(value))(_) } .future.map { _ => value }) { _ =>
+    db(save(Seq(value))(_)).future.map { _ =>
       onAdded ! Seq(value)
+      value
     }
   }
 
@@ -306,8 +309,9 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
     if (updated == current) Future.successful(Some((current, updated)))
     else {
       cache.put(key, Some(updated))
-      returning(db { save(Seq(updated))(_) } .future.map { _ => Some((current, updated)) }) { _ =>
+      db(save(Seq(updated))(_)).future.map { _ =>
         onUpdated ! Seq((current, updated))
+        Some((current, updated))
       }
     }
   }
@@ -318,12 +322,16 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
 
   def remove(key: K): Future[Unit] = Future {
     cache.put(key, None)
-    returning(db { delete(Seq(key))(_) } .future) { _ => onDeleted ! Seq(key) }
+    db(delete(Seq(key))(_)).future.map { _ =>
+      onDeleted ! Seq(key)
+    }
   } .flatten
 
   def removeAll(keys: Iterable[K]): Future[Unit] = Future {
     keys foreach { key => cache.put(key, None) }
-    returning(db { delete(keys)(_) } .future) { _ => onDeleted ! keys.toVector }
+    db(delete(keys)(_)).future.map { _ =>
+      onDeleted ! keys.toVector
+    }
   } .flatten
 
   def cacheIfNotPresent(key: K, value: V) = cachedOrElse(key, Future {
