@@ -199,26 +199,14 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
   })
 
-  override def getLoggedInAccounts = storage.list().map { as =>
-    returning(as.toSet) { as =>
-      verbose(s"getLoggedInAccounts: $as")
-    }
-  }
-
+  override def getLoggedInAccounts = storage.getLoggedInAccounts
   override def getLoggedInAccountIds = getLoggedInAccounts.map(_.map(_.id))
 
   override val loggedInAccounts = migrationDone.flatMap {
-    case true =>
-      val changes = EventStream.union(
-        storage.onChanged.map(_.map(_.id)),
-        storage.onDeleted
-      ).map(_.toSet)
-      new RefreshingSignal[Set[AccountData], Set[UserId]](CancellableFuture.lift(getLoggedInAccounts), changes)
+    case true  => storage.loggedInAccounts
     case false => Signal.const(Set.empty[AccountData])
   }
-
   override val loggedInAccountIds = loggedInAccounts.map(_.map(_.id))
-  loggedInAccountIds(as => verbose(s"Logged in accounts: $as"))
 
   @volatile private var accountStateSignals = Map.empty[UserId, Signal[AccountState]]
 

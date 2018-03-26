@@ -18,14 +18,40 @@
 package com.waz.content
 
 import android.content.Context
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.verbose
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.AccountDataOld.AccountDataOldDao
 import com.waz.model._
+import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
+import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
+import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache, returning}
 
-trait AccountStorage extends CachedStorage[UserId, AccountData]
-class AccountStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[UserId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) with AccountStorage
+import scala.concurrent.Future
+
+trait AccountStorage extends CachedStorage[UserId, AccountData] {
+  def getLoggedInAccounts: Future[Set[AccountData]]
+  def loggedInAccounts: Signal[Set[AccountData]]
+}
+class AccountStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[UserId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) with AccountStorage {
+  import Threading.Implicits.Background
+
+  override def loggedInAccounts = {
+    val changes = EventStream.union(
+      onChanged.map(_.map(_.id)),
+      onDeleted
+    ).map(_.toSet)
+    RefreshingSignal[Set[AccountData], Set[UserId]](getLoggedInAccounts, changes)
+  }
+
+  override def getLoggedInAccounts = list().map { as =>
+    verbose(s"getLoggedInAccounts: $as")
+    returning(as.toSet) { as =>
+      verbose(s"getLoggedInAccounts: $as")
+    }
+  }
+}
 
 trait AccountsStorageOld extends CachedStorage[AccountId, AccountDataOld]
 class AccountsStorageOldImpl(context: Context, storage: Database) extends CachedStorageImpl[AccountId, AccountDataOld](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataOldDao) with AccountsStorageOld

@@ -72,9 +72,9 @@ object AccountData {
   implicit object AccountDataDao extends Dao[AccountData, UserId] {
     val Id = id[UserId]('_id, "PRIMARY KEY").apply(_.id)
 
-    val TeamId = opt(id[TeamId]('user_id)).apply(_.teamId)
-    val Cookie = text[Cookie]('cookie, _.str, AuthenticationManager.Cookie)(_.cookie)
-    val Token = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))(_.accessToken)
+    val TeamId         = opt(id[TeamId]('user_id)).apply(_.teamId)
+    val Cookie         = text[Cookie]('cookie, _.str, AuthenticationManager.Cookie)(_.cookie)
+    val Token          = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))(_.accessToken)
     val RegisteredPush = opt(id[PushToken]('registered_push))(_.pushToken)
 
     override val idCol = Id
