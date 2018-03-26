@@ -80,8 +80,5 @@ class TeamsSyncHandlerImpl(userId:    UserId,
 }
 
 object TeamsSyncHandler {
-
-  def apply(teamId: Option[TeamId], client: TeamsClient, service: TeamsService): TeamsSyncHandler = new TeamsSyncHandlerImpl(teamId, client, service)
-
   case class SyncException(msg: String, err: ErrorResponse) extends Exception(msg) with NoStackTrace
 }

@@ -78,6 +78,7 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def deletePushToken(token: PushToken) = sid
 
   override def syncSelfClients(): Future[SyncId] = sid
+  override def syncSelfPermissions(): Future[SyncId] = sid
   override def postLiking(id: ConvId, liking: Liking): Future[SyncId] = sid
   override def postClientLabel(id: ClientId, label: String): Future[SyncId] = sid
   override def syncClients(user: UserId): Future[SyncId] = sid

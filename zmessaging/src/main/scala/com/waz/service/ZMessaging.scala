@@ -61,10 +61,6 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def client(auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
-  def usersClient(client: ZNetClient) = new UsersClient(client)
-
-  def teamsClient(client: ZNetClient) = new TeamsClientImpl(client)
-
   def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
 
   def cryptobox(userId: UserId, storage: StorageModule) = new CryptoBoxService(global.context, userId, global.metadata, storage.userPrefs)
@@ -75,7 +71,7 @@ class ZMessagingFactory(global: GlobalModule) {
 class StorageModule(context: Context, val userId: UserId, globalPreferences: GlobalPreferences) {
   lazy val db                                         = new ZmsDatabase(userId, context)
   lazy val userPrefs                                  = UserPreferences.apply(context, db, globalPreferences)
-  lazy val usersStorage:      UsersStorage        = wire[UsersStorageImpl]
+  lazy val usersStorage:      UsersStorage            = wire[UsersStorageImpl]
   lazy val otrClientsStorage: OtrClientsStorage       = wire[OtrClientsStorageImpl]
   lazy val membersStorage                             = wire[MembersStorageImpl]
   lazy val assetsStorage :    AssetsStorage           = wire[AssetsStorageImpl]
@@ -225,7 +221,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val usersearchSync                             = wire[UserSearchSyncHandler]
   lazy val usersSync                                  = wire[UsersSyncHandler]
   lazy val conversationSync                           = wire[ConversationsSyncHandler]
-  lazy val teamsSync                                  = wire[TeamsSyncHandler]
+  lazy val teamsSync:       TeamsSyncHandler          = wire[TeamsSyncHandlerImpl]
   lazy val connectionsSync                            = wire[ConnectionsSyncHandler]
   lazy val addressbookSync                            = wire[AddressBookSyncHandler]
   lazy val gcmSync                                    = wire[PushTokenSyncHandler]

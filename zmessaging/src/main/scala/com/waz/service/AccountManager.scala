@@ -70,8 +70,6 @@ class AccountManager(val userId:   UserId,
   lazy val cryptoBox          = global.factory.cryptobox(userId, storage)
   lazy val auth               = global.factory.auth(userId)
   lazy val netClient          = global.factory.client(auth)
-  lazy val usersClient        = global.factory.usersClient(netClient)
-  lazy val teamsClient        = global.factory.teamsClient(netClient)
   lazy val credentialsClient  = global.factory.credentialsClient(netClient)
 
   lazy val context            = global.context
@@ -87,16 +85,28 @@ class AccountManager(val userId:   UserId,
   lazy val membersStorage     = storage.membersStorage
   lazy val clientsStorage     = storage.otrClientsStorage
 
-  val otrClient:      OtrClient              = new OtrClient(netClient)
-  val clientsService: OtrClientsService      = wire[OtrClientsService]
-  val clientsSync:    OtrClientsSyncHandler  = wire[OtrClientsSyncHandlerImpl] //TODO - just use otrClient directly?
+  val zmessaging: Future[ZMessaging] = {
+    for {
+      _       <- firstData.fold2(Future.successful({}), u => usersStorage.updateOrCreate(userId, _.updated(u), UserData(u).copy(connection = UserData.ConnectionStatus.Self)))
+      cId     <- clientId.collect { case Some(id) => id }.head
+      Some(_) <- checkCryptoBox()
+    } yield {
+      verbose(s"Creating new ZMessaging instance for $userId, $cId, $teamId, service: $this")
+      global.factory.zmessaging(teamId, cId, this, storage, cryptoBox)
+    }
+  }
+
   val syncContent:    SyncContentUpdater     = wire[SyncContentUpdaterImpl]
   val syncRequests:   SyncRequestServiceImpl = wire[SyncRequestServiceImpl]
   val sync:           SyncServiceHandle      = wire[AndroidSyncServiceHandle]
+
+  val otrClient:      OtrClient              = new OtrClient(netClient)
+  val clientsService: OtrClientsService      = wire[OtrClientsService]
+  val clientsSync:    OtrClientsSyncHandler  = wire[OtrClientsSyncHandlerImpl] //TODO - just use otrClient directly?
+
   val syncHandler:    SyncHandler            = new AccountSyncHandler(zmessaging, clientsSync)
 
   val firstLogin: Signal[Boolean] = db.dbHelper.wasCreated
-
   firstCredentials.foreach {
     case c: EmailCredentials =>
       userPrefs(UserPreferences.Email) := Some(c.email)
@@ -104,6 +114,7 @@ class AccountManager(val userId:   UserId,
       userPrefs(UserPreferences.Phone) := Some(c.phone)
     case _ =>
   }
+
 
   private val otrClients =
     storage.otrClientsStorage.signal(userId)
@@ -115,7 +126,6 @@ class AccountManager(val userId:   UserId,
     case Some(cId) => otrClients.map(_.find(_.id == cId))
     case _ => Signal const Option.empty[Client]
   }
-
   private var hasClient = false
   otrCurrentClient.map(_.isDefined) { exists =>
     if (hasClient && !exists) {
@@ -126,16 +136,6 @@ class AccountManager(val userId:   UserId,
     hasClient = exists
   }
 
-  val zmessaging: Future[ZMessaging] = {
-    for {
-      _       <- firstData.fold2(Future.successful({}), u => usersStorage.updateOrCreate(userId, _.updated(u), UserData(u).copy(connection = UserData.ConnectionStatus.Self)))
-      cId     <- clientId.collect { case Some(id) => id }.head
-      Some(_) <- checkCryptoBox()
-    } yield {
-      verbose(s"Creating new ZMessaging instance for $userId, $cId, $teamId, service: $this")
-      global.factory.zmessaging(teamId, cId, this, storage, cryptoBox)
-    }
-  }
 
   //TODO update locally
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] =
