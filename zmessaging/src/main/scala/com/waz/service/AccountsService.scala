@@ -108,6 +108,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
   implicit val ec: EventContext = EventContext.Global
 
+  //TODO - race between creating a new AM with userInfo in login/register, and accessing it in the UI...
   @volatile private var accountMap = HashMap[UserId, AccountManager]()
 
   val context       = global.context
