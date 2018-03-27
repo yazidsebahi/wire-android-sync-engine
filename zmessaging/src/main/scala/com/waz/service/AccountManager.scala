@@ -181,6 +181,7 @@ class AccountManager(val userId:   UserId,
                     Future.successful(Left(error))
                 }
             }
+            _ <- resp.fold(_ => Future.successful({}), userPrefs(SelfClient) := _)
           } yield resp
       }
     }
