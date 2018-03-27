@@ -25,6 +25,7 @@ import com.waz.model.sync._
 import com.waz.model.{AccountId, ConvId, SyncId, UserId}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService, ReportingService}
+import com.waz.sync.SyncRequestServiceImpl.{Data, SyncMatcher}
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler, SyncSchedulerImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
@@ -35,6 +36,7 @@ import scala.concurrent.Future
 trait SyncRequestService {
   def scheduler: SyncScheduler
   def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId]
+  def syncState(matchers: Seq[SyncMatcher]): Signal[Data]
 }
 
 
@@ -84,7 +86,7 @@ class SyncRequestServiceImpl(context:   Context,
     }
   }
 
-  def syncState(matchers: Seq[SyncMatcher]): Signal[Data] =
+  override def syncState(matchers: Seq[SyncMatcher]) =
     content.syncJobs map { _.values.filter(job => matchers.exists(_.apply(job))) } map { jobs =>
       val state = if (jobs.isEmpty) SyncState.COMPLETED else jobs.minBy(_.state.ordinal()).state
       Data(state, ProgressUnknown, jobs.flatMap(_.error).toSeq)

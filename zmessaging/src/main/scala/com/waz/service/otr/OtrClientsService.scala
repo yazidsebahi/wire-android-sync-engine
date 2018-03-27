@@ -17,15 +17,15 @@
  */
 package com.waz.service.otr
 
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog._
 import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.UserPreferences.LastSelfClientsSyncRequestedTime
 import com.waz.content._
 import com.waz.model.AccountData.Password
-import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.model._
+import com.waz.model.otr.{Client, ClientId, UserClients}
 import com.waz.service.AccountsService.Active
 import com.waz.service._
 import com.waz.sync.SyncServiceHandle
@@ -34,12 +34,11 @@ import com.waz.utils._
 import com.waz.utils.events.Signal
 
 import scala.collection.immutable.Map
-import scala.collection.breakOut
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class OtrClientsService(userId:    UserId,
-                        clientId:  Signal[Option[ClientId]],
+class OtrClientsService(selfId:    UserId,
+                        clientId:  ClientId,
                         netClient: OtrClient,
                         userPrefs: UserPreferences,
                         storage:   OtrClientsStorage,
@@ -51,7 +50,7 @@ class OtrClientsService(userId:    UserId,
 
   lazy val lastSelfClientsSyncPref = userPrefs.preference(LastSelfClientsSyncRequestedTime)
 
-  accounts.accountState(userId) {
+  accounts.accountState(selfId) {
     case _: Active => requestSyncIfNeeded()
     case _ =>
   }
@@ -59,9 +58,12 @@ class OtrClientsService(userId:    UserId,
   val otrClientsProcessingStage = EventScheduler.Stage[OtrClientEvent] { (convId, events) =>
     RichFuture.processSequential(events) {
       case OtrClientAddEvent(client) =>
-        updateClients(Map(userId -> Seq(client))).flatMap(_ => sync.syncPreKeys(userId, Set(client.id)))
+        for {
+          _  <- updateUserClients(selfId, Seq(client))
+          id <- sync.syncPreKeys(selfId, Set(client.id))
+        } yield id
       case OtrClientRemoveEvent(cId) =>
-        removeClients(userId, Seq(cId))
+        removeClients(selfId, Seq(cId))
     }
   }
 
@@ -75,11 +77,11 @@ class OtrClientsService(userId:    UserId,
     }
 
   def deleteClient(id: ClientId, password: Password) =
-    storage.get(userId) flatMap {
+    storage.get(selfId) flatMap {
       case Some(cs) if cs.clients.contains(id) =>
         netClient.deleteClient(id, password).future flatMap {
           case Right(_) => for {
-            _ <- storage.update(userId, { uc => uc.copy(clients = uc.clients - id) })
+            _ <- storage.update(selfId, { uc => uc.copy(clients = uc.clients - id) })
             _ <- requestSyncIfNeeded()
           } yield Right(())
           case res => Future.successful(res)
@@ -98,47 +100,33 @@ class OtrClientsService(userId:    UserId,
         storage.updateOrCreate(id, update, create) flatMap { ucs =>
           val res = ucs.clients(client)
           if (res.isVerified) Future successful res
-          else VerificationStateUpdater.awaitUpdated(userId) map { _ => res } // synchronize with verification state processing to ensure that OTR_UNVERIFIED message is added before anything else
+          else VerificationStateUpdater.awaitUpdated(selfId) map { _ => res } // synchronize with verification state processing to ensure that OTR_UNVERIFIED message is added before anything else
         }
     }
   }
 
-  def updateClients(ucs: Map[UserId, Seq[Client]], replace: Boolean = false): Future[Set[UserClients]] = {
-
-    def updateOrCreate(user: UserId, clients: Seq[Client]): (Option[UserClients] => UserClients) = {
-      case Some(cs) =>
-        val prev = cs.clients
-        val updated: Map[ClientId, Client] = clients.map { c => c.id -> prev.get(c.id).fold(c)(_.updated(c)) }(breakOut)
-        cs.copy(clients = if (replace) updated else prev ++ updated)
-      case None =>
-        UserClients(user, clients.map(c => c.id -> c)(breakOut))
-    }
-
-    // request clients location sync if some location has no name
-    // location will be present only for self clients, but let's check that just to be explicit
-    def requestLocationSyncIfNeeded(uss: Traversable[UserClients]) = {
-      val needsSync = uss.filter(_.clients.values.exists(_.regLocation.exists(!_.hasName)))
-      if (needsSync.nonEmpty)
-        if (needsSync.exists(_.user == userId)) sync.syncClientsLocation() else Future.successful(())
-    }
-
-    verbose(s"updateClients: $ucs, replace = $replace")
-
-    storage.updateOrCreateAll(ucs.map { case (u, cs) => u -> updateOrCreate(u, cs) } (breakOut)) map { res =>
-      requestLocationSyncIfNeeded(res)
-      res
-    }
-  }
-
-  def updateUserClients(user: UserId, clients: Seq[Client], replace: Boolean = false) = {
+  def updateUserClients(user: UserId, clients: Seq[Client], replace: Boolean = false): Future[UserClients] = {
     verbose(s"updateUserClients($user, $clients, $replace)")
     updateClients(Map(user -> clients), replace).map(_.head)
   }
 
-  def onCurrentClientRemoved() = clientId.head flatMap {
-    case Some(id) => storage.update(userId, _ - id)
-    case None => Future successful None
+  def updateClients(ucs: Map[UserId, Seq[Client]], replace: Boolean = false): Future[Set[UserClients]] = {
+
+    // request clients location sync if some location has no name
+    // location will be present only for self clients, but let's check that just to be explicit
+    def needsLocationSync(selfId: UserId, uss: Traversable[UserClients]): Boolean = {
+      val needsSync = uss.filter(_.clients.values.exists(_.regLocation.exists(!_.hasName)))
+      needsSync.nonEmpty && needsSync.exists(_.user == selfId)
+    }
+
+    verbose(s"updateUserClients(${ucs.map { case (id, cs) => id -> cs.size }}, $replace)")
+    for {
+      updated <- storage.updateClients(ucs, replace)
+      _ <- if (needsLocationSync(selfId, updated)) sync.syncClientsLocation() else Future.successful({})
+    } yield updated
   }
+
+  def onCurrentClientRemoved() = storage.update(selfId, _ - clientId)
 
   def removeClients(user: UserId, clients: Seq[ClientId]) =
     storage.update(user, { cs =>
@@ -146,7 +134,7 @@ class OtrClientsService(userId:    UserId,
     })
 
   def updateClientLabel(id: ClientId, label: String) =
-    storage.update(userId, { cs =>
+    storage.update(selfId, { cs =>
       cs.clients.get(id).fold(cs) { client =>
         cs.copy(clients = cs.clients.updated(id, client.copy(label = label)))
       }
@@ -160,16 +148,15 @@ class OtrClientsService(userId:    UserId,
     }
 
   def selfClient = for {
-    uc <- storage.signal(userId)
-    cId <- clientId
-    res <- cId.flatMap(uc.clients.get).fold(Signal.empty[Client])(Signal.const)
+    uc <- storage.signal(selfId)
+    res <- Signal.const(uc.clients.get(clientId))
   } yield res
 
   def getSelfClient: Future[Option[Client]] =
-    storage.get(userId).zip(clientId.head) map {
-      case (Some(cs), Some(id)) =>
-        verbose(s"self clients: $cs, clientId: $id")
-        cs.clients.get(id)
+    storage.get(selfId).map {
+      case Some(cs) =>
+        verbose(s"self clients: $cs, clientId: $clientId")
+        cs.clients.get(clientId)
       case _ => None
     }
 

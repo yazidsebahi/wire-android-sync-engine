@@ -29,15 +29,15 @@ import com.waz.content.UserPreferences
 import com.waz.model.AccountData.{Label, Password}
 import com.waz.model._
 import com.waz.service.tracking.LoggedOutEvent
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
+import com.waz.threading.SerialDispatchQueue
+import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{RichOption, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import com.waz.znet.ZNetClient._
 
 import scala.collection.immutable.HashMap
 import scala.concurrent.Future
-import scala.util.{Failure, Right, Success}
+import scala.util.Right
 import scala.util.control.NonFatal
 
 trait AccountsService {

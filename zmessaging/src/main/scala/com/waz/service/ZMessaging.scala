@@ -37,9 +37,11 @@ import com.waz.service.messages._
 import com.waz.service.otr._
 import com.waz.service.push._
 import com.waz.service.teams.{TeamsService, TeamsServiceImpl}
+import com.waz.sync._
 import com.waz.sync.client._
 import com.waz.sync.handler._
-import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
+import com.waz.sync.otr.{OtrClientsSyncHandler, OtrClientsSyncHandlerImpl, OtrSyncHandler, OtrSyncHandlerImpl}
+import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
@@ -96,14 +98,15 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   val zNetClient = account.netClient
   val lifecycle  = global.lifecycle
 
-  lazy val accounts             = ZMessaging.currentAccounts
-  implicit lazy val evContext   = account.accountContext
-  lazy val sync                 = account.sync
-  lazy val syncHandler          = account.syncHandler
-  lazy val otrClientsService    = account.clientsService
-  lazy val syncContent          = account.syncContent
-  lazy val syncRequests         = account.syncRequests
-  lazy val otrClientsSync       = account.clientsSync
+  lazy val accounts           = ZMessaging.currentAccounts
+  implicit lazy val evContext = account.accountContext
+
+  lazy val sync:              SyncServiceHandle     = wire[AndroidSyncServiceHandle]
+  lazy val syncHandler:       AccountSyncHandler    = new AccountSyncHandler(this)
+  lazy val otrClientsService: OtrClientsService     = wire[OtrClientsService]
+  lazy val syncContent:       SyncContentUpdater    = wire[SyncContentUpdaterImpl]
+  lazy val syncRequests:      SyncRequestService    = wire[SyncRequestServiceImpl]
+  lazy val otrClientsSync:    OtrClientsSyncHandler = wire[OtrClientsSyncHandlerImpl]
 
   def context           = global.context
   def accountStorage    = global.accountsStorage

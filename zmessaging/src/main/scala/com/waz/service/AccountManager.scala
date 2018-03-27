@@ -17,28 +17,25 @@
  */
 package com.waz.service
 
-import com.softwaremill.macwire._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.{Credentials, EmailCredentials, PhoneCredentials}
+import com.waz.api.impl.ErrorResponse
+import com.waz.api.{Credentials, EmailCredentials, PhoneCredentials, ZmsVersion}
 import com.waz.content.UserPreferences
-import com.waz.content.UserPreferences.SelfClient
+import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
 import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service.AccountManager.ClientRegistrationState
-import com.waz.service.AccountManager.ClientRegistrationState.{Registered, Unregistered}
-import com.waz.service.otr.OtrClientsService
+import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, PasswordMissing, Registered, Unregistered}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.tracking.LoggedOutEvent
-import com.waz.sync._
 import com.waz.sync.client.OtrClient
-import com.waz.sync.otr.{OtrClientsSyncHandler, OtrClientsSyncHandlerImpl}
-import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
+import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
 import scala.concurrent.Future
@@ -63,27 +60,28 @@ class AccountManager(val userId:   UserId,
   val db        = storage.db
   val userPrefs = storage.userPrefs
 
-  val account = global.accountsStorage.signal(userId)
+  val account     = global.accountsStorage.signal(userId)
   val clientState = userPrefs(SelfClient).signal
-  val clientId = clientState.map(_.clientId)
+  val clientId    = clientState.map(_.clientId)
 
-  lazy val cryptoBox          = global.factory.cryptobox(userId, storage)
-  lazy val auth               = global.factory.auth(userId)
-  lazy val netClient          = global.factory.client(auth)
-  lazy val credentialsClient  = global.factory.credentialsClient(netClient)
+  val context        = global.context
+  val contextWrapper = Context.wrap(context)
 
-  lazy val context            = global.context
-  lazy val contextWrapper     = Context.wrap(context)
+  val cryptoBox         = global.factory.cryptobox(userId, storage)
+  val auth              = global.factory.auth(userId)
+  val netClient         = global.factory.client(auth)
+  val otrClient         = new OtrClient(netClient)
+  val credentialsClient = global.factory.credentialsClient(netClient)
 
-  lazy val timeouts           = global.timeouts
-  lazy val network            = global.network
-  lazy val lifecycle          = global.lifecycle
-  lazy val reporting          = global.reporting
-  lazy val tracking           = global.trackingService
-  lazy val usersStorage       = storage.usersStorage
-  lazy val convsStorage       = storage.convsStorage
-  lazy val membersStorage     = storage.membersStorage
-  lazy val clientsStorage     = storage.otrClientsStorage
+  val timeouts       = global.timeouts
+  val network        = global.network
+  val lifecycle      = global.lifecycle
+  val reporting      = global.reporting
+  val tracking       = global.trackingService
+  val usersStorage   = storage.usersStorage
+  val convsStorage   = storage.convsStorage
+  val membersStorage = storage.membersStorage
+  val clientsStorage = storage.otrClientsStorage
 
   val zmessaging: Future[ZMessaging] = {
     for {
@@ -95,16 +93,6 @@ class AccountManager(val userId:   UserId,
       global.factory.zmessaging(teamId, cId, this, storage, cryptoBox)
     }
   }
-
-  val syncContent:    SyncContentUpdater     = wire[SyncContentUpdaterImpl]
-  val syncRequests:   SyncRequestServiceImpl = wire[SyncRequestServiceImpl]
-  val sync:           SyncServiceHandle      = wire[AndroidSyncServiceHandle]
-
-  val otrClient:      OtrClient              = new OtrClient(netClient)
-  val clientsService: OtrClientsService      = wire[OtrClientsService]
-  val clientsSync:    OtrClientsSyncHandler  = wire[OtrClientsSyncHandlerImpl] //TODO - just use otrClient directly?
-
-  val syncHandler:    SyncHandler            = new AccountSyncHandler(zmessaging, clientsSync)
 
   val firstLogin: Signal[Boolean] = db.dbHelper.wasCreated
   firstCredentials.foreach {
@@ -179,26 +167,35 @@ class AccountManager(val userId:   UserId,
         else
           cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
-  
-  def registerClient(): ErrorOr[ClientRegistrationState] = {
-    verbose(s"ensureClientRegistered: $userId")
-    for {
-      curState <- clientState.head
-      pw   <- account.map(_.password).head
-      resp <- curState match {
-        case Registered(_) => Future.successful(Right(curState))
-        case _ =>
-          clientsSync.registerClient(pw).flatMap {
-            case Right(state) =>
-              verbose(s"Client registration complete: $state")
-              if (state.clientId.isEmpty) sync.syncSelfClients()
-              (userPrefs(SelfClient) := state).map(_ => Right(state))
-            case Left(err) =>
-              error(s"client registration failed: $err")
-              Future.successful(Left(err))
-          }
-      }
-    } yield resp
+
+  def registerClient(password: Option[Password] = None): Future[Either[ErrorResponse, ClientRegistrationState]] = {
+    verbose(s"registerClient: pw: $password")
+    Serialized.future("sync-self-clients", this) {
+      for {
+        curState <- clientState.head
+        pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
+        client   <- cryptoBox.createClient()
+        resp <- client match {
+          case None => Future.successful(Left(ErrorResponse.internalError("CryptoBox missing")))
+          case Some((c, lastKey, keys)) =>
+            otrClient.postClient(userId, c, lastKey, keys, password).future.flatMap {
+              case Right(cl) =>
+                for {
+                  _   <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
+                  ucs <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
+                } yield Right(Registered(cl.id))
+              case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
+                warn(s"client registration not allowed: $error, password missing")
+                Future.successful(Right(PasswordMissing))
+              case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
+                warn(s"client registration not allowed: $error")
+                Future.successful(Right(LimitReached))
+              case Left(error) =>
+                Future.successful(Left(error))
+            }
+        }
+      } yield resp
+    }
   }
 
   private def checkCryptoBox() =
