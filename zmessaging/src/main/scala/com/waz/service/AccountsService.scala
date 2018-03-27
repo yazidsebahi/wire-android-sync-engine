@@ -31,7 +31,7 @@ import com.waz.model._
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.utils.{RichOption, returning}
+import com.waz.utils.{RichOption, Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import com.waz.znet.ZNetClient._
 
@@ -107,9 +107,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
   implicit val ec: EventContext = EventContext.Global
-
-  //TODO - race between creating a new AM with userInfo in login/register, and accessing it in the UI...
-  @volatile private var accountMap = HashMap[UserId, AccountManager]()
 
   val context       = global.context
   val prefs         = global.prefs
@@ -263,7 +260,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None      => Future.successful(None)
   }
 
-  private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] = {
+  @volatile private var accountMap = HashMap[UserId, AccountManager]()
+  private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] = Serialized.future("create-account-manager") {
     verbose(s"getOrCreateAccountManager: $userId")
     accountMap.get(userId) match {
       case Some(am) =>
