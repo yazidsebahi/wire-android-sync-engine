@@ -76,19 +76,6 @@ class OtrClientsService(selfId:    UserId,
         }
     }
 
-  def deleteClient(id: ClientId, password: Password) =
-    storage.get(selfId) flatMap {
-      case Some(cs) if cs.clients.contains(id) =>
-        netClient.deleteClient(id, password).future flatMap {
-          case Right(_) => for {
-            _ <- storage.update(selfId, { uc => uc.copy(clients = uc.clients - id) })
-            _ <- requestSyncIfNeeded()
-          } yield Right(())
-          case res => Future.successful(res)
-        }
-      case _ => Future.successful(Left(ErrorResponse.internalError("Client does not belong to current user or was already deleted")))
-    }
-
   def getClient(id: UserId, client: ClientId) = storage.get(id) map { _.flatMap(_.clients.get(client)) }
 
   def getOrCreateClient(id: UserId, client: ClientId) = {

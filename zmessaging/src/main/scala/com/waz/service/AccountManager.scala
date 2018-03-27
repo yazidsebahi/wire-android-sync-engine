@@ -200,6 +200,18 @@ class AccountManager(val userId:   UserId,
     }
   }
 
+  def deleteClient(id: ClientId, password: Password) =
+    clientsStorage.get(userId).flatMap {
+      case Some(cs) if cs.clients.contains(id) =>
+        otrClient.deleteClient(id, password).future.flatMap {
+          case Right(_) => for {
+            _ <- clientsStorage.update(userId, { uc => uc.copy(clients = uc.clients - id) })
+          } yield Right(())
+          case res => Future.successful(res)
+        }
+      case _ => Future.successful(Left(ErrorResponse.internalError("Client does not belong to current user or was already deleted")))
+    }
+
   private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {
       case Some(cb) => Future.successful(Some(cb))
