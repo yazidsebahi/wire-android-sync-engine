@@ -131,64 +131,64 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val activeAccountPref = prefs.preference(ActiveAccountPef)
 
   //TODO can be removed after a (very long) while
-//  databasesRenamedPref().flatMap {
-//    case true => Future.successful({}) //databases have been renamed - nothing to do.
-//    case false =>
-//      for {
-//        active <- prefs.preference(CurrentAccountPrefOld).apply()
-//        accs <- storageOld.list()
-//        _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
-//          val userId = acc.userId.get
-//          //migrate the databases
-//          verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
-//
-//          val dbFileOld = context.getDatabasePath(acc.id.str)
-//
-//          val exts = Seq("", "-wal", "-shm", "-journal")
-//
-//          val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
-//
-//          val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
-//            f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
-//          }.forall(identity)
-//
-//          //migrate cryptobox dirs
-//          val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
-//          val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
-//          val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
-//
-//          verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
-//
-//          //Ensure that the current active account remains active
-//          if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
-//        })
-//        //copy the client ids
-//        _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
-//          import com.waz.service.AccountManager.ClientRegistrationState._
-//          val state = (acc.clientId, acc.clientRegState) match {
-//            case (Some(id), _) => Registered(id)
-//            case (_, "UNKNOWN") => Unregistered
-//            case (_, "PASSWORD_MISSING") => PasswordMissing
-//            case (_, "LIMIT_REACHED") => LimitReached
-//            case _ =>
-//              error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
-//              Unregistered
-//          }
-//
-//          global.factory.baseStorage(acc.userId.get).userPrefs.preference(UserPreferences.SelfClient) := state
-//        })
-//        //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
-//        _ <- firstTimeWithTeamsPref().map {
-//          case false => accs.collect { case acc if acc.cookie.isEmpty => acc.id }
-//          case true => accs.map(_.id).filterNot(active.contains)
-//        }.flatMap(storageOld.removeAll)
-//        _ <- markMigrationDone()
-//      } yield {}
-//  }.recoverWith {
-//    case NonFatal(e) =>
-//      warn("Failed to migrate databases, aborting operation", e)
-//      markMigrationDone()
-//  }
+  databasesRenamedPref().flatMap {
+    case true => Future.successful({}) //databases have been renamed - nothing to do.
+    case false =>
+      for {
+        active <- prefs.preference(CurrentAccountPrefOld).apply()
+        accs <- storageOld.list()
+        _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
+          val userId = acc.userId.get
+          //migrate the databases
+          verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
+
+          val dbFileOld = context.getDatabasePath(acc.id.str)
+
+          val exts = Seq("", "-wal", "-shm", "-journal")
+
+          val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
+
+          val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
+            f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
+          }.forall(identity)
+
+          //migrate cryptobox dirs
+          val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
+          val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
+          val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
+
+          verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
+
+          //Ensure that the current active account remains active
+          if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
+        })
+        //copy the client ids
+        _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
+          import com.waz.service.AccountManager.ClientRegistrationState._
+          val state = (acc.clientId, acc.clientRegState) match {
+            case (Some(id), _) => Registered(id)
+            case (_, "UNKNOWN") => Unregistered
+            case (_, "PASSWORD_MISSING") => PasswordMissing
+            case (_, "LIMIT_REACHED") => LimitReached
+            case _ =>
+              error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
+              Unregistered
+          }
+
+          global.factory.baseStorage(acc.userId.get).userPrefs.preference(UserPreferences.SelfClient) := state
+        })
+        //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
+        _ <- firstTimeWithTeamsPref().map {
+          case false => accs.collect { case acc if acc.cookie.isEmpty => acc.id }
+          case true => accs.map(_.id).filterNot(active.contains)
+        }.flatMap(storageOld.removeAll)
+        _ <- markMigrationDone()
+      } yield {}
+  }.recoverWith {
+    case NonFatal(e) =>
+      warn("Failed to migrate databases, aborting operation", e)
+      markMigrationDone()
+  }
 
   private def markMigrationDone() =
     for {
