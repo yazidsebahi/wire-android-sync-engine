@@ -171,7 +171,7 @@ object TrackingService {
   }
 
   val defaultZmsProvider = new ZmsProvider {
-    override def apply(userId: UserId): Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.zms(userId).head)
+    override def apply(userId: UserId): Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.getZms(userId))
     override def current: Future[Option[ZMessaging]] = ZMessaging.accountsService.flatMap(_.getActiveZms)
   }
 

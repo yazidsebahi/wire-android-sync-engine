@@ -151,33 +151,38 @@ class AccountManager(val userId:   UserId,
           cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
 
-  def registerClient(password: Option[Password] = None): Future[Either[ErrorResponse, ClientRegistrationState]] = {
+  def registerClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
     verbose(s"registerClient: pw: $password")
     Serialized.future("sync-self-clients", this) {
-      for {
-        curState <- clientState.head
-        pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
-        client   <- cryptoBox.createClient()
-        resp <- client match {
-          case None => Future.successful(Left(ErrorResponse.internalError("CryptoBox missing")))
-          case Some((c, lastKey, keys)) =>
-            otrClient.postClient(userId, c, lastKey, keys, password).future.flatMap {
-              case Right(cl) =>
-                for {
-                  _   <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
-                  ucs <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
-                } yield Right(Registered(cl.id))
-              case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
-                warn(s"client registration not allowed: $error, password missing")
-                Future.successful(Right(PasswordMissing))
-              case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
-                warn(s"client registration not allowed: $error")
-                Future.successful(Right(LimitReached))
-              case Left(error) =>
-                Future.successful(Left(error))
+      clientState.head.flatMap {
+        case st@Registered(_) =>
+          warn("Client already registered, returning")
+          Future.successful(Right(st))
+        case _ =>
+          for {
+            pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
+            client   <- cryptoBox.createClient()
+            resp <- client match {
+              case None => Future.successful(Left(ErrorResponse.internalError("CryptoBox missing")))
+              case Some((c, lastKey, keys)) =>
+                otrClient.postClient(userId, c, lastKey, keys, pw).future.flatMap {
+                  case Right(cl) =>
+                    for {
+                      _   <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
+                      ucs <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
+                    } yield Right(Registered(cl.id))
+                  case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
+                    warn(s"client registration not allowed: $error, password missing")
+                    Future.successful(Right(PasswordMissing))
+                  case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
+                    warn(s"client registration not allowed: $error")
+                    Future.successful(Right(LimitReached))
+                  case Left(error) =>
+                    Future.successful(Left(error))
+                }
             }
-        }
-      } yield resp
+          } yield resp
+      }
     }
   }
 

@@ -29,7 +29,7 @@ import com.waz.content.UserPreferences
 import com.waz.model.AccountData.{Label, Password}
 import com.waz.model._
 import com.waz.service.tracking.LoggedOutEvent
-import com.waz.threading.SerialDispatchQueue
+import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{RichOption, Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
@@ -102,10 +102,9 @@ object AccountsService {
 }
 
 class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
-
   import AccountsService._
+  import Threading.Implicits.Background
 
-  implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
   implicit val ec: EventContext = EventContext.Global
 
   val context       = global.context
@@ -116,16 +115,14 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  private val firstTimeWithTeamsPref = prefs.preference(FirstTimeWithTeams)
-  private val databasesRenamedPref = prefs.preference(DatabasesRenamed)
+  private val activeAccountPref      = prefs(ActiveAccountPef)
+  private val firstTimeWithTeamsPref = prefs(FirstTimeWithTeams)
+  private val databasesRenamedPref   = prefs(DatabasesRenamed)
 
   private val migrationDone = for {
     first   <- firstTimeWithTeamsPref.signal
     renamed <- databasesRenamedPref.signal
-  } yield //!first && renamed TODO
-    true
-
-  val activeAccountPref = prefs.preference(ActiveAccountPef)
+  } yield !first && renamed
 
   //TODO can be removed after a (very long) while
   databasesRenamedPref().flatMap {
@@ -197,17 +194,21 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
   })
 
-  override def getLoggedInAccounts = storage.getLoggedInAccounts
-  override def getLoggedInAccountIds = getLoggedInAccounts.map(_.map(_.id))
+  override def getLoggedInAccountIds = storage.getLoggedInAccounts
 
-  override val loggedInAccounts = migrationDone.flatMap {
+  override val loggedInAccountIds = migrationDone.flatMap {
     case true  => storage.loggedInAccounts
-    case false => Signal.const(Set.empty[AccountData])
+    case false => Signal.const(Set.empty[UserId])
   }
-  override val loggedInAccountIds = loggedInAccounts.map(_.map(_.id))
+
+  override def loggedInAccounts = loggedInAccountIds.flatMap { ids =>
+    Signal.sequence(ids.toSeq.map(storage.signal):_*).map(_.toSet)
+  }
+
+  //here we use the signals of logged in accounts to ensure we hit the cache and get in-memory passwords
+  override def getLoggedInAccounts = loggedInAccounts.head
 
   @volatile private var accountStateSignals = Map.empty[UserId, Signal[AccountState]]
-
   override def accountState(userId: UserId) = {
 
     lazy val newSignal: Signal[AccountState] =
@@ -260,7 +261,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None      => Future.successful(None)
   }
 
-  @volatile private var accountMap = HashMap[UserId, AccountManager]()
+  private var accountMap = HashMap[UserId, AccountManager]()
   private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] =
     Serialized.future("getOrCreateAccountManager") {
       verbose(s"getOrCreateAccountManager: $userId")
@@ -290,7 +291,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }).disableAutowiring()
 
   override def zms(userId: UserId): Signal[Option[ZMessaging]] =
-    zmsInstances.map(_.find(_.selfUserId == userId))
+    Signal.future(getZms(userId))
 
   override def getZms(userId: UserId): Future[Option[ZMessaging]] =
     getOrCreateAccountManager(userId).flatMap(_.fold2(Future.successful(Option.empty[ZMessaging]), _.zmessaging.map(Some(_))))
@@ -315,16 +316,11 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     userId match {
       case Some(id) =>
         for {
-          cur      <- getActiveAccountId
-          if !cur.contains(id)
-          account  <- storage.get(id)
-          if account.isDefined
+          cur      <- getActiveAccountId if !cur.contains(id)
+          account  <- storage.get(id)    if account.isDefined
           _        <- activeAccountPref := userId
-          _        <- getOrCreateAccountManager(id)
         } yield {}
-
-      case None =>
-        activeAccountPref := userId
+      case None => activeAccountPref := None
     }
   }
 
