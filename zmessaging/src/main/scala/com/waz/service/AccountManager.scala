@@ -74,9 +74,6 @@ class AccountManager(val userId:   UserId,
   val lifecycle      = global.lifecycle
   val reporting      = global.reporting
   val tracking       = global.trackingService
-  val usersStorage   = storage.usersStorage
-  val convsStorage   = storage.convsStorage
-  val membersStorage = storage.membersStorage
   val clientsStorage = storage.otrClientsStorage
 
   val zmessaging: Future[ZMessaging] = {
@@ -141,7 +138,7 @@ class AccountManager(val userId:   UserId,
   def updateHandle(handle: Handle): ErrorOr[Unit] =
     credentialsClient.updateHandle(handle).future.flatMap {
       case Left(err) => Future successful Left(err)
-      case Right(_)  => usersStorage.update(userId, _.copy(handle = Some(handle))).map(_ => Right({}))
+      case Right(_)  => storage.usersStorage.update(userId, _.copy(handle = Some(handle))).map(_ => Right({}))
     }
 
   def fingerprintSignal(uId: UserId, cId: ClientId): Signal[Option[Array[Byte]]] =
