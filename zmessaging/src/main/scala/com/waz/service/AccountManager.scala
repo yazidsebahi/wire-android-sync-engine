@@ -152,6 +152,16 @@ class AccountManager(val userId:   UserId,
     } yield fingerprint
 
   def registerClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
+
+    //TODO - even if we call this, we'll do a slow sync once we get a client. For now, that's necessary, but maybe we can avoid the
+    //unnecessary extra fetch?
+    def getOtherClients: ErrorOr[Unit] = {
+      for {
+        resp <- otrClient.loadClients().future
+        _    <- resp.fold(_ => Future.successful({}), cs => clientsStorage.updateClients(Map(userId -> cs), replace = true))
+      } yield resp.fold(err => Left(err), _ => Right({}))
+    }
+
     verbose(s"registerClient: pw: $password")
     Serialized.future("register-client", this) {
       clientState.head.flatMap {
@@ -175,8 +185,11 @@ class AccountManager(val userId:   UserId,
                     warn(s"client registration not allowed: $error, password missing")
                     Future.successful(Right(PasswordMissing))
                   case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
-                    warn(s"client registration not allowed: $error")
-                    Future.successful(Right(LimitReached))
+                    verbose(s"client registration not allowed: $error, loading other clients")
+                    getOtherClients.map {
+                      case Right(_) => Right(LimitReached)
+                      case Left(err) => Left(err)
+                    }
                   case Left(error) =>
                     Future.successful(Left(error))
                 }
@@ -190,12 +203,7 @@ class AccountManager(val userId:   UserId,
   private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {
       case Some(cb) => Future.successful(Some(cb))
-      case None =>
-        for {
-          _ <- userPrefs(SelfClient) := Unregistered
-          _ <- cryptoBox.deleteCryptoBox()
-          res <- cryptoBox.cryptoBox
-        } yield res
+      case None => logoutAndResetClient().map(_ => None)
     }
 
   private def logoutAndResetClient() =

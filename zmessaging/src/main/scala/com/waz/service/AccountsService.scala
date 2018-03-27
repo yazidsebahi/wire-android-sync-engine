@@ -90,6 +90,9 @@ trait AccountsService {
 }
 
 object AccountsService {
+
+  val AccountMapKey = "accounts-map"
+
   trait AccountState
 
   case object LoggedOut extends AccountState
@@ -97,8 +100,6 @@ object AccountsService {
   trait Active extends AccountState
   case object InBackground extends Active
   case object InForeground extends Active
-
-  val NoEmailSetWarning = "Account does not have email set - can't request activation code"
 }
 
 class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
@@ -263,7 +264,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   private var accountMap = HashMap[UserId, AccountManager]()
   private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] =
-    Serialized.future("getOrCreateAccountManager") {
+    Serialized.future(AccountMapKey) {
       verbose(s"getOrCreateAccountManager: $userId")
       accountMap.get(userId) match {
         case Some(am) =>
@@ -304,7 +305,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       otherAccounts <- getLoggedInAccountIds.map(_.filter(userId != _))
       _ <- if (current.contains(userId)) setAccount(otherAccounts.headOption) else Future.successful(())
       _ <- storage.remove(userId) //TODO pass Id to some sort of clean up service before removing
-    } yield accountMap -= userId
+      _ <- Serialized.future(AccountMapKey)(Future(accountMap -= userId))
+    } yield {}
   }
 
   /**
