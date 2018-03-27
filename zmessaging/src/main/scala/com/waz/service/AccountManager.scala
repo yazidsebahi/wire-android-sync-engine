@@ -19,8 +19,8 @@ package com.waz.service
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.{Credentials, EmailCredentials, PhoneCredentials, ZmsVersion}
 import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
 import com.waz.model.AccountData.Password
@@ -45,11 +45,7 @@ import scala.util.Right
 class AccountManager(val userId:   UserId,
                      val teamId:   Option[TeamId],
                      val global:   GlobalModule,
-                     val accounts: AccountsService,
-
-                    //"first data" should not be relied on too long after construction!
-                     firstCredentials: Option[Credentials] = None,
-                     firstData:        Option[UserInfo]    = None) {
+                     val accounts: AccountsService) {
 
   implicit val dispatcher = new SerialDispatchQueue()
   implicit val accountContext: AccountContext = new AccountContext(userId, accounts)
@@ -85,7 +81,6 @@ class AccountManager(val userId:   UserId,
 
   val zmessaging: Future[ZMessaging] = {
     for {
-      _       <- firstData.fold2(Future.successful({}), u => usersStorage.updateOrCreate(userId, _.updated(u), UserData(u).copy(connection = UserData.ConnectionStatus.Self)))
       cId     <- clientId.collect { case Some(id) => id }.head
       Some(_) <- checkCryptoBox()
     } yield {
@@ -95,14 +90,6 @@ class AccountManager(val userId:   UserId,
   }
 
   val firstLogin: Signal[Boolean] = db.dbHelper.wasCreated
-  firstCredentials.foreach {
-    case c: EmailCredentials =>
-      userPrefs(UserPreferences.Email) := Some(c.email)
-    case c: PhoneCredentials =>
-      userPrefs(UserPreferences.Phone) := Some(c.phone)
-    case _ =>
-  }
-
 
   private val otrClients =
     storage.otrClientsStorage.signal(userId)
@@ -123,7 +110,6 @@ class AccountManager(val userId:   UserId,
     }
     hasClient = exists
   }
-
 
   //TODO update locally
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] =

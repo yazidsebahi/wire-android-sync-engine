@@ -243,7 +243,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case None     => Signal.const(None)
   }
 
-  lazy val activeZms = activeAccountManager.flatMap[Option[ZMessaging]] {
+  override lazy val activeZms = activeAccountManager.flatMap[Option[ZMessaging]] {
     case Some(am) => Signal.future(am.zmessaging.map(Some(_)))
     case None     => Signal.const(None)
   }
@@ -397,7 +397,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
           case Right(tId) =>
             for {
              _ <- storage.updateOrCreate(user.id, _.copy(teamId = tId, cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, tId, cookie, token, password = credentials.maybePassword) )
-             _ =  accountMap += (user.id -> new AccountManager(user.id, tId, global, this, Some(credentials), Some(user)))
              _ <- setAccount(Some(user.id))
             } yield Right({})
           case Left(err) => Future.successful(Left(err))

@@ -22,7 +22,7 @@ import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{SyncState, ZmsVersion}
 import com.waz.model.sync._
-import com.waz.model.{AccountId, ConvId, SyncId, UserId}
+import com.waz.model.{ConvId, SyncId, UserId}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService, ReportingService}
 import com.waz.sync.SyncRequestServiceImpl.{Data, SyncMatcher}
