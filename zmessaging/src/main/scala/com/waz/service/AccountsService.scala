@@ -315,11 +315,16 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     verbose(s"setAccount: $userId")
     userId match {
       case Some(id) =>
-        for {
-          cur      <- getActiveAccountId if !cur.contains(id)
-          account  <- storage.get(id)    if account.isDefined
-          _        <- activeAccountPref := userId
-        } yield {}
+        getActiveAccountId.flatMap {
+          case Some(cur) if cur == id => Future.successful({})
+          case Some(_)   => storage.get(id).flatMap {
+            case Some(_) => activeAccountPref := Some(id)
+            case _ =>
+              warn(s"Tried to set active user who is not logged in: $userId, not changing account")
+              Future.successful({})
+          }
+          case _ => activeAccountPref := Some(id)
+        }
       case None => activeAccountPref := None
     }
   }

@@ -153,7 +153,7 @@ class AccountManager(val userId:   UserId,
 
   def registerClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
     verbose(s"registerClient: pw: $password")
-    Serialized.future("sync-self-clients", this) {
+    Serialized.future("register-client", this) {
       clientState.head.flatMap {
         case st@Registered(_) =>
           warn("Client already registered, returning")
