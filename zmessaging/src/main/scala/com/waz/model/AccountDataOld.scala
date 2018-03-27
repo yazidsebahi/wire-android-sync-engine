@@ -46,7 +46,18 @@ case class AccountData(id:           UserId,
                        cookie:       Cookie,
                        accessToken:  Option[AccessToken] = None,
                        pushToken:    Option[PushToken]   = None,
-                       password:     Option[Password]    = None) //password never saved to database
+                       password:     Option[Password]    = None) { //password never saved to database
+
+  override def toString: String =
+    s"""AccountData:
+       | id:              $id
+       | teamId:          $teamId
+       | cookie:          $cookie
+       | accessToken:     $accessToken
+       | registeredPush:  $pushToken
+       | password:        $password
+    """.stripMargin
+}
 
 object AccountData {
 

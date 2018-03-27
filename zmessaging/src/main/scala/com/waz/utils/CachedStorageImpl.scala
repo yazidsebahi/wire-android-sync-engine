@@ -26,8 +26,8 @@ import com.waz.utils.events.{AggregatingSignal, EventStream, Signal}
 import com.waz.utils.wrappers.DB
 
 import scala.collection.JavaConverters._
-import scala.collection.{GenTraversableOnce, breakOut}
 import scala.collection.generic._
+import scala.collection.{GenTraversableOnce, breakOut}
 import scala.concurrent.Future
 
 trait StorageDao[K, V] {
@@ -101,6 +101,8 @@ trait CachedStorage[K, V] {
   def removeAll(keys: Iterable[K]): Future[Unit]
 
   def cacheIfNotPresent(key: K, value: V): Unit
+
+  def printCache(): Unit
 }
 
 class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(implicit val dao: StorageDao[K, V], tag: LogTag = "CachedStorage") extends CachedStorage[K, V] {
@@ -337,4 +339,15 @@ class CachedStorageImpl[K, V](cache: LruCache[K, Option[V]], db: Database)(impli
   def cacheIfNotPresent(key: K, value: V) = cachedOrElse(key, Future {
     Option(cache.get(key)).getOrElse { returning(Some(value))(cache.put(key, _)) }
   })
+
+  override def printCache(): Unit = {
+    val c = cache.snapshot().asScala
+
+    val vs = c.map {
+      case (key, Some(v)) => v.toString
+      case _ => ""
+    }.mkString("\n")
+
+    verbose(s"${c.size} values in cache: ${this.getClass.getSimpleName}\n$vs")
+  }
 }

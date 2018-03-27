@@ -261,23 +261,24 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   }
 
   @volatile private var accountMap = HashMap[UserId, AccountManager]()
-  private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] = Serialized.future("create-account-manager") {
-    verbose(s"getOrCreateAccountManager: $userId")
-    accountMap.get(userId) match {
-      case Some(am) =>
-        verbose(s"AccountManager for: $userId already created")
-        Future.successful(Some(am))
-      case _ =>
-        verbose(s"No AccountManager for: $userId, creating new one")
-        storage.get(userId).map {
-          case Some(acc) =>
-            Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountMap += (userId -> am)))
-          case _ =>
-            warn(s"No logged in account for user: $userId, not creating account manager")
-            None
-        }
+  private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] =
+    Serialized.future("getOrCreateAccountManager") {
+      verbose(s"getOrCreateAccountManager: $userId")
+      accountMap.get(userId) match {
+        case Some(am) =>
+          verbose(s"AccountManager for: $userId already created")
+          Future.successful(Some(am))
+        case _ =>
+          verbose(s"No AccountManager for: $userId, creating new one")
+          storage.get(userId).map {
+            case Some(acc) =>
+              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountMap += (userId -> am)))
+            case _ =>
+              warn(s"No logged in account for user: $userId, not creating account manager")
+              None
+          }
+      }
     }
-  }
 
   override lazy val zmsInstances = (for {
     ids <- loggedInAccountIds
