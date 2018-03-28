@@ -17,41 +17,7 @@
  */
 package com.waz.api
 
-import com.waz.api.Asset.LoadCallback
-import com.waz.utils.wrappers.URI
 import org.threeten.bp.Duration
-
-object Asset {
-  trait LoadCallback[A] {
-    def onLoaded(a: A): Unit
-    def onLoadFailed(): Unit
-  }
-}
-
-trait Asset extends UiObservable {
-  def getId: String
-  def getName: String
-  def isEmpty: Boolean
-
-  def getMimeType: String
-  def isVideo: Boolean
-  def isAudio: Boolean
-
-  def getSizeInBytes: Long // will return negative value if size is unknown
-  def getStatus: AssetStatus
-
-  def getDuration: Duration
-  def getWidth: Int
-  def getHeight: Int
-  def getAudioOverview: AudioOverview
-
-  def getContentUri(callback: LoadCallback[URI]): Unit
-  def saveToDownloads(callback: LoadCallback[URI]): Unit
-  def getPlaybackControls(callback: LoadCallback[PlaybackControls]): Unit
-
-  def getDownloadProgress: ProgressIndicator
-  def getUploadProgress: ProgressIndicator
-}
 
 trait PlaybackControls extends UiObservable {
   def play(): Unit

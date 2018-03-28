@@ -163,8 +163,8 @@ trait UiEventListener[A] {
   
   protected def onReset: Future[Unit]
   
-  ui.onResumed {
-    case Some(_) => updateQueue.post(onResume)
+  ui.onStarted {
+    case true => updateQueue.post(onResume)
     case _ => // ignore
   }
 

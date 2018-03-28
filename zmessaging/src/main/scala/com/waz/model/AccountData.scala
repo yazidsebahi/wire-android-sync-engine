@@ -60,7 +60,6 @@ case class AccountData(id:              AccountId                       = Accoun
                        regWaiting:      Boolean                         = false,
                        code:            Option[ConfirmationCode]        = None,
                        name:            Option[String]                  = None,
-                       invitationToken: Option[PersonalInvitationToken] = None,
                        firstLogin:      Boolean                         = true,
                        private val _selfPermissions: Long      = 0,
                        private val _copyPermissions: Long      = 0
@@ -87,7 +86,6 @@ case class AccountData(id:              AccountId                       = Accoun
        | regWaiting:      $regWaiting
        | code:            $code
        | name:            $name
-       | invitationToken  $invitationToken
        | firstLogin       $firstLogin
        | _selfPermissions ${_selfPermissions}
        | _copyPermissions ${_copyPermissions}
@@ -105,7 +103,7 @@ case class AccountData(id:              AccountId                       = Accoun
     (phone.isDefined && pendingPhone != phone) || email.isDefined
 
   def authorized(credentials: Credentials) = credentials match {
-    case EmailCredentials(e, Some(passwd), _) if pendingEmail.contains(e) || email.contains(e) =>
+    case EmailCredentials(e, Some(passwd)) if pendingEmail.contains(e) || email.contains(e) =>
       Some(copy(password = Some(passwd)))
     case _ =>
       None
@@ -137,7 +135,6 @@ case class AccountData(id:              AccountId                       = Accoun
 
   private def addCredentialsToJson(o: JSONObject, isLogin: Boolean = true) = {
     o.put("label", id.str)  // this label can be later used for cookie revocation
-    invitationToken foreach (i => o.put("invitation_code", i.code))
 
     (email.orElse(pendingEmail), handle, phone.orElse(pendingPhone), password, code) match {
       case (Some(e), _, _, Some(p), _) =>
@@ -156,7 +153,7 @@ case class AccountData(id:              AccountId                       = Accoun
     }
   }
 
-  def autoLoginOnRegistration = phone.isDefined || invitationToken.isDefined
+  def autoLoginOnRegistration = phone.isDefined
 
   def updated(user: UserInfo): AccountData =
     copy(userId = Some(user.id), email = user.email.orElse(email), pendingEmail = email.fold(pendingEmail)(_ => Option.empty[EmailAddress]), phone = user.phone.orElse(phone), handle = user.handle.orElse(handle), privateMode = user.privateMode.getOrElse(privateMode))
@@ -287,16 +284,15 @@ object AccountData {
     val PrivateMode = bool('private_mode)(_.privateMode)
     val RegWaiting = bool('reg_waiting)(_.regWaiting)
     val Code = opt(text[ConfirmationCode]('code, _.str, ConfirmationCode))(_.code)
-    val InvitationToken = opt(text[PersonalInvitationToken]('invitation_token, _.code, PersonalInvitationToken))(_.invitationToken)
     val Name = opt(text('name))(_.name)
     val FirstLogin = bool('first_login)(_.firstLogin)
     val SelfPermissions = long('self_permissions)(_._selfPermissions)
     val CopyPermissions = long('copy_permissions)(_._copyPermissions)
 
     override val idCol = Id
-    override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, PendingTeamName, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
+    override val table = Table("Accounts", Id, Team, Email, PendingEmail, PendingPhone, PendingTeamName, Cookie, Phone, Token, UserId, ClientId, ClientRegState, Handle, PrivateMode, RegWaiting, RegisteredPush, Code, Name, FirstLogin, SelfPermissions, CopyPermissions)
 
-    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, PendingTeamName, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, InvitationToken, FirstLogin, SelfPermissions, CopyPermissions)
+    override def apply(implicit cursor: DBCursor): AccountData = AccountData(Id, Team, PendingTeamName, Email, Phone, Handle, RegisteredPush, PendingEmail, PendingPhone, Cookie, None, Token, UserId, ClientId, ClientRegState, PrivateMode, RegWaiting, Code, Name, FirstLogin, SelfPermissions, CopyPermissions)
 
     def findByEmail(email: EmailAddress)(implicit db: DB) =
       iterating(db.query(table.name, null, s"${Email.name} = ? OR ${PendingEmail.name} = ?", Array(email.str, email.str), null, null, null))

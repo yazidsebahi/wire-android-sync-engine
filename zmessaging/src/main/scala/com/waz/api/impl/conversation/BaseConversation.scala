@@ -17,39 +17,23 @@
  */
 package com.waz.api.impl.conversation
 
-import android.os.Parcel
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api
+import com.waz.ZLog._
+import com.waz.api.IConversation
 import com.waz.api.impl._
-import com.waz.api.{IConversation, Verification}
-import com.waz.content.Uris
 import com.waz.model.ConversationData
 import com.waz.service.ZMessaging
 import com.waz.ui.{SignalLoading, UiModule}
-import com.waz.utils.JsonEncoder
 
 import scala.util.Try
 
 abstract class BaseConversation(implicit ui: UiModule) extends IConversation with UiObservable with SignalLoading {
   import BaseConversation._
-  import IConversation.Type._
-
-  private val conversations = ui.convs
 
   var name: String = ""
   var data: ConversationData = ConversationData.Empty
-  var selected = false
 
   protected def id = data.id
-
-  addLoader(_.convsStats.selectedConversationId) { sel =>
-    if (selected != sel.contains(id)) {
-      selected = !selected
-      verbose(s"selected changed: now $selected")
-      notifyChanged()
-    }
-  }
 
   def set(data: ConversationData): Unit = {
     verbose(s"set($data)")
@@ -61,53 +45,14 @@ abstract class BaseConversation(implicit ui: UiModule) extends IConversation wit
     }
   }
 
-  def updateType(convType: IConversation.Type): IConversation = {
-    if (data.convType != convType) {
-      data = data.copy(convType = convType)
-      notifyChanged()
-    }
-    this
-  }
-
-  override def getId = id.str
-
   def getName = name
-
-  def getType = data.convType
-
-  def getUsers = ui.cached(Uris.ConvMembersUri(id), new MembersList(id))
-
-  override def isMemberOfConversation: Boolean = data.isActive
-
-  // used by DeviceActor
-  override def setArchived(archived: Boolean): Unit = conversations.setArchived(id, archived)
-  override def setMuted(muted: Boolean): Unit = conversations.setMuted(id, muted)
-  override def clear(): Unit = conversations.clear(id)
-
-  override def getBackground = ImageAsset.Empty
-
-  override def getVerified: Verification = data.verified
-
-  override def getOtherParticipant: api.User = {
-    if ((data ne ConversationData.Empty) && data.convType != ONE_TO_ONE && data.convType != WAIT_FOR_CONNECTION && data.convType != INCOMING_CONNECTION)
-      error(s"unexpected call, most likely UI error", new UnsupportedOperationException(s"Can't get other participant for: ${data.convType} conversation"))
-
-    ui.getOtherParticipantForOneToOneConv(id)
-  }
-
-  override def getInputStateIndicator: InputStateIndicator = ui.cached(Uris.InputStateIndicatorUri(id), new InputStateIndicator(id))
 
   override def toString: String = s"Conversation($id, $name, $data)"
 
-  override def writeToParcel(dest: Parcel, flags: Int): Unit = dest.writeString(JsonEncoder.encodeString(data))
-  override def describeContents(): Int = 0
-
-  override def equals(other: Any): Boolean = other match {
-    case other: BaseConversation => id == other.id
-    case _ => false
-  }
-
   override def hashCode = id.hashCode
+
+  override def getId = id.str
+
 }
 
 object BaseConversation {

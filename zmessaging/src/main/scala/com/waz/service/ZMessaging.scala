@@ -200,7 +200,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val assets: AssetService                       = wire[AssetServiceImpl]
   lazy val users: UserService                         = wire[UserServiceImpl]
   lazy val conversations: ConversationsService        = wire[ConversationsServiceImpl]
-  lazy val convsNotifier                              = wire[ConversationsNotifier]
   lazy val convOrder: ConversationOrderEventsService  = wire[ConversationOrderEventsService]
   lazy val convsUi: ConversationsUiService            = wire[ConversationsUiServiceImpl]
   lazy val convsStats: ConversationsListStateService  = wire[ConversationsListStateServiceImpl]
@@ -225,7 +224,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val recordAndPlay                              = wire[RecordAndPlayService]
   lazy val receipts                                   = wire[ReceiptService]
   lazy val ephemeral                                  = wire[EphemeralMessagesService]
-  lazy val handlesService                             = wire[HandlesService]
   lazy val gsmService                                 = wire[GsmInterruptService]
 
   lazy val assetSync                                  = wire[AssetSyncHandler]
@@ -245,7 +243,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val lastReadSync                               = wire[LastReadSyncHandler]
   lazy val clearedSync                                = wire[ClearedSyncHandler]
   lazy val openGraphSync                              = wire[OpenGraphSyncHandler]
-  lazy val handlesSync                                = wire[HandlesSyncHandler]
   lazy val integrationsSync: IntegrationsSyncHandler  = wire[IntegrationsSyncHandlerImpl]
   lazy val expiringUsers                              = wire[ExpiredUsersService]
 

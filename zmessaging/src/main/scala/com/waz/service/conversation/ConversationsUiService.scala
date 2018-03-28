@@ -121,8 +121,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   override def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = content match {
     case m: api.MessageContent.Text =>
       debug(s"send text message ${m.getContent.take(4)}...")
-      if (m.getMentions.isEmpty) sendTextMessage(convId, m.getContent)
-      else mentionsMap(m.getMentions) flatMap { ms => sendTextMessage(convId, m.getContent, ms) }
+      sendTextMessage(convId, m.getContent)
 
     case m: api.MessageContent.Location =>
       sendLocationMessage(convId, Location(m.getLongitude, m.getLatitude, m.getName, m.getZoom))
@@ -403,11 +402,6 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
 
   override def setEphemeral(id: ConvId, expiration: EphemeralExpiration): Future[Option[(ConversationData, ConversationData)]] =
     convStorage.update(id, _.copy(ephemeral = expiration))
-
-  private def mentionsMap(us: Array[api.User]): Future[Map[UserId, String]] =
-    users.getUsers(us.map { u => UserId(u.getId) }) map { uss =>
-      uss.map(u => u.id -> u.getDisplayName)(breakOut)
-    }
 
   private def mentionsMap(us: Set[UserId]): Future[Map[UserId, String]] =
     users.getUsers(us.toSeq) map { uss =>

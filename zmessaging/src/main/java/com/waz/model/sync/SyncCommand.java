@@ -69,7 +69,6 @@ public enum SyncCommand {
     PostAssetStatus("post-asset-status"),
     PostOpenGraphMeta("post-og-meta"),
     PostReceipt("post-receipt"),
-    ValidateHandles("validate-handles"),
     Unknown("unknown");
 
     public final String name;

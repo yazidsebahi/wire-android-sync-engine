@@ -24,10 +24,10 @@ import akka.actor.SupervisorStrategy._
 import akka.actor._
 import android.content.Context
 import android.view.View
-import com.waz.ZLog.LogTag
 import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.LogTag
 import com.waz.api._
-import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse, ZMessagingApi}
+import com.waz.api.impl.{DoNothingAndProceed, ErrorResponse}
 import com.waz.content.{Database, GlobalDatabase}
 import com.waz.log.{InternalLog, LogOutput}
 import com.waz.media.manager.context.IntensityLevel
@@ -38,7 +38,6 @@ import com.waz.model.{ConvId, Liking, RConvId, MessageContent => _, _}
 import com.waz.provision.DeviceActor.responseTimeout
 import com.waz.service._
 import com.waz.service.call.FlowManagerService
-import com.waz.service.call.FlowManagerService.VideoCaptureDevice
 import com.waz.testutils.Implicits._
 import com.waz.threading._
 import com.waz.ui.UiModule
@@ -50,7 +49,7 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future.successful
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
+import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Random, Success, Try}
 
 /**
@@ -142,12 +141,8 @@ class DeviceActor(val deviceName: String,
     Await.ready(firstTimePref := false, 5.seconds)
   }
 
-  val ui = new UiModule(accountsService)
-  val api = {
-    val api = new ZMessagingApi()(ui)
-    api.onCreate(application)
-    api.onResume()
-    api
+  val ui = returning(new UiModule(accountsService)) { ui =>
+    ui.onStart()
   }
 
   val zms = accountsService.activeZms.collect { case Some(z) => z }
@@ -157,10 +152,9 @@ class DeviceActor(val deviceName: String,
 
   @throws[Exception](classOf[Exception])
   override def postStop(): Unit = {
-    api.onPause()
-    api.onDestroy()
+    ui.onDestroy()
     globalModule.lifecycle.releaseUi()
-    Await.result(api.ui.getCurrent, 5.seconds) foreach { zms =>
+    Await.result(ui.getCurrent, 5.seconds) foreach { zms =>
       zms.syncContent.syncStorage { storage =>
         storage.getJobs foreach { job => storage.remove(job.id) }
       }
@@ -267,21 +261,11 @@ class DeviceActor(val deviceName: String,
 
     case SendGiphy(rConvId, searchQuery) =>
       zmsWithLocalConv(rConvId).flatMap { case (z, convId) =>
-        searchQuery match {
-          case "" =>
-            waitUntil(api.getGiphy.random())(_.isReady == true) map { results =>
-              z.convsUi.sendMessage(convId, "Via giphy.com")
-              z.convsUi.sendMessage(convId, results.head)
-              Successful
-            }
-
-          case _ =>
-            waitUntil(api.getGiphy.search(searchQuery))(_.isReady == true) map { results =>
-              z.convsUi.sendMessage(convId, "%s · via giphy.com".format(searchQuery))
-              z.convsUi.sendMessage(convId, results.head)
-              Successful
-            }
-        }
+        for {
+          res   <- (if (searchQuery.isEmpty) z.giphy.getRandomGiphyImage else z.giphy.searchGiphyImage(searchQuery)).future
+          msg1  <- z.convsUi.sendMessage(convId, "Via giphy.com")
+//              msg2  <- z.convsUi.sendMessage(convId, ) //TODO use asset data directly when we get rid of ImageAsset
+        } yield Successful
       }
 
     case RecallMessage(rConvId, msgId) =>
@@ -332,7 +316,7 @@ class DeviceActor(val deviceName: String,
         z.cache.addStream(CacheKey(assetId.str), new FileInputStream(file), Mime(mime)).map { cacheEntry =>
           Mime(mime) match {
             case Mime.Image() =>
-              z.convsUi.sendMessage(convId, api.ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
+              z.convsUi.sendMessage(convId, ui.images.createImageAssetFrom(IoUtils.toByteArray(cacheEntry.inputStream)))
               Successful
             case _ =>
               val asset = impl.AssetForUpload(assetId, Some(file.getName), Mime(mime), Some(file.length())) {
@@ -394,7 +378,7 @@ class DeviceActor(val deviceName: String,
       }.map(_ => Successful)
 
     case UpdateProfileImage(path) =>
-      zms.head.flatMap(_.users.updateSelfPicture(api.ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path)))))
+      zms.head.flatMap(_.users.updateSelfPicture(ui.images.createImageAssetFrom(IoUtils.toByteArray(getClass.getResourceAsStream(path)))))
         .map(_ => Successful)
 
     case UpdateProfileName(name) =>
@@ -511,40 +495,5 @@ class DeviceActor(val deviceName: String,
     val printWriter = new PrintWriter(result)
     t.printStackTrace(printWriter)
     result.toString
-  }
-
-  private var listeners = Set.empty[UpdateListener] // required to keep references to the listeners as waitUntil manages to get them garbage-collected
-  private var delay = CancellableFuture.cancelled[Unit]()
-
-  def waitUntil[S <: UiObservable](observable: S, timeout: FiniteDuration = 120.seconds)(check: S => Boolean): Future[S] = {
-    Threading.assertUiThread()
-    val promise = Promise[S]()
-
-    def onUpdated: Unit = {
-      Threading.assertUiThread()
-      if (check(observable)) {
-        promise.trySuccess(observable)
-      }
-    }
-
-    val listener = new UpdateListener {
-      override def updated(): Unit = onUpdated
-    }
-    listeners += listener
-    observable.addUpdateListener(listener)
-
-    onUpdated
-
-    delay = CancellableFuture.delay(timeout)
-    delay.onSuccess { case _ =>
-      promise.tryFailure(new Exception(s"Wait until did not complete before timeout of : ${timeout.toSeconds} seconds"))
-    }
-
-    promise.future.andThen {
-      case _ =>
-        observable.removeUpdateListener(listener)
-        listeners -= listener
-        delay.cancel()("wait_until")
-    }
   }
 }

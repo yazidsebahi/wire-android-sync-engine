@@ -85,8 +85,6 @@ trait EmptySyncServiceTrait extends SyncServiceHandle {
   override def syncPreKeys(user: UserId, clients: Set[ClientId]): Future[SyncId] = sid
   override def postSessionReset(conv: ConvId, user: UserId, client: ClientId): Future[SyncId] = sid
 
-  override def postValidateHandles(handles: Seq[Handle]): Future[SyncId] = sid
-
   override def performFullSync(): Future[Unit] = Future.successful({})
 
   private def sid = Future.successful(SyncId())

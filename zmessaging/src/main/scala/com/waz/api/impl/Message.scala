@@ -17,30 +17,25 @@
  */
 package com.waz.api.impl
 
-import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api
-import com.waz.api.Message.{Status, Type}
+import com.waz.api.Message.Status
 import com.waz.api.{EphemeralExpiration, UpdateListener}
 import com.waz.model._
-import com.waz.service.media.GoogleMapsMediaService
 import com.waz.service.messages.MessageAndLikes
 import com.waz.threading.Threading
 import com.waz.ui._
-import com.waz.utils._
 import com.waz.utils.events.Signal
 
-import scala.collection.breakOut
-
-class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[UserId], var likedBySelf: Boolean)(implicit context: UiModule) extends api.Message with SignalLoading with UiObservable {
+class Message(val id: MessageId, var data: MessageData)(implicit context: UiModule) extends api.Message with SignalLoading with UiObservable {
 
   private val convId = if (data == MessageData.Empty) Signal[ConvId]() else Signal(data.convId)
   private var lastMessageFromSelf = false
   private var lastMessageFromOther = false
 
-  def this(msg: MessageAndLikes)(context: UiModule) = this(msg.message.id, msg.message, msg.likes, msg.likedBySelf)(context)
-  def this(id: MessageId)(context: UiModule) = this(id, MessageData.Empty, Vector.empty, false)(context)
+  def this(msg: MessageAndLikes)(context: UiModule) = this(msg.message.id, msg.message)(context)
+  def this(id: MessageId)(context: UiModule) = this(id, MessageData.Empty)(context)
 
   reload() // always reload because data from constructor might always be outdated already
   addLoader(zms => convId.flatMap(c => zms.messagesStorage.lastMessageFromSelfAndFromOther(c)), (Option.empty[MessageData], Option.empty[MessageData])) { case (fromSelf, fromOther) =>
@@ -55,10 +50,8 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   def reload() = context.zms.flatMapFuture(_.msgAndLikes.getMessageAndLikes(id))(Threading.Background).map { m => set(m.getOrElse(MessageAndLikes.Deleted)) } (Threading.Ui)
 
-  def set(msg: MessageAndLikes): Unit = if (msg.message != data || msg.likes != likes || msg.likedBySelf != likedBySelf) {
+  def set(msg: MessageAndLikes): Unit = if (msg.message != data) {
     data = msg.message
-    likes = msg.likes
-    likedBySelf = msg.likedBySelf
     notifyChanged()
     convId ! data.convId
     notifyEphemeralRead()
@@ -76,23 +69,6 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   private def content = if (data.content.isEmpty) MessageContent.Empty else data.content.head
 
-  override def isEphemeral = data.ephemeral != EphemeralExpiration.NONE
-
-  override def isExpired: Boolean = data.expired
-
-  override def getImage = getImage(0, 0)
-
-  private def getImage(w: Int, h: Int) = data.msgType match {
-    case Type.LOCATION =>
-      data.location.fold2(ImageAsset.Empty, { loc =>
-        val id = AssetId(s"${data.assetId.str}_${w}_$h") // use dimensions in id, to avoid caching images with different sizes
-        context.images.getLocalImageAsset(GoogleMapsMediaService.mapImageAsset(id, loc, if (w <= 0) GoogleMapsMediaService.ImageDimensions else Dim2(w, h)))
-      })
-    case _ => context.images.getImageAsset(data.assetId)
-  }
-
-  override def getId: String = data.id.str
-
   override def retry(): Unit =
     if (data.state == Status.FAILED || data.state == Status.FAILED_READ) context.messages.retry(data.convId, data.id)
     else error(s"Retrying a message that has not yet failed (${data.state}): $id")
@@ -104,33 +80,5 @@ class Message(val id: MessageId, var data: MessageData, var likes: IndexedSeq[Us
 
   override def hashCode: Int = id.hashCode
 
-  override def toString: String = s"Message($id, $content, $likes, $data)"
-
-  override def writeToParcel(dest: Parcel, flags: Int): Unit = {
-    dest.writeString(JsonEncoder.encodeString(data))
-    dest.writeStringArray(likes.map(_.str)(breakOut))
-    dest.writeInt(if (likedBySelf) 1 else 0)
-  }
-
-  override def describeContents(): Int = 0
-
-  override def getLikes: Array[api.User] = likes.map(context.users.getUser)(breakOut)
-}
-
-object EmptyMessage extends com.waz.api.Message {
-  override def getId: String = Uid(0, 0).str
-  override def retry(): Unit = ()
-  override def getImage: api.ImageAsset = ImageAsset.Empty
-  override def removeUpdateListener(listener: UpdateListener): Unit = {}
-  override def addUpdateListener(listener: UpdateListener): Unit = {}
-  override def writeToParcel(dest: Parcel, flags: Int): Unit = {
-    dest.writeString(JsonEncoder.encodeString(MessageData.Empty))
-    dest.writeStringArray(Array.empty[String])
-    dest.writeInt(0)
-  }
-  override def describeContents(): Int = 0
-  override val getLikes: Array[api.User] = Array.empty
-  override def isEphemeral: Boolean = false
-  override def isExpired: Boolean = false
-
+  override def toString: String = s"Message($id, $content, $data)"
 }

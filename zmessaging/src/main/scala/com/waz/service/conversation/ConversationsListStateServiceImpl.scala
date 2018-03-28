@@ -18,8 +18,6 @@
 package com.waz.service.conversation
 
 import com.waz.ZLog._
-import com.waz.api.impl.ConversationsListState
-import com.waz.api.impl.ConversationsListState.Data
 import com.waz.content.UserPreferences.SelectedConvId
 import com.waz.content.{ConversationStorage, Preferences, UserPreferences}
 import com.waz.model.ConversationData.ConversationType
@@ -32,7 +30,6 @@ import org.threeten.bp.Instant
 import scala.concurrent.Future
 
 trait ConversationsListStateService {
-  def state: Signal[Data]
   def selectedConvIdPref: Preferences.Preference[Option[ConvId]]
   def selectedConversationId: Signal[Option[ConvId]]
   def selectConversation(id: Option[ConvId]): Future[Unit]
@@ -43,7 +40,6 @@ trait ConversationsListStateService {
  */
 class ConversationsListStateServiceImpl(convs: ConversationStorage, userPrefs: UserPreferences) extends ConversationsListStateService {
 
-  import ConversationsListState.Data
   import com.waz.utils.events.EventContext.Implicits.global
 
   implicit val dispatcher = new SerialDispatchQueue(name = "ConversationsListStateService")
@@ -52,10 +48,6 @@ class ConversationsListStateServiceImpl(convs: ConversationStorage, userPrefs: U
 
   val selectedConvIdPref: Preferences.Preference[Option[ConvId]] = userPrefs.preference(SelectedConvId)
   private[conversation] val listStats = Signal[ConversationListStats](ConversationListStats())
-
-  val state: Signal[Data] = listStats map { stats =>
-    Data(unread = stats.unreadCount > 0, unsent = stats.unsentCount > 0, pending = stats.pendingCount > 0)
-  }
 
   private[conversation] var lastEventTime = Instant.EPOCH
 

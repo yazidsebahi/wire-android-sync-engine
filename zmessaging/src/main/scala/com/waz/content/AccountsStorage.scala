@@ -42,8 +42,8 @@ class AccountsStorageImpl(context: Context, storage: Database) extends CachedSto
   def findByPhone(phone: PhoneNumber) = find(ac => ac.phone.contains(phone) || ac.pendingPhone.contains(phone), AccountDataDao.findByPhone(phone)(_), identity).map(_.headOption)
 
   def find(credentials: Credentials): Future[Option[AccountData]] = credentials match {
-    case EmailCredentials(email, _, _) => findByEmail(email)
-    case PhoneCredentials(phone, _, _) => findByPhone(phone)
+    case EmailCredentials(email, _) => findByEmail(email)
+    case PhoneCredentials(phone, _) => findByPhone(phone)
     case _ => Future successful None
   }
 

@@ -76,7 +76,7 @@ object SyncRequest {
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
-  case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
+  case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
   case object SyncTeam extends BaseRequest(Cmd.SyncTeam)
 
   case class SyncTeamMember(userId: UserId) extends BaseRequest(Cmd.SyncTeam) {
@@ -304,16 +304,6 @@ object SyncRequest {
     override val mergeKey = (cmd, convId, user)
   }
 
-  case class ValidateHandles(handles: Seq[Handle]) extends BaseRequest(Cmd.ValidateHandles) {
-    override def merge(req: SyncRequest) = mergeHelper[ValidateHandles](req) {
-      other => Merged(ValidateHandles(other.handles ++ handles.filter(!other.handles.contains(_))))
-    }
-    override def isDuplicateOf(req: SyncRequest): Boolean = req match {
-      case ValidateHandles(otherHandles) => handles.sameElements(otherHandles)
-      case _ => false
-    }
-  }
-
   private def mergeHelper[A <: SyncRequest : ClassTag](other: SyncRequest)(f: A => MergeResult[A]): MergeResult[A] = other match {
     case req: A if req.mergeKey == other.mergeKey => f(req)
     case _ => Unchanged
@@ -386,7 +376,6 @@ object SyncRequest {
           case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
           case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
           case Cmd.PostReceipt           => PostReceipt(convId, messageId, userId, ReceiptType.fromName('type))
-          case Cmd.ValidateHandles       => ValidateHandles('handles)
           case Cmd.Unknown               => Unknown
         }
       } catch {
@@ -497,7 +486,6 @@ object SyncRequest {
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
         case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
-        case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
       }
     }
   }
