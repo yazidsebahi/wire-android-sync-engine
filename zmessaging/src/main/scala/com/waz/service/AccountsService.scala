@@ -66,10 +66,10 @@ trait AccountsService {
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
-  def loginEmail(validEmail: String, validPassword: String) = login(EmailCredentials(EmailAddress(validEmail), Password(validPassword)))
+  def loginEmail(validEmail: String, validPassword: String): ErrorOr[UserId]
   def loginPhone(phone: String, code: String) = login(PhoneCredentials(PhoneNumber(phone), ConfirmationCode(code))) //TODO return email if already set
 
-  def login(loginCredentials: Credentials): ErrorOr[Unit]
+  def login(loginCredentials: Credentials): ErrorOr[(UserId, Option[EmailAddress])]
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
   def hasDatabase(userId: UserId): Future[Boolean] = ???
@@ -343,12 +343,15 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     regClient.verifyRegistrationMethod(Right(email), code, dryRun).map(_.fold(Left(_), _ => Right({}))) //TODO handle label and cookie!
   }
 
+  //TODO return email address from login request when phone login fails because password is already set
   override def login(loginCredentials: Credentials) = {
     verbose(s"login: $loginCredentials")
     loginClient.login(loginCredentials).future.flatMap {
       case Right((token, Some(cookie), _)) => //TODO handle label
         loginClient.getSelfUserInfo(token).flatMap {
-          case Right(user) => createAndEnterAccount(user, cookie, Some(token), loginCredentials)
+          case Right(user) =>
+            createAccount(user, cookie, Some(token), loginCredentials)
+              .map(_.right.map(_ => (user.id, Option.empty[EmailAddress])))
           case Left(err) => Future.successful(Left(err))
         }
       case Right(_) =>
@@ -360,11 +363,14 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
+  override def loginEmail(validEmail: String, validPassword: String) =
+    login(EmailCredentials(EmailAddress(validEmail), Password(validPassword))).map(_.fold(err => Left(err), resp => Right(resp._1)))
+
   override def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None) = {
     verbose(s"register: $registerCredentials, name: $name, teamName: $teamName")
     regClient.register(registerCredentials, name, teamName).flatMap {
       case Right((user, Some((cookie, _)))) =>
-        createAndEnterAccount(user, cookie, None, registerCredentials)
+        createAccount(user, cookie, None, registerCredentials)
       case Right(_) =>
         warn("Register didn't return a cookie")
         Future.successful(Left(ErrorResponse.internalError("No cookie for user after registration - can't create account")))
@@ -374,7 +380,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
-  private def createAndEnterAccount(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): ErrorOr[Unit] = {
+  private def createAccount(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): ErrorOr[Unit] = {
     verbose(s"createAndEnterAccount: $user, $cookie, $token, $credentials")
     for {
       tokenResp <- token.fold2(loginClient.access(cookie, None).future, at => Future.successful(Right((at, Some(cookie), Option.empty[Label])))).map(_.right.map(_._1))
