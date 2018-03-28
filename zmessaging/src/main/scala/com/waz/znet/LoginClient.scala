@@ -23,7 +23,7 @@ import com.waz.api.Credentials
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClientImpl
 import com.waz.model.AccountData.Label
-import com.waz.model.{TeamData, TeamId, UserId, UserInfo}
+import com.waz.model.{TeamData, TeamId, UserInfo}
 import com.waz.service.BackendConfig
 import com.waz.service.ZMessaging.clock
 import com.waz.service.tracking.TrackingService
@@ -36,7 +36,7 @@ import com.waz.znet.AuthenticationManager._
 import com.waz.znet.ContentEncoder.{EmptyRequestContent, JsonContentEncoder}
 import com.waz.znet.LoginClient.LoginResult
 import com.waz.znet.Response.{Status, SuccessHttpStatus}
-import com.waz.znet.ZNetClient.{ErrorOr, ErrorOrResponse}
+import com.waz.znet.ZNetClient.ErrorOr
 import org.json.JSONObject
 import org.threeten.bp
 

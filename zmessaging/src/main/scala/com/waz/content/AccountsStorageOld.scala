@@ -24,30 +24,12 @@ import com.waz.model.AccountDataOld.AccountDataOldDao
 import com.waz.model._
 import com.waz.threading.Threading
 import com.waz.utils.TrimmingLruCache.Fixed
-import com.waz.utils.events.{EventStream, RefreshingSignal, Signal}
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
 import scala.concurrent.Future
 
-trait AccountStorage extends CachedStorage[UserId, AccountData] {
-  def getLoggedInAccounts: Future[Set[UserId]]
-  def loggedInAccounts: Signal[Set[UserId]]
-}
-class AccountStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[UserId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) with AccountStorage {
-  import Threading.Implicits.Background
-
-  override def loggedInAccounts = {
-    val changes = EventStream.union(
-      onChanged.map(_.map(_.id)),
-      onDeleted
-    ).map(_.toSet)
-    //TODO - make an aggregating signal?
-    RefreshingSignal[Set[UserId], Set[UserId]](getLoggedInAccounts, changes)
-  }
-
-  //Note - only ids are safe to return here, as the password is not kept in memory and `list()` doesn't check the cache.
-  override def getLoggedInAccounts = list().map(_.map(_.id).toSet)
-}
+trait AccountStorage extends CachedStorage[UserId, AccountData]
+class AccountStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[UserId, AccountData](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataDao) with AccountStorage
 
 trait AccountsStorageOld extends CachedStorage[AccountId, AccountDataOld]
 class AccountsStorageOldImpl(context: Context, storage: Database) extends CachedStorageImpl[AccountId, AccountDataOld](new TrimmingLruCache(context, Fixed(8)), storage)(AccountDataOldDao) with AccountsStorageOld

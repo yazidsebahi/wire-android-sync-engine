@@ -35,43 +35,28 @@ import com.waz.utils.{RichOption, Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import com.waz.znet.ZNetClient._
 
-import scala.collection.immutable.HashMap
 import scala.concurrent.Future
 import scala.util.Right
 import scala.util.control.NonFatal
 
+/**
+  * There are a few possible states that an account can progress through for the purposes of log in and registration.
+  *
+  * No state - an account is not known to sync engine
+  *
+  * Logged in (global db row)  - the account has a cookie and token and can authenticate requests - it will be persisted,
+  *   but logged in accounts alone are not visible externally to this service.
+  *
+  * With AccountManager - the account has a database as well as being logged in. Here, we can start registering clients
+  *
+  * With ZMessaging - A ready, working account with database, client and logged in.
+  *
+  * Active - the current selected account, this state is independent to the other states, except that the account in question
+  *   must have an account manager
+  *
+  */
 trait AccountsService {
   import AccountsService._
-
-  def accountState(userId: UserId): Signal[AccountState]
-
-  def activeAccountId: Signal[Option[UserId]]
-  def getActiveAccountId: Future[Option[UserId]]
-
-  def loggedInAccounts: Signal[Set[AccountData]]
-  def getLoggedInAccounts: Future[Set[AccountData]]
-
-  def loggedInAccountIds: Signal[Set[UserId]]
-  def getLoggedInAccountIds: Future[Set[UserId]]
-
-  def activeAccount: Signal[Option[AccountData]]
-  def getActiveAccount: Future[Option[AccountData]]
-
-  def activeAccountManager: Signal[Option[AccountManager]]
-  def getActiveAccountManager: Future[Option[AccountManager]]
-
-  def zmsInstances: Signal[Set[ZMessaging]]
-
-  def activeZms: Signal[Option[ZMessaging]]
-  def getActiveZms: Future[Option[ZMessaging]]
-
-  def zms(userId: UserId): Signal[Option[ZMessaging]]
-  def getZms(userId: UserId): Future[Option[ZMessaging]]
-
-  //Set to None in order to go to the login screen without logging out the current users
-  def setAccount(userId: Option[UserId]): Future[Unit]
-
-  def logout(userId: UserId): Future[Unit]
 
   def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
 
@@ -81,17 +66,37 @@ trait AccountsService {
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
-  //TODO other convenience methods
   def loginEmail(validEmail: String, validPassword: String) = login(EmailCredentials(EmailAddress(validEmail), Password(validPassword)))
+  def loginPhone(phone: String, code: String) = login(PhoneCredentials(PhoneNumber(phone), ConfirmationCode(code))) //TODO return email if already set
 
   def login(loginCredentials: Credentials): ErrorOr[Unit]
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
+  def hasDatabase(userId: UserId): Future[Boolean] = ???
+  def enterAccount(userId: UserId, dbFile: Option[File]): Future[Unit] //TODO return error codes on failure?
+
+  //Set to None in order to go to the login screen without logging out the current users
+  def setAccount(userId: Option[UserId]): Future[Unit]
+
+  def logout(userId: UserId): Future[Unit]
+
+
+  def accountManagers: Signal[Set[AccountManager]]
+  def accountsWithManagers: Signal[Set[UserId]] = accountManagers.map(_.map(_.userId))
+  def zmsInstances: Signal[Set[ZMessaging]]
+  def getZms(userId: UserId): Future[Option[ZMessaging]]
+
+  def accountState(userId: UserId): Signal[AccountState]
+
+  def activeAccountId:      Signal[Option[UserId]]
+  def activeAccount:        Signal[Option[AccountData]]
+  def activeAccountManager: Signal[Option[AccountManager]]
+  def activeZms:            Signal[Option[ZMessaging]]
 }
 
 object AccountsService {
 
-  val AccountMapKey = "accounts-map"
+  val AccountManagersKey = "accounts-map"
 
   trait AccountState
 
@@ -108,13 +113,12 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   implicit val ec: EventContext = EventContext.Global
 
-  val context       = global.context
-  val prefs         = global.prefs
-  val storage       = global.accountsStorage
-  val storageOld    = global.accountsStorageOld
-  val phoneNumbers  = global.phoneNumbers
-  val regClient     = global.regClient
-  val loginClient   = global.loginClient
+  private val context       = global.context
+  private val prefs         = global.prefs
+  private val storageOld    = global.accountsStorageOld
+  private val phoneNumbers  = global.phoneNumbers
+  private val regClient     = global.regClient
+  private val loginClient   = global.loginClient
 
   private val activeAccountPref      = prefs(ActiveAccountPef)
   private val firstTimeWithTeamsPref = prefs(FirstTimeWithTeams)
@@ -124,6 +128,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     first   <- firstTimeWithTeamsPref.signal
     renamed <- databasesRenamedPref.signal
   } yield !first && renamed
+
+  private val storage = migrationDone.head.map(_ => global.accountsStorage)
 
   //TODO can be removed after a (very long) while
   databasesRenamedPref().flatMap {
@@ -191,23 +197,41 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       _ <- databasesRenamedPref   := true
     } yield {}
 
-  storage.onDeleted(_.foreach { user =>
+
+  storage.map(_.onDeleted(_.foreach { user =>
+    verbose(s"user logged out: $user")
     global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
-  })
+    Serialized.future(AccountManagersKey)(Threading.Background[Unit](accountManagers.mutate(_.filterNot(_.userId == user))))
+  }))
 
-  override def getLoggedInAccountIds = storage.getLoggedInAccounts
+  override val accountManagers = Signal[Set[AccountManager]]()
 
-  override val loggedInAccountIds = migrationDone.flatMap {
-    case true  => storage.loggedInAccounts
-    case false => Signal.const(Set.empty[UserId])
+  //create account managers for all logged in accounts on app start
+  for {
+    ids <- storage.flatMap(_.list().map(_.map(_.id).toSet))
+    _   <- Future.sequence(ids.map(enterAccount(_, None)))
+  } yield {}
+
+  override def enterAccount(userId: UserId, importDbFile: Option[File]) = {
+    //TODO import dbFile and create ZMessagingDb
+    Serialized.future(AccountManagersKey) {
+      verbose(s"getOrCreateAccountManager: $userId")
+      accountManagers.head.map(_.find(_.userId == userId)).map {
+        case Some(am) =>
+          warn(s"AccountManager for: $userId already created")
+          Future.successful(Some(am))
+        case _ =>
+          verbose(s"No AccountManager for: $userId, creating new one")
+          storage.flatMap(_.get(userId).map {
+            case Some(acc) =>
+              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountManagers.mutate(_ + am)))
+            case _ =>
+              warn(s"No logged in account for user: $userId, not creating account manager")
+              None
+          })
+      }
+    }
   }
-
-  override def loggedInAccounts = loggedInAccountIds.flatMap { ids =>
-    Signal.sequence(ids.toSeq.map(storage.signal):_*).map(_.toSet)
-  }
-
-  //here we use the signals of logged in accounts to ensure we hit the cache and get in-memory passwords
-  override def getLoggedInAccounts = loggedInAccounts.head
 
   @volatile private var accountStateSignals = Map.empty[UserId, Signal[AccountState]]
   override def accountState(userId: UserId) = {
@@ -215,7 +239,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     lazy val newSignal: Signal[AccountState] =
       for {
         selected <- activeAccountPref.signal.map(_.contains(userId))
-        loggedIn <- loggedInAccountIds.map(_.contains(userId))
+        loggedIn <- accountsWithManagers.map(_.contains(userId))
         uiActive <- global.lifecycle.uiActive
       } yield {
         returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
@@ -228,84 +252,44 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     })
   }
 
-  override lazy val activeAccountId = activeAccountPref.signal
-
-  override def getActiveAccountId = activeAccountPref()
-
-  override lazy val activeAccount = activeAccountId.flatMap[Option[AccountData]] {
-    case Some(id) => storage.optSignal(id)
-    case None     => Signal.const(None)
-  }
-
   override lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
-    case Some(id) => Signal.future(getOrCreateAccountManager(id))
+    case Some(id) => accountManagers.map(_.find(_.userId == id))
     case None     => Signal.const(None)
   }
+
+  override lazy val activeAccount = activeAccountManager.flatMap[Option[AccountData]] {
+    case Some(am) => Signal.future(storage).flatMap(_.optSignal(am.userId))
+    case None     => Signal.const(None)
+  }
+
+  override lazy val activeAccountId = activeAccount.map(_.map(_.id))
 
   override lazy val activeZms = activeAccountManager.flatMap[Option[ZMessaging]] {
     case Some(am) => Signal.future(am.zmessaging.map(Some(_)))
     case None     => Signal.const(None)
   }
 
-  override def getActiveAccount = getActiveAccountId.flatMap {
-    case Some(id) => storage.get(id)
-    case None     => Future.successful(None)
-  }
-
-  override def getActiveAccountManager = getActiveAccountId.flatMap {
-    case Some(id) => getOrCreateAccountManager(id)
-    case _        => Future.successful(None)
-  }
-
-  override def getActiveZms = getActiveAccountManager.flatMap {
-    case Some(acc) => acc.zmessaging.map(Some(_))
-    case None      => Future.successful(None)
-  }
-
-  private var accountMap = HashMap[UserId, AccountManager]()
-  private def getOrCreateAccountManager(userId: UserId): Future[Option[AccountManager]] =
-    Serialized.future(AccountMapKey) {
-      verbose(s"getOrCreateAccountManager: $userId")
-      accountMap.get(userId) match {
-        case Some(am) =>
-          verbose(s"AccountManager for: $userId already created")
-          Future.successful(Some(am))
-        case _ =>
-          verbose(s"No AccountManager for: $userId, creating new one")
-          storage.get(userId).map {
-            case Some(acc) =>
-              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountMap += (userId -> am)))
-            case _ =>
-              warn(s"No logged in account for user: $userId, not creating account manager")
-              None
-          }
-      }
-    }
-
   override lazy val zmsInstances = (for {
-    ids <- loggedInAccountIds
-    ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
-    zs  <- Signal.sequence(ams.flatten.map(am => Signal.future(am.zmessaging)).toSeq: _*)
+    ams <- accountManagers
+    zs  <- Signal.sequence(ams.map(am => Signal.future(am.zmessaging)).toSeq: _*)
   } yield
     returning(zs.toSet) { v =>
-      verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
+      verbose(s"Loaded: ${v.size} zms instances for ${ams.size} accounts")
     }).disableAutowiring()
 
-  override def zms(userId: UserId): Signal[Option[ZMessaging]] =
-    Signal.future(getZms(userId))
-
-  override def getZms(userId: UserId): Future[Option[ZMessaging]] =
-    getOrCreateAccountManager(userId).flatMap(_.fold2(Future.successful(Option.empty[ZMessaging]), _.zmessaging.map(Some(_))))
+  override def getZms(userId: UserId): Future[Option[ZMessaging]] = {
+    verbose(s"getZms: $userId")
+    zmsInstances.head.map(_.find(_.selfUserId == userId))
+  }
 
   //TODO optional delete history
   def logout(userId: UserId) = {
     verbose(s"logout: $userId")
     for {
-      current       <- getActiveAccountId
-      otherAccounts <- getLoggedInAccountIds.map(_.filter(userId != _))
+      current       <- activeAccountId.head
+      otherAccounts <- accountsWithManagers.head.map(_.filter(userId != _))
       _ <- if (current.contains(userId)) setAccount(otherAccounts.headOption) else Future.successful(())
-      _ <- storage.remove(userId) //TODO pass Id to some sort of clean up service before removing
-      _ <- Serialized.future(AccountMapKey)(Future(accountMap -= userId))
+      _ <- storage.flatMap(_.remove(userId)) //TODO pass Id to some sort of clean up service before removing
     } yield {}
   }
 
@@ -317,9 +301,9 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     verbose(s"setAccount: $userId")
     userId match {
       case Some(id) =>
-        getActiveAccountId.flatMap {
+        activeAccountId.head.flatMap {
           case Some(cur) if cur == id => Future.successful({})
-          case Some(_)   => storage.get(id).flatMap {
+          case Some(_)   => accountManagers.head.map(_.find(_.userId == userId)).flatMap {
             case Some(_) => activeAccountPref := Some(id)
             case _ =>
               warn(s"Tried to set active user who is not logged in: $userId, not changing account")
@@ -398,7 +382,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         case Right(at)  => getTeam(at).flatMap {
           case Right(tId) =>
             for {
-             _ <- storage.updateOrCreate(user.id, _.copy(teamId = tId, cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, tId, cookie, token, password = credentials.maybePassword) )
+             _ <- storage.flatMap(_.updateOrCreate(user.id, _.copy(teamId = tId, cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, tId, cookie, token, password = credentials.maybePassword)))
              _ <- setAccount(Some(user.id))
             } yield Right({})
           case Left(err) => Future.successful(Left(err))

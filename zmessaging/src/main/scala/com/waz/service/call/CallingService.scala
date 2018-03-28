@@ -115,7 +115,7 @@ class CallingService(val userId:          UserId,
   }
 
   Option(ZMessaging.currentAccounts).foreach(
-    _.loggedInAccountIds.map(_.contains(userId)) {
+    _.accountsWithManagers.map(_.contains(userId)) {
       case false =>
         verbose(s"Account $userId logged out, unregistering from AVS")
         wCall.map(avs.unregisterAccount)
