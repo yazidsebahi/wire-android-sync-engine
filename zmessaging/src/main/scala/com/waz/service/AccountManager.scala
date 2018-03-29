@@ -166,7 +166,7 @@ class AccountManager(val userId:   UserId,
     Serialized.future("register-client", this) {
       clientState.head.flatMap {
         case st@Registered(_) =>
-          warn("Client already registered, returning")
+          verbose("Client already registered, returning")
           Future.successful(Right(st))
         case _ =>
           for {
@@ -182,7 +182,7 @@ class AccountManager(val userId:   UserId,
                       ucs <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
                     } yield Right(Registered(cl.id))
                   case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
-                    warn(s"client registration not allowed: $error, password missing")
+                    verbose(s"client registration not allowed: $error, password missing")
                     Future.successful(Right(PasswordMissing))
                   case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
                     verbose(s"client registration not allowed: $error, loading other clients")
@@ -228,7 +228,7 @@ class AccountManager(val userId:   UserId,
 
 object AccountManager {
 
-  trait ClientRegistrationState {
+  sealed trait ClientRegistrationState {
     val clientId: Option[ClientId] = None
   }
 
