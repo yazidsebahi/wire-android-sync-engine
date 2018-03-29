@@ -201,22 +201,22 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   storage.map(_.onDeleted(_.foreach { user =>
     verbose(s"user logged out: $user")
     global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
-    Serialized.future(AccountManagersKey)(Threading.Background[Unit](accountManagers.mutate(_.filterNot(_.userId == user))))
+    Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutate(_.filterNot(_.userId == user))))
   }))
 
   override val accountManagers = Signal[Set[AccountManager]]()
 
-  //create account managers for all logged in accounts on app start
+  //create account managers for all logged in accounts on app start, or initialise the signal to an empty set
   for {
     ids <- storage.flatMap(_.list().map(_.map(_.id).toSet))
     _   <- Future.sequence(ids.map(enterAccount(_, None)))
-  } yield {}
+  } yield Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutateOrDefault(identity, Set.empty[AccountManager])))
 
   override def enterAccount(userId: UserId, importDbFile: Option[File]) = {
     //TODO import dbFile and create ZMessagingDb
     Serialized.future(AccountManagersKey) {
       verbose(s"getOrCreateAccountManager: $userId")
-      accountManagers.head.map(_.find(_.userId == userId)).map {
+      accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head.map(_.find(_.userId == userId)).map {
         case Some(am) =>
           warn(s"AccountManager for: $userId already created")
           Future.successful(Some(am))
@@ -224,7 +224,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
           verbose(s"No AccountManager for: $userId, creating new one")
           storage.flatMap(_.get(userId).map {
             case Some(acc) =>
-              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountManagers.mutate(_ + am)))
+              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountManagers.mutateOrDefault(_ + am, Set(am))))
             case _ =>
               warn(s"No logged in account for user: $userId, not creating account manager")
               None
