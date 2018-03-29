@@ -66,14 +66,14 @@ trait AccountsService {
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
-  def loginEmail(validEmail: String, validPassword: String): ErrorOr[UserId]
-  def loginPhone(phone: String, code: String) = login(PhoneCredentials(PhoneNumber(phone), ConfirmationCode(code))) //TODO return email if already set
+  def loginEmail(validEmail: String, validPassword: String): ErrorOr[UserId] = login(EmailCredentials(EmailAddress(validEmail), Password(validPassword)))
+  def loginPhone(phone: String, code: String) = login(PhoneCredentials(PhoneNumber(phone), ConfirmationCode(code)))
+  def login(loginCredentials: Credentials): ErrorOr[UserId]
 
-  def login(loginCredentials: Credentials): ErrorOr[(UserId, Option[EmailAddress])]
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
   def hasDatabase(userId: UserId): Future[Boolean] = ???
-  def enterAccount(userId: UserId, dbFile: Option[File]): Future[Unit] //TODO return error codes on failure?
+  def enterAccount(userId: UserId, dbFile: Option[File]): Future[Option[AccountManager]] //TODO return error codes on failure?
 
   //Set to None in order to go to the login screen without logging out the current users
   def setAccount(userId: Option[UserId]): Future[Unit]
@@ -216,7 +216,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     //TODO import dbFile and create ZMessagingDb
     Serialized.future(AccountManagersKey) {
       verbose(s"getOrCreateAccountManager: $userId")
-      accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head.map(_.find(_.userId == userId)).map {
+      accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head.map(_.find(_.userId == userId)).flatMap {
         case Some(am) =>
           warn(s"AccountManager for: $userId already created")
           Future.successful(Some(am))
@@ -351,7 +351,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         loginClient.getSelfUserInfo(token).flatMap {
           case Right(user) =>
             createAccount(user, cookie, Some(token), loginCredentials)
-              .map(_.right.map(_ => (user.id, Option.empty[EmailAddress])))
+              .map(_.right.map(_ => user.id))
           case Left(err) => Future.successful(Left(err))
         }
       case Right(_) =>
@@ -363,14 +363,14 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
-  override def loginEmail(validEmail: String, validPassword: String) =
-    login(EmailCredentials(EmailAddress(validEmail), Password(validPassword))).map(_.fold(err => Left(err), resp => Right(resp._1)))
-
   override def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None) = {
     verbose(s"register: $registerCredentials, name: $name, teamName: $teamName")
     regClient.register(registerCredentials, name, teamName).flatMap {
       case Right((user, Some((cookie, _)))) =>
-        createAccount(user, cookie, None, registerCredentials)
+        for {
+          resp <- createAccount(user, cookie, None, registerCredentials)
+          _    <- resp.fold(err => Future.successful(Left(err)), _ => enterAccount(user.id, None))
+        } yield resp
       case Right(_) =>
         warn("Register didn't return a cookie")
         Future.successful(Left(ErrorResponse.internalError("No cookie for user after registration - can't create account")))
