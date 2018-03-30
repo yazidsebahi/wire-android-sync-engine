@@ -169,11 +169,11 @@ class AndroidSyncServiceHandle(service: SyncRequestService, timeouts: Timeouts, 
   def postSessionReset(conv: ConvId, user: UserId, client: ClientId) = addRequest(PostSessionReset(conv, user, client))
 
   override def performFullSync(): Future[Unit] = for {
-    id1 <- syncConversations()
-    id2 <- syncTeam()
+    id1 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
+    id2 <- syncSelfClients()
     id3 <- syncSelfPermissions()
-    id4 <- syncSelfUser().flatMap(dependency => syncConnections(Some(dependency)))
-    id5 <- syncSelfClients()
+    id4 <- syncTeam()
+    id5 <- syncConversations()
     _ <- service.scheduler.await(Set(id1, id2, id3, id4, id5))
   } yield ()
 }

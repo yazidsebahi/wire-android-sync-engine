@@ -398,12 +398,12 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       cur  <- storage.flatMap(_.get(user.id))
       resp <- cur match {
         case Some(_) =>
-          verbose(s"There is already an account entry for ${user.id}, setting account")
+          verbose(s"There is already an account entry for ${user.id}")
           storage
             .flatMap(_.update(user.id, _.copy(cookie = cookie, accessToken = token, password = credentials.maybePassword)))
             .map(_ => Right({}))
         case None =>
-          verbose("No account entry, getting access token if necessary, checking team, and setting account")
+          verbose("No account entry, getting access token if necessary and checking team")
           for {
             tokenResp <- token.fold2(loginClient.access(cookie, None).future, at => Future.successful(Right((at, Some(cookie), Option.empty[Label])))).map(_.right.map(_._1))
             teamResp <- tokenResp match {
