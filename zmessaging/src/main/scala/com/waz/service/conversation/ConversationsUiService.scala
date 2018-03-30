@@ -424,7 +424,7 @@ class ConversationsUiServiceImpl(userId:          UserId,
   private def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
     verbose(s"sendImageMessage($img, $conv)")
     for {
-      data <- assets.addImageAsset(img, conv.remoteId, isSelf = false)
+      data <- assets.addImageAsset(img)
       msg <- messages.addAssetMessage(conv.id, data)
       _ <- updateLastRead(msg)
       _ <- Future.successful(tracking.assetContribution(data.id, userId))

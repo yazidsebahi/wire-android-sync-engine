@@ -29,6 +29,7 @@ import com.waz.utils.Locales.currentLocaleOrdering
 import com.waz.utils.scrypt.SCrypt
 import com.waz.utils.wrappers.{DB, DBContentValues, DBCursor, DBProgram}
 import com.waz.utils.{JsonDecoder, JsonEncoder}
+import com.waz.zms.BuildConfig
 import com.waz.znet.AuthenticationManager
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import org.json.JSONObject
@@ -62,7 +63,7 @@ case class AccountData(id:           UserId,
 object AccountData {
 
   case class Password(str: String) {
-    override def toString = str.map(_ => '*')
+    override def toString = if (BuildConfig.DEBUG) str else "********"
   }
 
   //Labels can be used to revoke all cookies for a given client

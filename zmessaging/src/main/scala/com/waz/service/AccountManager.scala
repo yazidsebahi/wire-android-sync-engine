@@ -108,28 +108,6 @@ class AccountManager(val userId:   UserId,
     hasClient = exists
   }
 
-  def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] =
-    credentialsClient.updateEmail(email)
-
-  def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] =
-    credentialsClient.updatePhone(phone)
-
-  def clearPhone(): ErrorOr[Unit] =
-    credentialsClient.clearPhone().future
-
-  //TODO do we have to re-authenticate?
-  def updatePassword(newPassword: Password, currentPassword: Option[Password]) =
-    credentialsClient.updatePassword(newPassword, currentPassword).future.flatMap {
-      case Left(err) => Future.successful(Left(err))
-      case Right(_)  => global.accountsStorage.update(userId, _.copy(password = Some(newPassword))).map(_ => Right({}))
-    }
-
-  def updateHandle(handle: Handle): ErrorOr[Unit] =
-    credentialsClient.updateHandle(handle).future.flatMap {
-      case Left(err) => Future successful Left(err)
-      case Right(_)  => storage.usersStorage.update(userId, _.copy(handle = Some(handle))).map(_ => Right({}))
-    }
-
   def fingerprintSignal(uId: UserId, cId: ClientId): Signal[Option[Array[Byte]]] =
     for {
       selfClientId <- clientId
