@@ -382,33 +382,46 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   private def createAccount(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): ErrorOr[Unit] = {
     verbose(s"createAndEnterAccount: $user, $cookie, $token, $credentials")
-    for {
-      tokenResp <- token.fold2(loginClient.access(cookie, None).future, at => Future.successful(Right((at, Some(cookie), Option.empty[Label])))).map(_.right.map(_._1))
-      teamResp  <- tokenResp match {
-        case Right(at)  => getTeam(at).flatMap {
-          case Right(tId) =>
-            for {
-             _ <- storage.flatMap(_.updateOrCreate(user.id, _.copy(teamId = tId, cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, tId, cookie, token, password = credentials.maybePassword)))
-             _ <- setAccount(Some(user.id))
-            } yield Right({})
-          case Left(err) => Future.successful(Left(err))
-        }
-        case Left(err) => Future.successful(Left(err))
-      }
-    } yield teamResp
-  }
 
-  private def getTeam(accessToken: AccessToken): ErrorOr[Option[TeamId]] = {
-    loginClient.findSelfTeam(accessToken).flatMap {
-      case Right(teamOpt) =>
-        (teamOpt match {
-          case Some(t) => global.teamsStorage.updateOrCreate(t.id, _ => t, t)
-          case _ => Future.successful({})
-        }).map(_ => Right(teamOpt.map(_.id)))
-      case Left(err) =>
-        warn(s"Failed to update team information: ${err.message}")
-        Future.successful(Left(err))
+    def getTeam(accessToken: AccessToken): ErrorOr[Option[TeamId]] = {
+      loginClient.findSelfTeam(accessToken).flatMap {
+        case Right(teamOpt) =>
+          (teamOpt match {
+            case Some(t) => global.teamsStorage.updateOrCreate(t.id, _ => t, t)
+            case _ => Future.successful({})
+          }).map(_ => Right(teamOpt.map(_.id)))
+        case Left(err) =>
+          warn(s"Failed to update team information: ${err.message}")
+          Future.successful(Left(err))
+      }
     }
+
+    for {
+      cur  <- storage.flatMap(_.get(user.id))
+      resp <- cur match {
+        case Some(_) =>
+          verbose(s"There is already an account entry for ${user.id}, setting account")
+          storage
+            .flatMap(_.update(user.id, _.copy(cookie = cookie, accessToken = token, password = credentials.maybePassword)))
+            .map(_ => Right({}))
+        case None =>
+          verbose("No account entry, getting access token if necessary, checking team, and setting account")
+          for {
+            tokenResp <- token.fold2(loginClient.access(cookie, None).future, at => Future.successful(Right((at, Some(cookie), Option.empty[Label])))).map(_.right.map(_._1))
+            teamResp <- tokenResp match {
+              case Right(access) => getTeam(access).flatMap {
+                case Right(tId) =>
+                  storage
+                    .flatMap(_.insert(AccountData(user.id, tId, cookie, token, password = credentials.maybePassword)))
+                    .map(_ => Right({}))
+                case Left(err) => Future.successful(Left(err))
+              }
+              case Left(err) => Future.successful(Left(err))
+            }
+          } yield teamResp
+      }
+      _ <- resp.fold(err => Future.successful(Left(err)), _ => setAccount(Some(user.id)))
+    } yield resp
   }
 }
 
