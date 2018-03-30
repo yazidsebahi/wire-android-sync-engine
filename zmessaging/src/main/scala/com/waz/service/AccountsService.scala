@@ -327,7 +327,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   override def requestEmailCode(email: EmailAddress) = {
     verbose(s"requestEmailConfirmationCode: $email")
-    regClient.requestEmailCode(email) //TODO should this email address be normalised?
+    regClient.requestEmailCode(email)
   }
 
   override def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean) = {
@@ -339,11 +339,9 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   override def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true) = {
     verbose(s"verifyEmailAddress: $email, $code, $dryRun")
-    //TODO normalise email?
     regClient.verifyRegistrationMethod(Right(email), code, dryRun).map(_.fold(Left(_), _ => Right({}))) //TODO handle label and cookie!
   }
 
-  //TODO return email address from login request when phone login fails because password is already set
   override def login(loginCredentials: Credentials) = {
     verbose(s"login: $loginCredentials")
     loginClient.login(loginCredentials).future.flatMap {

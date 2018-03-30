@@ -262,16 +262,7 @@ class UserServiceImpl(selfUserId:    UserId,
         case Some(user: UserData) => user.updated(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else user.connection)
         case None => UserData(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else ConnectionStatus.Unconnected)
       }
-
-      usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut)).flatMap { updated =>
-        users.find(_.id == selfUserId).fold2(Future.successful(updated), info =>
-          //if the self user gets updated - update the user's preferences TODO - maybe just use user storage...
-          for {
-            _ <- userPrefs(UserPreferences.Email).mutate(cur => info.email.orElse(cur))
-            _ <- userPrefs(UserPreferences.Phone).mutate(cur => info.phone.orElse(cur))
-          } yield updated
-        )
-      }
+      usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
     }
   }
 

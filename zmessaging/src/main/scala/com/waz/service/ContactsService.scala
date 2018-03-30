@@ -300,8 +300,8 @@ class ContactsServiceImpl(userId:         UserId,
   private def selfUserHashes: Future[Vector[String]] =
     for {
       phone   <- phoneNumbers.myPhoneNumber
-      email   <- userPrefs(Email).apply()
-      myPhone <- userPrefs(Phone).apply()
+      email   <- users.selfUser.map(_.email).head
+      myPhone <- users.selfUser.map(_.phone).head
     } yield
       withSHA2 { digest =>
         Vector(email.map(e => digest(e.str)), myPhone.map(p => digest(p.str)), phone.filterNot(myPhone.contains).map(p => digest(p.str))).flatten

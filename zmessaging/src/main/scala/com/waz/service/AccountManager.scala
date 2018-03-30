@@ -108,25 +108,14 @@ class AccountManager(val userId:   UserId,
     hasClient = exists
   }
 
-  //TODO update locally
   def updateEmail(email: EmailAddress): ErrorOrResponse[Unit] =
     credentialsClient.updateEmail(email)
 
-  def clearEmail(): ErrorOr[Unit] =
-    credentialsClient.clearEmail().future.flatMap {
-      case Left(err) => Future successful Left(err)
-      case Right(_)  => (userPrefs(UserPreferences.Email) := None).map(Right(_))
-    }
-
-  //TODO update locally
   def updatePhone(phone: PhoneNumber): ErrorOrResponse[Unit] =
     credentialsClient.updatePhone(phone)
 
   def clearPhone(): ErrorOr[Unit] =
-    credentialsClient.clearPhone().future.flatMap {
-      case Left(err) => Future successful Left(err)
-      case Right(_)  => (userPrefs(UserPreferences.Phone) := None).map(Right(_))
-    }
+    credentialsClient.clearPhone().future
 
   //TODO do we have to re-authenticate?
   def updatePassword(newPassword: Password, currentPassword: Option[Password]) =

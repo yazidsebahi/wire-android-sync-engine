@@ -375,10 +375,8 @@ object UserPreferences {
   lazy val SelfPermissions          = PrefKey[Long]("self_permissions")
   lazy val CopyPermissions          = PrefKey[Long]("copy_permissions")
 
-  //TODO we probably still need pending emails and phones
-  lazy val Email                    = PrefKey[Option[EmailAddress]]("email")
-  lazy val Phone                    = PrefKey[Option[PhoneNumber]]("phone")
-  //Note, Handle is taken from user storage
+  lazy val PendingEmail             = PrefKey[Option[EmailAddress]]("pending_email")
+  lazy val PendingPhone             = PrefKey[Option[PhoneNumber]]("pending_phone")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val ShowShareContacts        = PrefKey[Boolean]       ("show_share_contacts", customDefault = true) //whether to ask for permission or not
