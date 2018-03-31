@@ -163,8 +163,6 @@ class LoginClientImpl(client: AsyncClient, backend: BackendConfig, tracking: Tra
 object LoginClient {
   type LoginResult = Either[ErrorResponse, (AccessToken, Option[Cookie], Option[Label])]
 
-  val InsufficientCredentials = "insufficient credentials"
-
   val SetCookie = "Set-Cookie"
   val Cookie = "Cookie"
   val CookieHeader = ".*zuid=([^;]+).*".r

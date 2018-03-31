@@ -32,7 +32,6 @@ import scala.concurrent.Future
 
 class TeamConversationSpec extends AndroidFreeSpec {
 
-  val account      = AccountId()
   val self         = UserId()
   val team         = Some(TeamId("team"))
   val userStorage  = mock[UsersStorage]
@@ -122,5 +121,5 @@ class TeamConversationSpec extends AndroidFreeSpec {
   }
 
   def initService: ConversationsUiService =
-    new ConversationsUiServiceImpl(account, self, team, null, null, userStorage, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
+    new ConversationsUiServiceImpl(self, team, null, null, userStorage, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
 }

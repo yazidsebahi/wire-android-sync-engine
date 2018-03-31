@@ -20,6 +20,7 @@ package com.waz.znet
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.AccountStorage
 import com.waz.model.{AccountData, UserId}
 import com.waz.service.ZMessaging.{accountTag, clock}
@@ -55,28 +56,30 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
 
   implicit val dispatcher = new SerialDispatchQueue(name = "AuthenticationManager")
 
-  val onInvalidCredentials = EventStream[Unit]()
-
   private def token  = withAccount(_.accessToken)
   private def cookie = withAccount(_.cookie)
 
-  private def withAccount[A](f: (AccountData) => A): Future[A] = accStorage.get(id).map {
-    case Some(acc) => f(acc)
-    case _         => throw new IllegalStateException(s"Could not find matching account for: $id")
+  private def withAccount[A](f: (AccountData) => A): Future[A] = {
+    verbose("withAccount")
+    accStorage.get(id).map {
+      case Some(acc) =>
+        verbose(s"withAccount: $acc")
+        f(acc)
+      case _ => throw new IllegalStateException(s"Could not find matching account for: $id")
+    }
   }
 
   //Only performs safe update - never wipes either the cookie or the token.
-  private def updateCredentials(token: Option[AccessToken] = None, cookie: Option[Cookie] = None) =
+  private def updateCredentials(token: Option[AccessToken] = None, cookie: Option[Cookie] = None) = {
+    verbose(s"updateCredentials: $token, $cookie")
     accStorage.update(id, acc => acc.copy(accessToken = if (token.isDefined) token else acc.accessToken, cookie = cookie.getOrElse(acc.cookie)))
+  }
 
 
-  private def wipeCredentials() =
+  private def wipeCredentials() = {
+    verbose("wipe credentials")
     accStorage.remove(id)
-
-  /**
-   * Last login request result. Used to make sure we never send several concurrent login requests.
-   */
-  private var loginFuture: ErrorOr[AccessToken] = token.map(_.fold2(Left(ErrorResponse.internalError("No token currently set")), Right(_))) //TODO will this cause lots of failures?
+  }
 
   def invalidateToken() = token.map(_.foreach(t => updateCredentials(Some(t.copy(expiresAt = Instant.EPOCH)))))
 
@@ -85,21 +88,16 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
   /**
    * Returns current token if not expired or performs login request
    */
-  override def currentToken() = {
-    loginFuture = loginFuture.recover {
-      case ex =>
-        warn(s"login failed", ex)
-        Left(ErrorResponse.internalError(s"Exception while trying to login: ${ex.getCause}"))
-    } flatMap { _ =>
+  override def currentToken() =
+    Serialized.future("login-client") {
+      verbose("currentToken")
       token.flatMap {
         case Some(token) if !isExpired(token) =>
           verbose(s"Non expired token: $token")
-          CancellableFuture.successful(Right(token))
+          Future.successful(Right(token))
         case token => checkLoggedIn(token)
       }
     }
-    loginFuture
-  }
 
   /**
     * Forces an access request to check if the current cookie is valid. Can be used to see if a password reset was successful
@@ -154,7 +152,7 @@ object AuthenticationManager {
     override def toString = s"${str.take(10)}, exp: $expiry, isValid: $isValid"
   }
 
-  case class AccessToken(accessToken: String, tokenType: String, expiresAt: Instant) {
+  case class AccessToken(accessToken: String, tokenType: String, expiresAt: Instant = Instant.EPOCH) {
     val headers = Map(AccessToken.AuthorizationHeader -> s"$tokenType $accessToken")
     def prepare(req: AsyncHttpRequest) = req.addHeader(AccessToken.AuthorizationHeader, s"$tokenType $accessToken")
 

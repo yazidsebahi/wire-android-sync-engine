@@ -80,12 +80,12 @@ class AvsImpl() extends Avs {
   }
 
   override def registerAccount(cs: CallingService) = available.flatMap { _ =>
-    verbose(s"Initialising calling for: ${cs.userId} and current client: ${cs.clientId}")
+    verbose(s"Initialising calling for: ${cs.selfUserId} and current client: ${cs.clientId}")
 
     val callingReady = Promise[Unit]()
 
     val wCall = Calling.wcall_create(
-      cs.userId.str,
+      cs.selfUserId.str,
       cs.clientId.str,
       new ReadyHandler {
         override def onReady(version: Int, arg: Pointer) = {

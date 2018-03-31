@@ -42,7 +42,6 @@ import com.waz.sync.SyncServiceHandle
 
 class PrivateConversationSpec extends AndroidFreeSpec {
 
-  val account      = AccountId()
   val self         = UserId()
   val members      = mock[MembersStorage]
   val convsContent = mock[ConversationsContentUpdater]
@@ -285,5 +284,5 @@ class PrivateConversationSpec extends AndroidFreeSpec {
   }
 
   def initService: ConversationsUiService =
-    new ConversationsUiServiceImpl(account, self, None, null, null, null, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
+    new ConversationsUiServiceImpl(self, None, null, null, null, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
 }

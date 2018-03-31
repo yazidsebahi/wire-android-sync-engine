@@ -29,13 +29,13 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 
-@Ignore class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
+class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
 
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(50, Millis))
 
   lazy val user = UserId()
   lazy val storage = new ZmsDatabase(user, Robolectric.application)
-  lazy val clients = new OtrClientsStorageImpl(Robolectric.application, storage)
+  lazy val clients = new OtrClientsStorageImpl(user, Robolectric.application, storage)
 
   feature("clients storage") {
 
@@ -52,7 +52,7 @@ import scala.concurrent.duration._
 
     scenario("load clients form second clients storage") {
       awaitUi(1.second)
-      new OtrClientsStorageImpl(Robolectric.application, storage).get(user).futureValue shouldEqual Some(ucs)
+      new OtrClientsStorageImpl(user, Robolectric.application, storage).get(user).futureValue shouldEqual Some(ucs)
     }
   }
 }

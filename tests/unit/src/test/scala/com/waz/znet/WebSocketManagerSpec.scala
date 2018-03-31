@@ -23,12 +23,11 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import android.net.Uri
 import com.waz.RobolectricUtils
-import com.waz.model.AccountId
+import com.waz.model.UserId
 import com.waz.testutils.Slow
-import com.waz.threading.CancellableFuture
 import com.waz.utils.{ExponentialBackoff, returning}
 import com.waz.znet.AuthenticationManager.AccessToken
-import com.waz.znet.Response.Status
+import com.waz.znet.ZNetClient.ErrorOr
 import org.java_websocket.WebSocket
 import org.java_websocket.framing.Framedata
 import org.java_websocket.handshake.ClientHandshake
@@ -54,16 +53,16 @@ import scala.util.Try
   var manager: WebSocketClient = _
   var connectionCount = 0
 
-  var authResult: Either[Status, AccessToken] = Right(AccessToken("test_token", "Bearer"))
+  var authResult: ErrorOr[AccessToken] = Future.successful(Right(AccessToken("test_token", "Bearer")))
   val auth = new AccessTokenProvider {
-    override def currentToken() = Future.successful(authResult)
-    override def checkLoggedIn(token: Option[AccessToken]): CancellableFuture[Either[Status, AccessToken]] = CancellableFuture.successful(authResult)
+    override def currentToken() = authResult
+    override def checkLoggedIn(token: Option[AccessToken]) = authResult
   }
 
   val port = 9982
   def createServer() = new TestServer(port)
   def createClient(pongTimeout: FiniteDuration = 15.seconds, backoff: ExponentialBackoff = WebSocketClient.defaultBackoff) = {
-    returning(new WebSocketClient(context, AccountId(), new AsyncClientImpl(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
+    returning(new WebSocketClient(context, UserId(), new AsyncClientImpl(), Uri.parse(s"http://localhost:$port"), auth, pongTimeout = pongTimeout, backoff = backoff)) {_.connected.disableAutowiring()}
   }
 
   before {

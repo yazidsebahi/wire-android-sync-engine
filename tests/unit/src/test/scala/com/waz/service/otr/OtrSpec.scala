@@ -26,7 +26,7 @@ import com.wire.cryptobox._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.scalatest._
 
-@Ignore class OtrSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with GeneratorDrivenPropertyChecks {
+class OtrSpec extends FeatureSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with GeneratorDrivenPropertyChecks {
 
   val base = new File("target/cryptobox-jni/temp")
   var store: File = _

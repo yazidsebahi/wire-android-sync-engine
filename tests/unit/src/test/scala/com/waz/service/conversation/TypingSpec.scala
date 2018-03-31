@@ -31,7 +31,8 @@ import org.scalatest._
 
 import scala.concurrent.duration._
 
-@Ignore class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
+@Ignore
+class TypingSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils { test =>
 
   implicit val timeout: FiniteDuration = 1.seconds
 
@@ -43,12 +44,11 @@ import scala.concurrent.duration._
 
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
 
-  lazy val storage = new StorageModule(context, UserId(), "", null) {
+  lazy val storage = new StorageModule(context, UserId(), new TestGlobalPreferences) {
     convsStorage.insert(conv)
   }
 
   lazy val lifecycle: UiLifeCycle = new UiLifeCycleImpl {
-//    setLoggedIn(true)
     acquireUi()
   }
 
@@ -60,7 +60,7 @@ import scala.concurrent.duration._
     }
   }
 
-  lazy val service = new TypingService(AccountId(), storage.convsStorage, timeouts, null, new EmptySyncService {
+  lazy val service = new TypingService(UserId(), storage.convsStorage, timeouts, null, new EmptySyncService {
     override def postTypingState(id: ConvId, typing: Boolean) = {
       test.syncWasTyping = typing
       test.typingSync = Some(id)

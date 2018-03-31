@@ -63,7 +63,7 @@ class ZMessagingFactory(global: GlobalModule) {
 
   def client(auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
-  def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
+  def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClientImpl(netClient)
 
   def cryptobox(userId: UserId, storage: StorageModule) = new CryptoBoxService(global.context, userId, global.metadata, storage.userPrefs)
 
@@ -107,7 +107,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val syncContent:       SyncContentUpdater      = wire[SyncContentUpdaterImpl]
   lazy val syncRequests:      SyncRequestService      = wire[SyncRequestServiceImpl]
   lazy val otrClientsSync:    OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl]
-  lazy val credentialsClient: CredentialsUpdateClient = account.credentialsClient
+  lazy val credentialsClient: CredentialsUpdateClientImpl = account.credentialsClient
 
   def context           = global.context
   def accountStorage    = global.accountsStorage

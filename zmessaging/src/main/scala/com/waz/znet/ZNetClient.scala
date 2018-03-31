@@ -50,7 +50,7 @@ trait ZNetClient {
   def withFutureErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, T])(implicit ec: ExecutionContext): ErrorOr[T]
   def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T]
   def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T]
-
+  def close(): Future[Unit]
   def client: AsyncClient
 }
 
@@ -88,6 +88,15 @@ class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val cl
         super.cancel()(tag)
       }
     }
+  }
+
+  override def close(): Future[Unit] = Future {
+    closed = true
+    queue.foreach(_.promise.success(Response(Response.Cancelled)))
+    queue.clear()
+//    auth.foreach(_.close())
+
+    ongoing.values.toList foreach cancel
   }
 
   override def updateWithErrorHandling[A](name: String, r: Request[A])(implicit ec: ExecutionContext): ErrorOrResponse[Unit] =

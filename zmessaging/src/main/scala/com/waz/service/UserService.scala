@@ -262,14 +262,12 @@ class UserServiceImpl(selfUserId:        UserId,
     }
   }
 
-  //TODO handle user-update event with self id, remove pending email
   override def setEmail(email: EmailAddress, password: Password) = {
     verbose(s"setEmail: $email, password: $password")
     credentialsClient.updateEmail(email).future.flatMap {
       case Right(_) =>
         for {
           _ <- userPrefs(PendingEmail) := Some(email)
-          //TODO if the user does not verify their email, they can get stuck on a new device...
           resp <- credentialsClient.updatePassword(password, None).future
         } yield resp
       case Left(e) => Future.successful(Left(e))

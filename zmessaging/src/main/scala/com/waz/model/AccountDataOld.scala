@@ -42,9 +42,9 @@ import scala.collection.mutable
   *
   * Any information that needs to be deregistered can be kept here (e.g., de-registered cookies, tokens, clients etc)
   */
-case class AccountData(id:           UserId,
-                       teamId:       Option[TeamId],
-                       cookie:       Cookie,
+case class AccountData(id:           UserId              = UserId(),
+                       teamId:       Option[TeamId]      = None,
+                       cookie:       Cookie              = Cookie(""), //defaults for tests
                        accessToken:  Option[AccessToken] = None,
                        pushToken:    Option[PushToken]   = None,
                        password:     Option[Password]    = None) { //password never saved to database
