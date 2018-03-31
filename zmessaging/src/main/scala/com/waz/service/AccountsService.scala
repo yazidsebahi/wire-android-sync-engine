@@ -113,12 +113,12 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
 
   implicit val ec: EventContext = EventContext.Global
 
-  private val context       = global.context
-  private val prefs         = global.prefs
-  private val storageOld    = global.accountsStorageOld
-  private val phoneNumbers  = global.phoneNumbers
-  private val regClient     = global.regClient
-  private val loginClient   = global.loginClient
+  val context       = global.context
+  val prefs         = global.prefs
+  val storageOld    = global.accountsStorageOld
+  val phoneNumbers  = global.phoneNumbers
+  val regClient     = global.regClient
+  val loginClient   = global.loginClient
 
   private val activeAccountPref      = prefs(ActiveAccountPef)
   private val firstTimeWithTeamsPref = prefs(FirstTimeWithTeams)

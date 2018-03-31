@@ -136,7 +136,7 @@ class OtrClientsService(selfId:    UserId,
 
   def selfClient = for {
     uc <- storage.signal(selfId)
-    res <- Signal.const(uc.clients.get(clientId))
+    res <- Signal.const(uc.clients.get(clientId)).collect { case Some(c) => c }
   } yield res
 
   def getSelfClient: Future[Option[Client]] =
