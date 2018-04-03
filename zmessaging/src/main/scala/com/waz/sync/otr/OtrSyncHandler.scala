@@ -32,7 +32,7 @@ import com.waz.model.otr.ClientId
 import com.waz.service.assets.AssetService
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.messages.MessagesService
-import com.waz.service.otr.OtrService
+import com.waz.service.otr.{OtrClientsService, OtrService}
 import com.waz.service.push.PushService
 import com.waz.service.{ErrorsService, UserService}
 import com.waz.sync.SyncResult
@@ -54,10 +54,23 @@ trait OtrSyncHandler {
   def broadcastMessage(message: GenericMessage, retry: Int = 0, previous: EncryptedContent = EncryptedContent.Empty): Future[Either[ErrorResponse, Date]]
 }
 
-class OtrSyncHandlerImpl(otrClient: OtrClient, msgClient: MessagesClient, assetClient: AssetClient, service: OtrService, assets: AssetService,
-                         convs: ConversationsService, convStorage: ConversationStorage, users: UserService, messages: MessagesService,
-                         errors: ErrorsService, clientsSyncHandler: OtrClientsSyncHandler, cache: CacheService, push: PushService, usersClient: UsersClient,
-                         teamId: Option[TeamId], usersStorage: UsersStorage) extends OtrSyncHandler {
+class OtrSyncHandlerImpl(teamId:             Option[TeamId],
+                         otrClient:          OtrClient,
+                         msgClient:          MessagesClient,
+                         assetClient:        AssetClient,
+                         service:            OtrService,
+                         clients:            OtrClientsService,
+                         assets:             AssetService,
+                         convs:              ConversationsService,
+                         convStorage:        ConversationStorage,
+                         users:              UserService,
+                         messages:           MessagesService,
+                         errors:             ErrorsService,
+                         clientsSyncHandler: OtrClientsSyncHandler,
+                         cache:              CacheService,
+                         push:               PushService,
+                         usersClient:        UsersClient,
+                         usersStorage:       UsersStorage) extends OtrSyncHandler {
 
   import OtrSyncHandler._
   import com.waz.threading.Threading.Implicits.Background
@@ -65,7 +78,7 @@ class OtrSyncHandlerImpl(otrClient: OtrClient, msgClient: MessagesClient, assetC
   def postOtrMessage(conv: ConversationData, message: GenericMessage) = postOtrMessage(conv.id, conv.remoteId, message)
 
   def postOtrMessage(convId: ConvId, remoteId: RConvId, message: GenericMessage, recipients: Option[Set[UserId]] = None, nativePush: Boolean = true) = push.afterProcessing {
-    service.clients.getSelfClient flatMap {
+    clients.getSelfClient flatMap {
       case Some(selfClient) =>
         postEncryptedMessage(convId, message, recipients = recipients) {
           case (content, retry) if content.estimatedSize < MaxContentSize =>
@@ -144,7 +157,7 @@ class OtrSyncHandlerImpl(otrClient: OtrClient, msgClient: MessagesClient, assetC
       myTeamIds = myTeam.map(_.id)
     } yield acceptedOrBlocked.keySet ++ myTeamIds
 
-    service.clients.getSelfClient.flatMap {
+    clients.getSelfClient.flatMap {
       case Some(selfClient) => broadcastRecipients.flatMap { recp =>
         verbose(s"recipients: $recp")
         service.encryptBroadcastMessage(message, useFakeOnError = retry > 0, previous, recp).flatMap { content =>
@@ -178,7 +191,7 @@ class OtrSyncHandlerImpl(otrClient: OtrClient, msgClient: MessagesClient, assetC
     }
   }
 
-  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default) = CancellableFuture.lift(service.clients.getSelfClient).flatMap {
+  def uploadAssetDataV3(data: LocalData, key: Option[AESKey], mime: Mime = Mime.Default) = CancellableFuture.lift(clients.getSelfClient).flatMap {
     case Some(selfClient) =>
       key match {
         case Some(k) => CancellableFuture.lift(service.encryptAssetData(k, data)) flatMap {
@@ -215,7 +228,7 @@ class OtrSyncHandlerImpl(otrClient: OtrClient, msgClient: MessagesClient, assetC
     convData flatMap {
       case None => successful(SyncResult(internalError(s"conv not found: $convId, for user: $user in postSessionReset")))
       case Some(conv) =>
-        service.clients.getSelfClient flatMap {
+        clients.getSelfClient flatMap {
           case None => successful(SyncResult(internalError(s"client not registered")))
           case Some(selfClient) =>
             msgContent flatMap {

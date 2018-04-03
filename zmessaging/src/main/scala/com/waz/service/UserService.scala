@@ -21,9 +21,11 @@ import java.util.Date
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.ImageAssetFactory.getImageAsset
 import com.waz.api.impl.AccentColor
-import com.waz.content.UserPreferences.LastSlowSyncTimeKey
+import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, PendingEmail}
 import com.waz.content._
+import com.waz.model.AccountData.Password
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.EventScheduler.Stage
@@ -34,25 +36,26 @@ import com.waz.service.conversation.ConversationsListStateService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.sync.client.UserSearchClient.UserSearchEntry
-import com.waz.sync.client.UsersClient
+import com.waz.sync.client.{CredentialsUpdateClient, UsersClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events._
+import com.waz.utils.wrappers.AndroidURIUtil
 import com.waz.utils.{RichInstant, _}
+import com.waz.znet.ZNetClient.ErrorOr
 
 import scala.collection.breakOut
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{Awaitable, Future}
+import scala.util.Right
 
 trait UserService {
   def userUpdateEventsStage: Stage.Atomic
   def userDeleteEventsStage: Stage.Atomic
 
   def selfUser: Signal[UserData]
-  def selfUserId: UserId
 
   def getSelfUserId: Future[Option[UserId]]
   def getSelfUser: Future[Option[UserData]]
-  def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData): Future[UserData]
   def getOrCreateUser(id: UserId): Future[UserData]
   def updateUserData(id: UserId, updater: UserData => UserData): Future[Option[(UserData, UserData)]]
   def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]]
@@ -61,38 +64,57 @@ trait UserService {
   def syncIfNeeded(users: UserData*): Future[Option[SyncId]]
   def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]]
   def acceptedOrBlockedUsers: Signal[Map[UserId, UserData]]
-  def updateAvailability(availability: Availability): Future[Option[UserData]]
-  def processAvailability(availability: Map[UserId, Availability]): Future[Any]
+
 
   def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]]
   def syncNotExistingOrExpired(users: Seq[UserId]): Future[Option[SyncId]]
 
   def deleteAccount(): Future[SyncId]
   def userSignal(id: UserId): Signal[UserData]
-  def syncSelfNow: Future[Option[UserData]]
 
-  // called from ui to update user
-  def updateSelf(name: Option[String] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, handle: Option[Handle] = None): Future[Option[UserData]]
-  def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Option[UserData]]
-  def clearSelfPicture(): Future[Option[UserData]]
+  //These self user properties can fail in many ways, so we do not sync them and force the user to respond
+  def setEmail(email: EmailAddress, password: Password): ErrorOr[Unit]
+  def updateEmail(email: EmailAddress): ErrorOr[Unit]
+  def updatePhone(phone: PhoneNumber): ErrorOr[Unit]
+  def clearPhone(): ErrorOr[Unit]
+  def changePassword(newPassword: Password, oldPassword: Password): ErrorOr[Unit]
+  def updateHandle(handle: Handle): ErrorOr[Unit]
+
+  //These self user properties should always succeed given no fatal errors, so we update locally and create sync jobs
+  def updateName(name: String): Future[Unit]
+  def updateAccentColor(color: AccentColor): Future[Unit]
+  def updateAvailability(availability: Availability): Future[Unit]
+  def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Unit] //TODO take URIs or Array[Byte]
 }
 
-class UserServiceImpl(val selfUserId:    UserId,
-                      account:       AccountId,
-                      accounts:      AccountsService,
-                      usersStorage:  UsersStorage,
-                      userPrefs:     UserPreferences,
-                      push:          PushService,
-                      assets:        AssetService,
-                      usersClient:   UsersClient,
-                      sync:          SyncServiceHandle,
-                      assetsStorage: AssetsStorage) extends UserService {
+/**
+  * TODO improve accuracy of sync logic wrt to connected and unconnected users
+  * Currently, we sync all users on full-sync or if, when retrieving them via this class, we detect it's been a while since
+  * their last sync. This is both inefficient and incorrect. An improvement would be:
+  * 1. Since we get update events for all connected/team users, we don't need to bother syncing them outside of a full-sync.
+  * 2. For unconnected && non-team users, we should monitor the current conversation and just sync all unconnected users in
+  *    that conversation (there won't be that many on average, but maybe we'd need a throttle of a few minutes?). We should
+  *    also merge this with the ExpiredUsersService below, since that's what we do with wireless users, except we have a
+  *    timer for them.
+  * 3. Finally, we should listen to the self signals of all other logged in accounts and update our user's storage to reflect those states
+  */
+class UserServiceImpl(selfUserId:        UserId,
+                      accounts:          AccountsService,
+                      accsStorage:       AccountStorage,
+                      usersStorage:      UsersStorage,
+                      userPrefs:         UserPreferences,
+                      push:              PushService,
+                      assets:            AssetService,
+                      usersClient:       UsersClient,
+                      sync:              SyncServiceHandle,
+                      assetsStorage:     AssetsStorage,
+                      credentialsClient: CredentialsUpdateClient) extends UserService {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
   import userPrefs._
 
-  val selfUser: Signal[UserData] = usersStorage.optSignal(selfUserId) flatMap {
+  override val selfUser: Signal[UserData] = usersStorage.optSignal(selfUserId) flatMap {
     case Some(data) => Signal.const(data)
     case None =>
       sync.syncSelfUser()
@@ -100,16 +122,20 @@ class UserServiceImpl(val selfUserId:    UserId,
   }
 
   lazy val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
-  val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
+
+  override val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent]((_, e) => for {
       _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
-      _ <- removeIdentityFromSyncedUsers(e.filter(_.removeIdentity).map(_.user)(breakOut))
     } yield {}
   )
-  val userDeleteEventsStage: Stage.Atomic = EventScheduler.Stage[UserDeleteEvent]((c, e) => updateUserDeleted(e.map(_.user)(breakOut)))
+
+  override val userDeleteEventsStage: Stage.Atomic = EventScheduler.Stage[UserDeleteEvent] { (c, e) =>
+    //TODO handle self user deletion event
+    usersStorage.updateAll2(e.map(_.user)(breakOut), _.copy(deleted = true))
+  }
 
   //Update user data for other accounts
   //TODO remove this and move the necessary user data up to the account storage
-  accounts.loggedInAccounts.map(_.flatMap(_.userId).toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
+  accounts.accountsWithManagers.map(_.toSeq.filterNot(_ == selfUserId))(syncNotExistingOrExpired)
 
   push.onHistoryLost { time =>
     verbose(s"onSlowSyncNeeded, updating timestamp to: $time")
@@ -118,46 +144,34 @@ class UserServiceImpl(val selfUserId:    UserId,
 
   override lazy val acceptedOrBlockedUsers: Signal[Map[UserId, UserData]] =
     new AggregatingSignal[Seq[UserData], Map[UserId, UserData]](
-      usersStorage.onChanged, usersStorage.listUsersByConnectionStatus(acceptedOrBlocked),
+      usersStorage.onChanged, usersStorage.listUsersByConnectionStatus(AcceptedOrBlocked),
       { (accu, us) =>
-        val (toAdd, toRemove) = us.partition(u => acceptedOrBlocked(u.connection))
+        val (toAdd, toRemove) = us.partition(u => AcceptedOrBlocked(u.connection))
         accu -- toRemove.map(_.id) ++ toAdd.map(u => u.id -> u)
       }
     )
 
-  private lazy val acceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
-
-  def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
+  override def getOrCreateUser(id: UserId) = usersStorage.getOrElseUpdate(id, {
     sync.syncUsers(id)
-    UserData(id, None, defaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(defaultUserName), handle = None)
+    UserData(id, None, DefaultUserName, None, None, connection = ConnectionStatus.Unconnected, searchKey = SearchKey(DefaultUserName), handle = None)
   })
 
-  def getSelfUserId: Future[Option[UserId]] = Future successful Some(selfUserId)
+  override def getSelfUserId = Future successful Some(selfUserId)
 
-  def updateOrCreateUser(id: UserId, update: UserData => UserData, create: => UserData) =
-    usersStorage.updateOrCreate(id, update, create)
-
-  def updateUserConversation(id: UserId, convId: RConvId) = usersStorage.update(id, _.copy(conversation = Some(convId)))
-
-  def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): Future[Option[UserData]] =
+  override def updateConnectionStatus(id: UserId, status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None) =
     usersStorage.update(id, { user => returning(user.updateConnectionStatus(status, time, message))(u => verbose(s"updateConnectionStatus($u)")) }) map {
       case Some((prev, updated)) if prev != updated => Some(updated)
       case _ => None
     }
 
-  def updateAvailability(availability: Availability): Future[Option[UserData]] = {
-    verbose(s"updateAvailability($availability)")
-    updateSelfAndSync(_.copy(availability = availability), _ => sync.postAvailability(availability))
-  }
+  override def updateUserData(id: UserId, updater: UserData => UserData) = usersStorage.update(id, updater)
 
-  def updateUserData(id: UserId, updater: UserData => UserData) = usersStorage.update(id, updater)
-
-  override def updateUsers(entries: Seq[UserSearchEntry]): Future[Set[UserData]] = {
+  override def updateUsers(entries: Seq[UserSearchEntry]) = {
     def updateOrAdd(entry: UserSearchEntry) = (_: Option[UserData]).fold(UserData(entry))(_.updated(entry))
     usersStorage.updateOrCreateAll(entries.map(entry => entry.id -> updateOrAdd(entry)).toMap)
   }
 
-  override def getUser(id: UserId): Future[Option[UserData]] = {
+  override def getUser(id: UserId) = {
     debug(s"getUser($id)")
 
     usersStorage.get(id) map {
@@ -170,7 +184,7 @@ class UserServiceImpl(val selfUserId:    UserId,
     }
   }
 
-  def userSignal(id: UserId): Signal[UserData] =
+  override def userSignal(id: UserId) =
     usersStorage.optSignal(id) flatMap {
       case None =>
         sync.syncUsers(id)
@@ -200,38 +214,15 @@ class UserServiceImpl(val selfUserId:    UserId,
     }
   }
 
-  def deleteAccount(): Future[SyncId] = sync.deleteAccount()
+  override def deleteAccount(): Future[SyncId] = sync.deleteAccount()
 
-  def withSelfUserId[T <: Awaitable[Option[UserData]]](f: UserId => T) = f(selfUserId)
-
-  def getSelfUser: Future[Option[UserData]] =
+  override def getSelfUser: Future[Option[UserData]] =
     usersStorage.get(selfUserId) flatMap {
       case Some(userData) => Future successful Some(userData)
       case _ => syncSelfNow
     }
 
-  def updateAndSync(userId: UserId, updater: UserData => UserData, sync: UserData => Future[_]) =
-    updateUserData(userId, updater) flatMap {
-      case Some((p, u)) if p != u => sync(u) map (_ => Some(u))
-      case _ => Future successful None
-    }
-
-  def updateSelfAndSync(updater: UserData => UserData, sync: UserData => Future[_]) =
-    updateAndSync(selfUserId, updater, sync)
-
-  // called from ui to update user
-  def updateSelf(name: Option[String] = None, phone: Option[PhoneNumber] = None, accent: Option[AccentColor] = None, handle: Option[Handle] = None): Future[Option[UserData]] =
-    updateSelfAndSync(_.updated(name, None, phone, accent, handle = handle), data => sync.postSelfUser(UserInfo(data.id, name, accent.map(_.id), phone = phone, handle = handle)))
-
-  def clearSelfPicture(): Future[Option[UserData]] =
-    updateSelfAndSync(_.copy(picture = None), _ => sync.postSelfPicture(None))
-
-  def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Option[UserData]] =
-    assets.addImageAsset(image, RConvId(selfUserId.str), isSelf = true) flatMap { asset =>
-      updateAndSync(selfUserId, _.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
-    }
-
-  def getUsers(ids: Seq[UserId]): Future[Seq[UserData]] =
+  override def getUsers(ids: Seq[UserId]): Future[Seq[UserData]] =
     usersStorage.listAll(ids) map { users =>
       syncIfNeeded(users: _*)
       users
@@ -240,7 +231,7 @@ class UserServiceImpl(val selfUserId:    UserId,
   /**
    * Schedules user data sync if user with given id doesn't exist or has old timestamp.
    */
-  def syncNotExistingOrExpired(users: Seq[UserId]): Future[Option[SyncId]] = usersStorage.listAll(users) flatMap { found =>
+  override def syncNotExistingOrExpired(users: Seq[UserId]): Future[Option[SyncId]] = usersStorage.listAll(users) flatMap { found =>
     val toSync = (users.toSet -- found.map(_.id)).toSeq
     if (toSync.nonEmpty) sync.syncUsers(toSync: _*) flatMap (sId => syncIfNeeded(found: _*).map(_.orElse(Some(sId)))) else syncIfNeeded(found: _*)
   }
@@ -255,43 +246,108 @@ class UserServiceImpl(val selfUserId:    UserId,
       case _ => sync.syncUsersIfNotEmpty(users.filter(_.picture.isEmpty).map(_.id))
     }
 
-  def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picture.getOrElse(Seq.empty[AssetData])))
-
-  def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
+  override def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
     debug(s"update synced users: $users, service: $this")
-    updateSyncedUsersPictures(users: _*) flatMap { _ =>
+    assets.updateAssets(users.flatMap(_.picture.getOrElse(Seq.empty[AssetData]))).flatMap { _ =>
       def updateOrCreate(info: UserInfo): Option[UserData] => UserData = {
         case Some(user: UserData) => user.updated(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else user.connection)
         case None => UserData(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else ConnectionStatus.Unconnected)
       }
-      usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
+
+      val selfInfo = users.find(_.id == selfUserId)
+      val newEmail = selfInfo.flatMap(_.email)
+
+      for {
+        _   <- if (newEmail.isDefined) userPrefs(PendingEmail) := None else Future.successful({})
+        res <- usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
+        _   <- res.find(_.id == selfUserId).fold(Future.successful({})) { self =>
+          if (self.picture.isDefined) Future.successful({}) else updateSelfPicture(getImageAsset(AndroidURIUtil.parse(UnsplashUrl)))
+        }
+      } yield res
     }
   }
 
-  def removeIdentityFromSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Unit] = {
-    def update(current: UserData): UserData = {
-      val userInfo = users.find(_.id == current.id)
-      userInfo.fold(current){ info =>
-        current.copy(
-          email = if (info.email.nonEmpty) None else current.email,
-          phone = if (info.phone.nonEmpty) None else current.phone)
-      }
+  override def setEmail(email: EmailAddress, password: Password) = {
+    verbose(s"setEmail: $email, password: $password")
+    credentialsClient.updateEmail(email).future.flatMap {
+      case Right(_) =>
+        for {
+          _ <- userPrefs(PendingEmail) := Some(email)
+          resp <- credentialsClient.updatePassword(password, None).future
+        } yield resp
+      case Left(e) => Future.successful(Left(e))
     }
-    usersStorage.updateAll2(users.map {user => user.id}, update).map(_ => ())
   }
 
-  def updateUserDeleted(userIds: Vector[UserId]): Future[Any] =
-    usersStorage.updateAll2(userIds, _.copy(deleted = true))
-
-  def processAvailability(avMap: Map[UserId, Availability]): Future[Any] = {
-    def update(user: UserData): UserData = avMap.get(user.id).fold(user){ av => user.copy(availability = av) }
-
-    usersStorage.updateAll2(avMap.keySet, update)
+  override def updateEmail(email: EmailAddress) = {
+    verbose(s"updateEmail: $email")
+    credentialsClient.updateEmail(email).future
   }
+
+  override def updatePhone(phone: PhoneNumber) = {
+    verbose(s"updatePhone: $phone")
+    credentialsClient.updatePhone(phone).future
+  }
+
+  override def clearPhone(): ErrorOr[Unit] = {
+    verbose(s"clearPhone")
+    credentialsClient.clearPhone().future
+  }
+
+  override def changePassword(newPassword: Password, currentPassword: Password) = {
+    verbose(s"changePassword: $newPassword, $currentPassword")
+    credentialsClient.updatePassword(newPassword, Some(currentPassword)).future.flatMap {
+      case Left(err) => Future.successful(Left(err))
+      case Right(_)  => accsStorage.update(selfUserId, _.copy(password = Some(newPassword))).map(_ => Right({}))
+    }
+  }
+
+  override def updateHandle(handle: Handle) = {
+    verbose(s"updateHandle: $handle")
+    credentialsClient.updateHandle(handle).future.flatMap {
+      case Right(_) => usersStorage.update(selfUserId, _.copy(handle = Some(handle))).map(_ => Right({}))
+      case Left(err) => Future.successful(Left(err))
+    }
+  }
+
+  override def updateName(name: String) = {
+    verbose(s"updateName: $name")
+    //TODO break this `postSelfUser(UserInfo)` into separate sync jobs for the different properties, or just stop using UserInfo
+    //The ultimate call to /self only takes accentId, name and Seq(assetId)
+    updateAndSync(_.copy(name = name), _ => sync.postSelfUser(UserInfo(selfUserId, Some(name))))
+  }
+
+  override def updateAccentColor(color: AccentColor) = {
+    verbose(s"updateAccentColor: $color")
+    updateAndSync(_.copy(accent = color.id), _ => sync.postSelfUser(UserInfo(selfUserId, accentId = Some(color.id))))
+  }
+
+  override def updateAvailability(availability: Availability) = {
+    verbose(s"updateAvailability($availability)")
+    updateAndSync(_.copy(availability = availability), _ => sync.postAvailability(availability)).map(_ => {})
+  }
+
+  override def updateSelfPicture(image: com.waz.api.ImageAsset) = {
+    verbose(s"updateSelfPicture($image)")
+    assets.addImageAsset(image, isProfilePic = true) flatMap { asset =>
+      updateAndSync(_.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
+    }
+  }
+
+  private def updateAndSync(updater: UserData => UserData, sync: UserData => Future[_]) =
+    updateUserData(selfUserId, updater).flatMap({
+      case Some((p, u)) if p != u => sync(u).map(_ => {})
+      case _ => Future.successful({})
+    })
+
 }
 
 object UserService {
-  val defaultUserName: String = ""
+  val DefaultUserName: String = ""
+
+  val UnsplashUrl = "https://source.unsplash.com/800x800/?landscape"
+
+  lazy val AcceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
 }
 
 /**

@@ -23,6 +23,7 @@ import com.waz.service.teams.TeamsService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncResult
 import com.waz.sync.client.TeamsClient
+import com.waz.testutils.TestUserPreferences
 import com.waz.threading.CancellableFuture
 
 import scala.concurrent.Future
@@ -32,7 +33,7 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
 
   val client = mock[TeamsClient]
   val service = mock[TeamsService]
-
+  val prefs   = new TestUserPreferences
   feature("Sync all teams") {
 
     scenario("Basic single team with some members sync") {
@@ -69,6 +70,6 @@ class TeamsSyncHandlerSpec extends AndroidFreeSpec {
     }
   }
 
-  def initHandler(teamId: Option[TeamId]) = new TeamsSyncHandlerImpl(teamId, client, service)
+  def initHandler(teamId: Option[TeamId]) = new TeamsSyncHandlerImpl(account1Id, prefs, teamId, client, service)
 
 }

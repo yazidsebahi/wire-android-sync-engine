@@ -59,7 +59,7 @@ class MessageIndexStorage(context: Context, storage: ZmsDatabase, messagesStorag
   }
 
   messagesStorage.onDeleted { removed =>
-    removeAll(removed)
+    if (removed.nonEmpty) removeAll(removed)
   }
 
   def searchText(contentSearchQuery: ContentSearchQuery, convId: Option[ConvId]): Future[MessagesCursor] =

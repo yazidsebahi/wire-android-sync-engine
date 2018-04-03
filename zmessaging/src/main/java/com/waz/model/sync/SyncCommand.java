@@ -55,6 +55,7 @@ public enum SyncCommand {
     PostAddressBook("post-addressbook"),
     PostInvitation("post-invitation"),
     SyncSelfClients("sync-clients"),   // sync user clients, register current client and update prekeys when needed
+    SyncSelfPermissions("sync-self-permissions"),
     SyncClients("sync-user-clients"),
     SyncClientLocation("sync-client-location"),
     SyncPreKeys("sync-prekeys"),

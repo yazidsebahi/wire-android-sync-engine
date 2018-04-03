@@ -23,6 +23,7 @@ import com.waz.Control.getOrUpdate
 import com.waz.service._
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.events._
+import com.waz.ZLog.ImplicitTag._
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -90,7 +91,7 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
 
   currentZms.onChanged { _ => onReset ! true }
 
-  def getCurrent = accounts.getActiveZms
+  def getCurrent = accounts.activeZms.head
 
   lazy val images: Images = new Images(global.context, bitmapDecoder, tracking)
   lazy val messages: Messages = new Messages

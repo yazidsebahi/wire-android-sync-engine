@@ -21,19 +21,18 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.ClientRegistrationState
 import com.waz.cache.CacheEntryData.CacheEntryDao
 import com.waz.content.ZmsDatabase
 import com.waz.db.Col._
 import com.waz.db.ZGlobalDB.{DbName, DbVersion, Migrations, daos}
-import com.waz.db.migrate.{AccountDataMigration, TableDesc, TableMigration}
+import com.waz.db.migrate.AccountDataMigration
 import com.waz.model.AccountData.AccountDataDao
 import com.waz.model.TeamData.TeamDataDoa
 import com.waz.model.otr.ClientId
 import com.waz.model.{AccountId, UserId}
 import com.waz.utils.wrappers.DB
-import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, Resource}
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.utils.{JsonDecoder, JsonEncoder, Resource}
+import com.waz.znet.AuthenticationManager.AccessToken
 
 class ZGlobalDB(context: Context, dbNameSuffix: String = "")
   extends DaoDB(context.getApplicationContext, DbName + dbNameSuffix, null, DbVersion, daos, Migrations.migrations(context)) {
@@ -59,35 +58,6 @@ object ZGlobalDB {
   object Migrations {
 
     def migrations(context: Context) = Seq(
-      Migration(5, 6) { implicit db =>
-        import CacheEntryDao._
-
-        debug("Upgrading global db to accommodate for upgraded image caching...")
-        Seq("path", "lastUsed", "timeout") foreach { col => db.execSQL(s"ALTER TABLE CacheEntry ADD COLUMN $col TEXT") }
-        setPathForFileEntries(context.getCacheDir)
-        moveToTimeouts()
-      },
-      Migration(6, 7) { implicit db =>
-        debug("Upgrading global db to prepare for phone number verification...")
-        db.execSQL(s"ALTER TABLE ZUsers ADD COLUMN phone TEXT")
-      },
-      Migration(7, 8) { implicit db =>
-        debug("Upgrading global DB to remember if phone number was verified…")
-        db.execSQL(s"ALTER TABLE ZUsers ADD COLUMN phone_verified INTEGER")
-        db.execSQL(s"UPDATE ZUsers SET phone_verified = phone is not null")
-      },
-      Migration(8, 9) { implicit db => db.execSQL("ALTER TABLE CacheEntry ADD COLUMN enc_key TEXT") },
-      Migration(9, 10) { implicit db =>
-        db.execSQL("ALTER TABLE CacheEntry ADD COLUMN mime TEXT default ''")
-        db.execSQL("ALTER TABLE CacheEntry ADD COLUMN file_name TEXT")
-      },
-      Migration(10, 11) { implicit db =>
-        db.execSQL("DELETE FROM CacheEntry WHERE enc_key IS NOT NULL") // encryption handling was changed, so it's easiest to just drop old cache entries
-      },
-      Migration(11, 12) { implicit db =>
-        db.execSQL("ALTER TABLE CacheEntry ADD COLUMN length INTEGER")
-      },
-      Migration(12, 13)(Migrations.v11(context)),
       Migration(13, 14) {
         implicit db => AccountDataMigration.v14(db)
       },
@@ -124,57 +94,6 @@ object ZGlobalDB {
     implicit object DbRes extends Resource[DB] {
       override def close(r: DB): Unit = r.close()
     }
-
-    def v11(context: Context): DB => Unit = { implicit db =>
-      // migrates ZUsers to AccountData, extracts some info from user specific KeyValue storage
-
-      val SelfUserId = "self_user_id"
-      val OtrClientId = "otr-client-id"
-      val OtrClientRegState = "otr-client-reg-state"
-
-      val c = db.query("ZUsers", Array("_id"), null, null, null, null, null)
-      val ids = Seq.tabulate(c.getCount) { idx =>
-        c.moveToPosition(idx)
-        c.getString(0)
-      }
-      c.close()
-
-      val accountData: Map[AccountId, (Option[UserId], Option[ClientId], Option[ClientRegistrationState])] = ids.map { id =>
-        val values = try {
-          IoUtils.withResource(new ZmsDatabase(AccountId(id), context)) { zmsDb =>
-            IoUtils.withResource(zmsDb.dbHelper.getReadableDatabase) { zd =>
-              val c = zd.query("KeyValues", Array("key", "value"), s"key IN ('$SelfUserId', '$OtrClientId', '$OtrClientRegState')", null, null, null, null)
-              Seq.tabulate(c.getCount) { i => c.moveToPosition(i); c.getString(0) -> c.getString(1) }.toMap
-            }
-          }
-        } catch {
-          case _: Throwable => Map.empty[String, String]
-        }
-
-        AccountId(id) -> (values.get(SelfUserId).map(UserId), values.get(OtrClientId).map(ClientId(_)), values.get(OtrClientRegState).map(ClientRegistrationState.valueOf))
-      }.toMap
-
-      val moveConvs = new TableMigration(TableDesc("ZUsers", Columns.v12.all), TableDesc("Accounts", Columns.v13.all)) {
-
-        import Columns.{v12 => src, v13 => dst}
-
-        override val bindings: Seq[Binder] = Seq(
-          dst.Id := src.Id,
-          dst.Email := src.Email,
-          dst.Hash := src.Hash,
-          dst.EmailVerified := src.EmailVerified,
-          dst.Cookie := src.Cookie,
-          dst.Phone := src.Phone,
-          dst.Token := { _ => None },
-          dst.UserId := { c => accountData.get(src.Id(c)).flatMap(_._1) },
-          dst.ClientId := { c => accountData.get(src.Id(c)).flatMap(_._2) },
-          dst.ClientRegState := { c => accountData.get(src.Id(c)).flatMap(_._3).getOrElse(ClientRegistrationState.UNKNOWN) }
-        )
-      }
-
-      moveConvs.migrate(db)
-      db.execSQL("DROP TABLE IF EXISTS ZUsers")
-    }
   }
 
   object Columns {
@@ -198,10 +117,10 @@ object ZGlobalDB {
       val EmailVerified = bool('verified)
       val Cookie = opt(text('cookie))
       val Phone = opt(phoneNumber('phone))
-      val Token = opt(text[Token]('access_token, JsonEncoder.encodeString[Token], JsonDecoder.decode[Token]))
+      val Token = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))
       val UserId = opt(id[UserId]('user_id))
       val ClientId = opt(id[ClientId]('client_id))
-      val ClientRegState = text[ClientRegistrationState]('reg_state, _.name(), ClientRegistrationState.valueOf)
+      val ClientRegState = text('reg_state)
 
       val all = Seq(Id, Email, Hash, EmailVerified, Cookie, Phone, Token, UserId, ClientId, ClientRegState)
     }

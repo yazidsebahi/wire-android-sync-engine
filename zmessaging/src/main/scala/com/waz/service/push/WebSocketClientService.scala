@@ -21,7 +21,7 @@ import android.content.Context
 import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.NetworkMode
-import com.waz.model.AccountId
+import com.waz.model.UserId
 import com.waz.model.otr.ClientId
 import com.waz.service.AccountsService.{Active, InBackground, LoggedOut}
 import com.waz.service.ZMessaging.accountTag
@@ -48,7 +48,7 @@ trait WebSocketClientService {
 }
 
 class WebSocketClientServiceImpl(context:     Context,
-                                 accountId:   AccountId,
+                                 userId:      UserId,
                                  accounts:    AccountsService,
                                  netClient:   ZNetClient,
                                  auth:        AuthenticationManager,
@@ -58,7 +58,7 @@ class WebSocketClientServiceImpl(context:     Context,
                                  timeouts:    Timeouts,
                                  pushToken:   PushTokenService)(implicit ev: AccountContext) extends WebSocketClientService {
   import WebSocketClientService._
-  implicit val logTag: LogTag = accountTag[WebSocketClientService](accountId)
+  implicit val logTag: LogTag = accountTag[WebSocketClientService](userId)
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "WebSocketClientService")
 
@@ -67,7 +67,7 @@ class WebSocketClientServiceImpl(context:     Context,
 
   override val useWebSocketFallback = pushToken.pushActive.map(!_)
 
-  val accState = accounts.accountState(accountId)
+  val accState = accounts.accountState(userId)
 
   // true if web socket should be active,
   override val wsActive = network.networkMode.flatMap {
@@ -155,7 +155,7 @@ class WebSocketClientServiceImpl(context:     Context,
   private def webSocketUri(clientId: ClientId) =
     Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build()
 
-  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, accountId, netClient, auth, webSocketUri(clientId))
+  private[waz] def createWebSocketClient(clientId: ClientId) = WebSocketClient(context, userId, netClient, auth, webSocketUri(clientId))
 }
 
 object WebSocketClientService {

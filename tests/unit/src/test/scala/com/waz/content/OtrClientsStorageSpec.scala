@@ -20,22 +20,22 @@ package com.waz.content
 import com.waz.RobolectricUtils
 import com.waz.api.{OtrClientType, Verification}
 import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
-import com.waz.model.{AESKey, AccountId, UserId}
+import com.waz.model.{AESKey, UserId}
 import org.robolectric.Robolectric
+import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
-import org.scalatest._
 import org.threeten.bp.Instant
 
 import scala.concurrent.duration._
 
-@Ignore class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
+class OtrClientsStorageSpec extends FeatureSpec with Matchers with BeforeAndAfter with RobolectricTests with RobolectricUtils with ScalaFutures { test =>
 
   implicit val defaultPatience = PatienceConfig(timeout = Span(5, Seconds), interval = Span(50, Millis))
 
-  lazy val storage = new ZmsDatabase(AccountId(), Robolectric.application)
-  lazy val clients = new OtrClientsStorageImpl(Robolectric.application, storage)
   lazy val user = UserId()
+  lazy val storage = new ZmsDatabase(user, Robolectric.application)
+  lazy val clients = new OtrClientsStorageImpl(user, Robolectric.application, storage)
 
   feature("clients storage") {
 
@@ -52,7 +52,7 @@ import scala.concurrent.duration._
 
     scenario("load clients form second clients storage") {
       awaitUi(1.second)
-      new OtrClientsStorageImpl(Robolectric.application, storage).get(user).futureValue shouldEqual Some(ucs)
+      new OtrClientsStorageImpl(user, Robolectric.application, storage).get(user).futureValue shouldEqual Some(ucs)
     }
   }
 }

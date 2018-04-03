@@ -96,6 +96,10 @@ package object utils {
     else compareAndSet(ref)(updater)
   }
 
+  implicit class RichBoolean(val boolean: Boolean) extends AnyVal {
+    def ?[T](ifTrue: => T, ifFalse: => T): T = if (boolean) ifTrue else ifFalse
+  }
+
   implicit class RichTraversableOnce[A](val b: TraversableOnce[A]) extends AnyVal {
     def by[B, C[_, _]](f: A => B)(implicit cbf: CanBuild[(B, A), C[B, A]]): C[B, A] = byMap[B, A, C](f, identity)
 

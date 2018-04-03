@@ -26,7 +26,6 @@ import com.waz.api.impl.ErrorResponse
 import com.waz.sync.client.OAuth2Client._
 import com.waz.threading.Threading
 import com.waz.utils.JsonDecoder
-import com.waz.znet.AuthenticationManager.Token
 import com.waz.znet.ContentEncoder.{BinaryRequestContent, RequestContent}
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.ZNetClient.ErrorOr
@@ -52,7 +51,7 @@ class OAuth2Client(netClient: ZNetClient)(implicit app: AppInfo) {
     }
   }
 
-  def bearerHeader(accessToken: AccessToken): Map[String, String] = Map(Token.AuthorizationHeader -> s"Bearer ${accessToken.token}")
+  def bearerHeader(accessToken: AccessToken): Map[String, String] = Map(AuthenticationManager.AccessToken.AuthorizationHeader -> s"Bearer ${accessToken.token}")
 
   def withFreshToken[A](refresh: Option[RefreshToken])(f: AccessToken => ErrorOr[A]): ErrorOr[A] = freshAccessToken(refresh) flatMap {
     case Right(token) => f(token)
