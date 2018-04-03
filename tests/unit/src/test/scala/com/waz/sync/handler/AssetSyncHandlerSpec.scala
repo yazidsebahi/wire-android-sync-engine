@@ -76,31 +76,31 @@ import scala.concurrent.Future
 
   private def arbitraryAssetData: List[AssetData] = (1 to 10).map(_ => sample(arbAssetData)).toList
 
-  feature("upload image") {
-    scenario("upload full image") {
-      arbitraryAssetData.foreach { asset =>
-        val remoteData = sample(arbRemoteData)
-        val assetUploadStarted = asset.copy(status = UploadInProgress)
-        val assetWithRemoteData = assetUploadStarted.copyWithRemoteData(remoteData)
-        val assetUploadDone = assetWithRemoteData.copy(status = UploadDone)
-
-        val assets = mock[AssetService]
-        val otrSync = mock[OtrSyncHandler]
-        val cacheService = mock[CacheService]
-
-        val cacheEntry = new CacheEntry(CacheEntryData(assetWithRemoteData.cacheKey), cacheService)
-
-        inSequence {
-          (assets.updateAsset _).expects(asset.id, *).returns(Future(Some(assetUploadStarted)))
-          (assets.getLocalData _).expects(asset.id).returns(CancellableFuture(Some(LocalData.Empty)))
-          (otrSync.uploadAssetDataV3 _).expects(LocalData.Empty, *, asset.mime).returns(CancellableFuture(Right(remoteData)))
-          (assets.updateAsset _).expects(asset.id, *).returns(Future(Some(assetWithRemoteData)))
-        }
-
-        val handler = new AssetSyncHandler(cacheService, assetClient, assets, otrSync)
-        result(handler.uploadAssetData(asset.id)).right.get shouldEqual Some(assetUploadDone)
-      }
-    }
-  }
+//  feature("upload image") {
+//    scenario("upload full image") {
+//      arbitraryAssetData.foreach { asset =>
+//        val remoteData = sample(arbRemoteData)
+//        val assetUploadStarted = asset.copy(status = UploadInProgress)
+//        val assetWithRemoteData = assetUploadStarted.copyWithRemoteData(remoteData)
+//        val assetUploadDone = assetWithRemoteData.copy(status = UploadDone)
+//
+//        val assets = mock[AssetService]
+//        val otrSync = mock[OtrSyncHandler]
+//        val cacheService = mock[CacheService]
+//
+//        val cacheEntry = new CacheEntry(CacheEntryData(assetWithRemoteData.cacheKey), cacheService)
+//
+//        inSequence {
+//          (assets.updateAsset _).expects(asset.id, *).returns(Future(Some(assetUploadStarted)))
+//          (assets.getLocalData _).expects(asset.id).returns(CancellableFuture(Some(LocalData.Empty)))
+//          (otrSync.uploadAssetDataV3 _).expects(LocalData.Empty, *, asset.mime).returns(CancellableFuture(Right(remoteData)))
+//          (assets.updateAsset _).expects(asset.id, *).returns(Future(Some(assetWithRemoteData)))
+//        }
+//
+//        val handler = new AssetSyncHandler(cacheService, assetClient, assets, otrSync)
+//        result(handler.uploadAssetData(asset.id)).right.get shouldEqual Some(assetUploadDone)
+//      }
+//    }
+//  }
 
 }

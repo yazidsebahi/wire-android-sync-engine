@@ -78,12 +78,12 @@ trait MessagesService {
 }
 
 class MessagesServiceImpl(selfUserId: UserId,
+                          teamId:     Option[TeamId],
                           storage:    MessagesStorage,
                           updater:    MessagesContentUpdater,
                           edits:      EditHistoryStorage,
                           convs:      ConversationsContentUpdater,
                           network:    NetworkModeService,
-                          teamId:     Option[TeamId],
                           members:    MembersStorage,
                           users:      UserService,
                           sync:       SyncServiceHandle) extends MessagesService {
