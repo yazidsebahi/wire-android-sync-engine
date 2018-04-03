@@ -26,6 +26,7 @@ import com.waz.api.impl.AccentColor
 import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, PendingEmail, ShouldSyncUsers}
 import com.waz.content._
 import com.waz.model.AccountData.Password
+import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.EventScheduler.Stage
@@ -272,7 +273,7 @@ class UserServiceImpl(selfUserId:        UserId,
         _   <- if (newEmail.isDefined) userPrefs(PendingEmail) := None else Future.successful({})
         res <- usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
         _   <- res.find(_.id == selfUserId).fold(Future.successful({})) { self =>
-          if (self.picture.isDefined) Future.successful({}) else updateSelfPicture(getImageAsset(AndroidURIUtil.parse(UnsplashUrl)))
+          if (self.picture.isDefined) Future.successful({}) else addUnsplashPicture()
         }
       } yield res
     }
@@ -341,6 +342,14 @@ class UserServiceImpl(selfUserId:        UserId,
   override def updateSelfPicture(image: com.waz.api.ImageAsset) = {
     verbose(s"updateSelfPicture($image)")
     assets.addImageAsset(image, isProfilePic = true) flatMap { asset =>
+      updateAndSync(_.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
+    }
+  }
+
+  private def addUnsplashPicture(): Future[Unit] = {
+    verbose(s"addUnsplashPicture")
+    val asset = AssetData.newImageAssetFromUri(uri = AndroidURIUtil.parse(UnsplashUrl))
+    assets.addImage(asset, isProfilePic = true) flatMap { asset =>
       updateAndSync(_.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
     }
   }
