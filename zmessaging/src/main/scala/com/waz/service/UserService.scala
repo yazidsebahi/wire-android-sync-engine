@@ -274,6 +274,7 @@ class UserServiceImpl(selfUserId:        UserId,
     }
   }
 
+  //TODO - remove and find a better flow for the settings
   override def setEmail(email: EmailAddress, password: Password) = {
     verbose(s"setEmail: $email, password: $password")
     credentialsClient.updateEmail(email).future.flatMap {

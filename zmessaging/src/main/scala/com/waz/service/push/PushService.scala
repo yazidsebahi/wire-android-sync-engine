@@ -90,7 +90,7 @@ class PushServiceImpl(userId:               UserId,
                       lifeCycle:            UiLifeCycle,
                       tracking:             TrackingService,
                       sync:                 SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
-  import PushService._  
+  import PushService._
 
   implicit val logTag: LogTag = accountTag[PushServiceImpl](userId)
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")

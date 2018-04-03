@@ -220,6 +220,19 @@ class AccountManager(val userId:   UserId,
       _ <- cryptoBox.deleteCryptoBox()
       _ <- userPrefs(SelfClient) := Unregistered
     } yield ()
+
+  def setEmail(email: EmailAddress): ErrorOr[Unit] = {
+    verbose(s"setEmail: $email")
+    credentialsClient.updateEmail(email).future
+  }
+
+  def setPassword(password: Password): ErrorOr[Unit] = {
+    verbose(s"setPassword: $password")
+    credentialsClient.updatePassword(password, None).future.flatMap {
+      case Left(err) => Future.successful(Left(err))
+      case Right(_) => global.accountsStorage.update(userId, _.copy(password = Some(password))).map(_ => Right({}))
+    }
+  }
 }
 
 object AccountManager {
