@@ -26,16 +26,16 @@ import com.waz.db.CompositeKeyTestItem.CompositeKeyTestItemDao
 import com.waz.db.TestItem.TestItemDao
 import com.waz.testutils.Implicits._
 import com.waz.threading.SerialDispatchQueue
-import com.waz.utils.wrappers.{DB, DBHelper}
+import com.waz.utils.wrappers.DB
 import org.robolectric.Robolectric
 import org.scalatest._
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import scala.util.Random
 
-@Ignore class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests with RobolectricUtils { outer =>
+class DaoSpec extends FeatureSpec with Matchers with BeforeAndAfter with GeneratorDrivenPropertyChecks with RobolectricTests with RobolectricUtils { outer =>
 
-  lazy val dbHelper: DBHelper = new DaoDB(Robolectric.application, "testdb", null, 1, Seq(TestItemDao, CompositeKeyTestItemDao), Seq.empty[Migration])
+  lazy val dbHelper = new DaoDB(Robolectric.application, "testdb", null, 1, Seq(TestItemDao, CompositeKeyTestItemDao), Seq.empty[Migration])
 
   implicit def database: DB = dbHelper.getWritableDatabase
 
@@ -146,7 +146,7 @@ import scala.util.Random
 
       lazy val dbase = new Database {
         override implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue()
-        override val dbHelper: DBHelper = outer.dbHelper
+        override val dbHelper = outer.dbHelper
       }
 
       val n = SQLiteGlobal.getWALConnectionPoolSize

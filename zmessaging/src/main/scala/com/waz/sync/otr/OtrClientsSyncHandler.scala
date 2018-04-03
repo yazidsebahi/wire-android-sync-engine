@@ -19,47 +19,39 @@ package com.waz.sync.otr
 
 import android.content.Context
 import android.location.Geocoder
-import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.api.ClientRegistrationState._
+import com.waz.ZLog._
+import com.waz.api.Verification
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.{ClientRegistrationState, Verification, ZmsVersion}
-import com.waz.content.UserPreferences.ClientRegVersion
-import com.waz.content.{OtrClientsStorage, UserPreferences}
-import com.waz.model.otr.{Client, ClientId, Location, SignalingKey, UserClients}
-import com.waz.model.{AccountId, UserId}
+import com.waz.content.OtrClientsStorage
+import com.waz.model.UserId
+import com.waz.model.otr.{Client, ClientId, Location, UserClients}
 import com.waz.service.otr._
 import com.waz.sync.SyncResult
 import com.waz.sync.client.OtrClient
 import com.waz.threading.Threading
-import com.waz.utils.events.Signal
 import com.waz.utils.{Locales, LoggedTry, Serialized}
-import com.waz.znet.Response.Status
 
 import scala.collection.breakOut
 import scala.concurrent.Future
 
 trait OtrClientsSyncHandler {
   def syncSelfClients(): Future[SyncResult]
-  def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]]
   def syncClients(user: UserId): Future[SyncResult]
   def postLabel(id: ClientId, label: String): Future[SyncResult]
   def syncPreKeys(clients: Map[UserId, Seq[ClientId]]): Future[SyncResult]
-  def registerSignalingKey(): Future[SyncResult]
   def syncClientsLocation(): Future[SyncResult]
 
   def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]]
 }
 
-class OtrClientsSyncHandlerImpl(context: Context,
-                                accountId: AccountId,
-                                userId: UserId,
-                                clientId: Signal[Option[ClientId]],
-                                netClient: OtrClient,
+class OtrClientsSyncHandlerImpl(context:    Context,
+                                userId:     UserId,
+                                selfClient:   ClientId,
+                                netClient:  OtrClient,
                                 otrClients: OtrClientsService,
-                                storage: OtrClientsStorage,
-                                cryptoBox: CryptoBoxService,
-                                userPrefs: UserPreferences) extends OtrClientsSyncHandler {
+                                storage:    OtrClientsStorage,
+                                cryptoBox:  CryptoBoxService) extends OtrClientsSyncHandler {
   import com.waz.threading.Threading.Implicits.Background
 
   private lazy val sessions = cryptoBox.sessions
@@ -69,33 +61,7 @@ class OtrClientsSyncHandlerImpl(context: Context,
     syncClients(userId)
   }
 
-  // keeps ZMS_MAJOR_VERSION number of client registration
-  // this can be used to detect problematic version updates
-  private lazy val clientRegVersion = userPrefs.preference(ClientRegVersion)
-
-  def registerClient(password: Option[String]): Future[Either[ErrorResponse, (ClientRegistrationState, Option[Client])]] = Serialized.future("sync-self-clients", this) {
-    cryptoBox.createClient() flatMap {
-      case None => Future successful Left(ErrorResponse.internalError("CryptoBox missing"))
-      case Some((c, lastKey, keys)) =>
-        netClient.postClient(accountId, c, lastKey, keys, password).future flatMap {
-          case Right(cl) =>
-            for {
-              _ <- clientRegVersion := ZmsVersion.ZMS_MAJOR_VERSION
-              _ <- otrClients.updateUserClients(userId, Seq(c.copy(id = cl.id).updated(cl)))
-            } yield Right((REGISTERED, Some(cl)))
-          case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
-            warn(s"client registration not allowed: $error, password missing")
-            Future successful Right((PASSWORD_MISSING, None))
-          case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
-            warn(s"client registration not allowed: $error")
-            Future successful Right((LIMIT_REACHED, None))
-          case Left(error) =>
-            Future.successful(Left(error))
-        }
-    }
-  }
-
-  def syncClients(user: UserId): Future[SyncResult] = clientId.head flatMap { current =>
+  def syncClients(user: UserId): Future[SyncResult] = {
     verbose(s"syncClients")
 
     def hasSession(user: UserId, client: ClientId) = sessions.getSession(OtrService.sessionId(user, client)).map(_.isDefined)
@@ -104,7 +70,7 @@ class OtrClientsSyncHandlerImpl(context: Context,
 
     def withoutSession(clients: Iterable[ClientId]) =
       Future.traverse(clients) { client =>
-        if (current.contains(client)) Future successful None
+        if (selfClient == client) Future successful None
         else hasSession(user, client) map { if (_) None else Some(client) }
       } map { _.flatten.toSeq }
 
@@ -135,18 +101,19 @@ class OtrClientsSyncHandlerImpl(context: Context,
 
         val userClients =
           if (user == userId)
-            clients.map(c => if (current.contains(c.id)) c.copy(verified = Verification.VERIFIED) else c)
+            clients.map(c => if (selfClient == c.id) c.copy(verified = Verification.VERIFIED) else c)
           else
             clients
 
-        otrClients.updateUserClients(user, userClients, replace = true) flatMap { ucs =>
-          syncSessionsIfNeeded(ucs.clients.keys).flatMap { _ =>
-            current match {
-              case Some(currentClient) => updatePreKeys(currentClient)
-              case _ => Future.successful(SyncResult.Success)
-            }
+        for {
+          ucs <- otrClients.updateUserClients(user, userClients, replace = true)
+          _   <- syncSessionsIfNeeded(ucs.clients.keys)
+          res <- updatePreKeys(selfClient)
+          _   <- res match {
+            case SyncResult.Success => otrClients.lastSelfClientsSyncPref := System.currentTimeMillis()
+            case _ => Future.successful({})
           }
-        }
+        } yield res
     }
   }
 
@@ -159,18 +126,6 @@ class OtrClientsSyncHandlerImpl(context: Context,
   def syncPreKeys(clients: Map[UserId, Seq[ClientId]]): Future[SyncResult] = syncSessions(clients) map {
     case Some(error) => SyncResult(error)
     case None => SyncResult.Success
-  }
-
-  def registerSignalingKey(): Future[SyncResult] = {
-    clientId.head.flatMap(_.fold(Future.successful(Option.empty[Client]))(otrClients.getClient(userId, _))).flatMap {
-      case Some(client) =>
-        val sk = Some(SignalingKey())
-        netClient.updateKeys(client.id, sigKey = sk).future flatMap {
-          case Right(_)  => otrClients.updateClients(Map(userId -> Seq(client.copy(signalingKey = sk)))).map(_ => SyncResult.Success)
-          case Left(err) => Future.successful(SyncResult.Failure(Some(err)))
-        }
-      case _ => Future.successful(SyncResult.Failure(None, shouldRetry = false))
-    }
   }
 
   def syncSessions(clients: Map[UserId, Seq[ClientId]]): Future[Option[ErrorResponse]] =

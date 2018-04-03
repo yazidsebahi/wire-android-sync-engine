@@ -51,7 +51,6 @@ trait ZNetClient {
   def chainedWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOrResponse[T]])(implicit ec: ExecutionContext): ErrorOrResponse[T]
   def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T]
   def close(): Future[Unit]
-
   def client: AsyncClient
 }
 
@@ -91,6 +90,15 @@ class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val cl
     }
   }
 
+  override def close(): Future[Unit] = Future {
+    closed = true
+    queue.foreach(_.promise.success(Response(Response.Cancelled)))
+    queue.clear()
+//    auth.foreach(_.close())
+
+    ongoing.values.toList foreach cancel
+  }
+
   override def updateWithErrorHandling[A](name: String, r: Request[A])(implicit ec: ExecutionContext): ErrorOrResponse[Unit] =
     withErrorHandling(name, r) { case Response(SuccessHttpStatus(), _, _) => () } (ec)
 
@@ -109,15 +117,6 @@ class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val cl
   override def chainedFutureWithErrorHandling[A, T](name: String, r: Request[A])(pf: PartialFunction[Response, ErrorOr[T]])(implicit ec: ExecutionContext): ErrorOr[T] =
     apply(r).future.flatMap(pf.orElse(errorHandling(name) andThen Future.successful))(ec).recover { case NonFatal(e) => Left(ErrorResponse.internalError("future failed: " + e.getMessage)) }
 
-  override def close(): Future[Unit] = Future {
-    closed = true
-    queue.foreach(_.promise.success(Response(Response.Cancelled)))
-    queue.clear()
-    auth.foreach(_.close())
-
-    ongoing.values.toList foreach cancel
-  }
-
   private def dispatch(): Unit = {
     if (ongoing.size < MaxConcurrentRequests) {
       queue.dropWhile(_.cancelled)
@@ -133,7 +132,7 @@ class ZNetClientImpl(auth: Option[AuthenticationManager] = None, override val cl
             auth match {
               case Some(am) => CancellableFuture.lift(am.currentToken()) flatMap {
                 case Right(token) => client(request.withHeaders(token.headers))
-                case Left(status) => CancellableFuture.successful(Response(status))
+                case Left(error) => CancellableFuture.successful(Response(HttpStatus(error.code, error.message))) //TODO it would be good to merge ErrorResponse and Response under one trait...
               }
               case _ => CancellableFuture.failed(throw new Exception("Attempted to perform request that requires authentication using a non-authenticated global ZNetClient"))
             }
@@ -240,7 +239,6 @@ object ZNetClient {
 
   class EmptyClient extends ZNetClientImpl(None, new EmptyAsyncClientImpl(), BackendConfig.StagingBackend.baseUrl) {
     override def apply[A](r: Request[A]): CancellableFuture[Response] = CancellableFuture.failed(new Exception("Empty client"))
-    override def close(): Future[Unit] = Future.successful({})
   }
 
   def errorHandling[T](name: String)(implicit logTag: LogTag): PartialFunction[Response, Either[ErrorResponse, T]] = {

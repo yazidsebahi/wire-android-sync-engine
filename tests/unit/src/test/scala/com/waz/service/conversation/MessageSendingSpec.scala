@@ -18,14 +18,13 @@
 package com.waz.service.conversation
 
 import com.waz.api.Message
-import com.waz.content._
+import com.waz.content.{UsersStorage, _}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent.Text
 import com.waz.model._
 import com.waz.service._
 import com.waz.service.assets.AssetService
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
-import com.waz.service.tracking.TrackingService
 import com.waz.specs.AndroidFreeSpec
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
@@ -38,43 +37,40 @@ class MessageSendingSpec extends AndroidFreeSpec { test =>
 
   lazy val selfUser = UserData("self user")
   lazy val conv = ConversationData(ConvId(), RConvId(), Some("convName"), selfUser.id, ConversationType.Group)
+
+  lazy val assets           = mock[AssetService]
+  lazy val users            = mock[UserService]
+  lazy val usersStorage     = mock[UsersStorage]
+  lazy val messages         = mock[MessagesService]
+  lazy val messagesStorage  = mock[MessagesStorage]
+  lazy val messagesContent: MessagesContentUpdater = null //mock[MessagesContentUpdater]
+  lazy val members          = mock[MembersStorage]
+  lazy val assetStorage     = mock[AssetsStorage]
+  lazy val convsContent     = mock[ConversationsContentUpdater]
+  lazy val convStorage      = mock[ConversationStorage]
+  lazy val network          = mock[NetworkModeService]
+  lazy val convs            = mock[ConversationsService]
+  lazy val sync             = mock[SyncServiceHandle]
+  lazy val errors           = mock[ErrorsService]
   
-  private def stubService( assets:          AssetService                 = stub[AssetService],
-                           users:           UserService                  = stub[UserService],
-                           usersStorage:    UsersStorage                 = stub[UsersStorage],
-                           messages:        MessagesService              = stub[MessagesService],
-                           messagesStorage: MessagesStorage              = stub[MessagesStorage],
-                           messagesContent: MessagesContentUpdater       = null, //stub[MessagesContentUpdater],
-                           members:         MembersStorage               = stub[MembersStorage],
-                           assetStorage:    AssetsStorage                = null, //stub[AssetsStorage],
-                           convsContent:    ConversationsContentUpdater  = stub[ConversationsContentUpdater],
-                           convStorage:     ConversationStorage          = stub[ConversationStorage],
-                           network:         NetworkModeService           = stub[NetworkModeService],
-                           convs:           ConversationsService         = null, //stub[ConversationsService],
-                           sync:            SyncServiceHandle            = stub[SyncServiceHandle],
-                           tracking:        TrackingService              = stub[TrackingService],
-                           errors:          ErrorsService                = null //stub[ErrorsService]
-  ) = new ConversationsUiServiceImpl(AccountId(),
-    UserId(), None, assets, users, usersStorage, messages, messagesStorage, messagesContent, members,
-    assetStorage, convsContent, convStorage, network, convs, sync, accounts, tracking, errors
-  )
+  private def stubService() = new ConversationsUiServiceImpl(account1Id, None, assets, users, usersStorage, messages,
+    messagesStorage, messagesContent, members, assetStorage, convsContent, convStorage, network, convs, sync, accounts, tracking, errors)
 
   feature("Text messages") {
     scenario("Add text message") {
-      val messages = mock[MessagesService]
+
       val mId = MessageId()
       val msgData = MessageData(mId, conv.id, Message.Type.TEXT, UserId(), MessageData.textContent("test"), protos = Seq(GenericMessage(mId.uid, Text("test", Map.empty, Nil))))
       val syncId = SyncId()
 
       (messages.addTextMessage _).expects(conv.id, "test", Map.empty[UserId, String]).once().returning(Future.successful(msgData))
 
-      val convsContent = mock[ConversationsContentUpdater]
       (convsContent.convById _).expects(conv.id).once().returning(Future.successful(Some(conv)))
       (convsContent.updateConversationLastRead _).expects(conv.id, msgData.time).once().returning(Future.successful(Some((conv, conv))))
 
-      val sync = mock[SyncServiceHandle]
+
       (sync.postMessage _).expects(msgData.id, conv.id, msgData.editTime).once().returning(Future.successful(syncId))
-      val convsUi = stubService(messages = messages, convsContent = convsContent, sync = sync)
+      val convsUi = stubService()
 
       val msg = Await.result(convsUi.sendMessage(conv.id, "test"), 1.second).get
       msg.contentString shouldEqual "test"

@@ -75,14 +75,14 @@ trait PushService {
   def beDrift: Signal[Duration]
 }
 
-class PushServiceImpl(context:              Context,
+class PushServiceImpl(userId:               UserId,
+                      context:              Context,
                       userPrefs:            UserPreferences,
                       prefs:                GlobalPreferences,
                       receivedPushes:       ReceivedPushStorage,
                       notificationStorage:  PushNotificationEventsStorage,
                       client:               PushNotificationsClient,
                       clientId:             ClientId,
-                      accountId:            AccountId,
                       pipeline:             EventPipeline,
                       otrService:           OtrService,
                       webSocket:            WebSocketClientService,
@@ -92,7 +92,7 @@ class PushServiceImpl(context:              Context,
                       sync:                 SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
   import PushService._
 
-  implicit val logTag: LogTag = accountTag[PushServiceImpl](accountId)
+  implicit val logTag: LogTag = accountTag[PushServiceImpl](userId)
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
 
   private val pipelineKey = "pipeline_processing"

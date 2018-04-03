@@ -33,7 +33,7 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class TypingService(accountId:     AccountId,
+class TypingService(userId:        UserId,
                     conversations: ConversationStorage,
                     timeouts:      Timeouts,
                     accounts:      AccountsService,
@@ -56,7 +56,7 @@ class TypingService(accountId:     AccountId,
 
   val typingEventStage = EventScheduler.Stage[TypingEvent]((c, es) => processSequential(es)(handleTypingEvent))
 
-  accounts.accountState(accountId).on(dispatcher) {
+  accounts.accountState(userId).on(dispatcher) {
     case InForeground => // fine
     case _            => stopTyping()
   }

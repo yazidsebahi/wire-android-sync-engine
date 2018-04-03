@@ -22,8 +22,9 @@ import com.waz.utils.events.EventStream
 import com.waz.utils.returning
 import org.scalatest._
 import com.waz.ZLog.ImplicitTag._
+import com.waz.specs.AndroidFreeSpec
 
-@Ignore class RecordingLevelsSpec extends FeatureSpec with Matchers with OptionValues with RobolectricTests {
+class RecordingLevelsSpec extends AndroidFreeSpec with OptionValues {
   scenario("Aggregating recording levels") {
     val stream = EventStream[Float]()
     val levels = returning(new RecordingLevels(stream).windowed(5))(_.disableAutowiring())

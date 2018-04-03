@@ -21,7 +21,7 @@ import java.util.concurrent.{Executors, ThreadFactory, TimeoutException}
 
 import com.waz.ZLog.{LogTag, error}
 import com.waz.log.{InternalLog, SystemLogOutput}
-import com.waz.model.AccountId
+import com.waz.model.UserId
 import com.waz.service.AccountsService.{AccountState, InForeground, LoggedOut}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, ZMessaging}
@@ -44,24 +44,24 @@ abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with B
 
   val clock = AndroidFreeSpec.clock
 
-  val account1Id  = AccountId("account1")
+  val account1Id  = UserId("account1")
   val accounts    = mock[AccountsService]
   val tracking    = mock[TrackingService]
 
-  (tracking.exception(_: Throwable, _: String, _: Option[AccountId])(_: LogTag)).expects(*, *, *, *).anyNumberOfTimes().onCall { (t, description, _, tag) =>
+  (tracking.exception(_: Throwable, _: String, _: Option[UserId])(_: LogTag)).expects(*, *, *, *).anyNumberOfTimes().onCall { (t, description, _, tag) =>
     t match {
       case e: exceptions.TestFailedException => swallowedFailure = Some(e)
       case _ => error(s"Exception sent to HockeyApp: $description", t)(tag)
     }
   }
 
-  val accountStates = Signal[Map[AccountId, AccountState]](Map(account1Id -> InForeground))
+  val accountStates = Signal[Map[UserId, AccountState]](Map(account1Id -> InForeground))
 
-  (accounts.accountState _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
+  (accounts.accountState _).expects(*).anyNumberOfTimes().onCall { id: UserId =>
     accountStates.map(_.getOrElse(id, LoggedOut))
   }
 
-  def updateAccountState(id: AccountId, state: AccountState) =
+  def updateAccountState(id: UserId, state: AccountState) =
     accountStates.mutate(_ + (id -> state))
 
   implicit val accountContext = new AccountContext(account1Id, accounts)

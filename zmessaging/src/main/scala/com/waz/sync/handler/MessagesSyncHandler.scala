@@ -34,7 +34,7 @@ import com.waz.model.sync.ReceiptType
 import com.waz.service.assets._
 import com.waz.service.conversation.{ConversationOrderEventsService, ConversationsContentUpdater}
 import com.waz.service.messages.{MessagesContentUpdater, MessagesService}
-import com.waz.service.otr.OtrServiceImpl
+import com.waz.service.otr.{OtrClientsService, OtrServiceImpl}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{MetaDataService, _}
 import com.waz.sync.client.MessagesClient
@@ -58,6 +58,7 @@ class MessagesSyncHandler(selfUserId: UserId,
                           convEvents: ConversationOrderEventsService,
                           client:     MessagesClient,
                           otr:        OtrServiceImpl,
+                          clients:    OtrClientsService,
                           otrSync:    OtrSyncHandler,
                           convs:      ConversationsContentUpdater,
                           storage:    MessagesStorage,
@@ -214,7 +215,7 @@ class MessagesSyncHandler(selfUserId: UserId,
         messageSent(conv.id, msg, time) map { _ => SyncResult.Success }
       case Left(error@ErrorResponse(Status.Forbidden, _, "unknown-client")) =>
         verbose(s"postOtrMessage($msg), failed: $error")
-        otr.clients.onCurrentClientRemoved() map { _ => SyncResult(error) }
+        clients.onCurrentClientRemoved() map { _ => SyncResult(error) }
       case Left(error@ErrorResponse.Cancelled) =>
         verbose(s"postOtrMessage($msg) cancelled")
         successful(SyncResult(error))

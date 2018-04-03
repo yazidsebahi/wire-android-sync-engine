@@ -17,11 +17,10 @@
  */
 package com.waz.service
 
-import com.waz.ZLog.LogTag
 import com.waz.ZLog.ImplicitTag.implicitLogTag
+import com.waz.ZLog.LogTag
 import com.waz.content.Database
 import com.waz.model._
-import com.waz.service.AccountsService.InForeground
 import com.waz.service.conversation.ConversationsService
 import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.specs.AndroidFreeSpec
@@ -77,9 +76,6 @@ class InvitationServiceSpec extends AndroidFreeSpec{
   private val client        = new InvitationClient(znet)
 
   def getInvitationService: InvitationServiceImpl = {
-    (accounts.accountState _).expects(*).anyNumberOfTimes().onCall { id: AccountId =>
-      accountStates.map(_.getOrElse(id, InForeground))
-    }
     (database.read[Set[ContactId]](_ : (DB) => Set[ContactId])).expects(*).anyNumberOfTimes().returning(Future.successful(Set.empty))
     (database.apply[Unit](_: (DB) => Unit)(_: LogTag)).expects(*, *).anyNumberOfTimes().returning(CancellableFuture.successful(()))
 

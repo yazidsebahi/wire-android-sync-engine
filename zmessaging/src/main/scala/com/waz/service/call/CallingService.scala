@@ -51,10 +51,10 @@ import scala.util.control.NonFatal
 
 class GlobalCallingService() {
 
-  lazy val services: Signal[Set[(AccountId, CallingService)]] = ZMessaging.currentAccounts.zmsInstances.map(_.map(z => z.accountId -> z.calling))
+  lazy val services: Signal[Set[(UserId, CallingService)]] = ZMessaging.currentAccounts.zmsInstances.map(_.map(z => z.selfUserId -> z.calling))
 
   //If there is an active call in one or more of the logged in accounts, returns the account id for the one with the oldest call
-  lazy val activeAccount: Signal[Option[AccountId]] = services.flatMap { ss =>
+  lazy val activeAccount: Signal[Option[UserId]] = services.flatMap { ss =>
     val signals = ss.toSeq.map { case (id, s) =>
       s.currentCall.map {
         case Some(call) => Some((id, call))
@@ -72,7 +72,6 @@ class GlobalCallingService() {
 
 class CallingService(val selfUserId:      UserId,
                      val clientId:        ClientId,
-                     account:             AccountId,
                      context:             Context,
                      avs:                 Avs,
                      convs:               ConversationsContentUpdater,
@@ -104,7 +103,7 @@ class CallingService(val selfUserId:      UserId,
 
   //track call on all state changes - except for when the state becomes None, this will be handled in onClosedCall
   currentCall.map(_.flatMap(_.state)).onChanged {
-    case Some(_) => currentCall.currentValue.flatten.foreach(tracking.trackCallState(account, _))
+    case Some(_) => currentCall.currentValue.flatten.foreach(tracking.trackCallState(selfUserId, _))
     case _ => //
   }
 
@@ -116,9 +115,9 @@ class CallingService(val selfUserId:      UserId,
   }
 
   Option(ZMessaging.currentAccounts).foreach(
-    _.loggedInAccounts.map(_.map(_.id)).map(_.contains(account)) {
+    _.accountsWithManagers.map(_.contains(selfUserId)) {
       case false =>
-        verbose(s"Account $account logged out, unregistering from AVS")
+        verbose(s"Account $selfUserId logged out, unregistering from AVS")
         wCall.map(avs.unregisterAccount)
       case true =>
     }(EventContext.Global)
@@ -126,7 +125,7 @@ class CallingService(val selfUserId:      UserId,
 
   callProfile.onChanged { p =>
     verbose(s"Call profile changed. active call: ${p.activeCall}, non active calls: ${p.nonActiveCalls}")
-    p.activeCall.foreach(i => if (i.state.contains(SelfCalling)) CallWakeService(context, account, i.convId))
+    p.activeCall.foreach(i => if (i.state.contains(SelfCalling)) CallWakeService(context, selfUserId, i.convId))
   }
 
   def onSend(ctx: Pointer, convId: RConvId, userId: UserId, clientId: ClientId, msg: String) = {
@@ -220,7 +219,7 @@ class CallingService(val selfUserId:      UserId,
               warn(s"unexpected call state: ${call.state}")
           }
           //need to track here manually, since the current call will either change or be set to None
-          tracking.trackCallState(account, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
+          tracking.trackCallState(selfUserId, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
           //Switch to any available calls that are still incoming and should ring
           p.nonActiveCalls.filter(_.state.contains(OtherCalling)).sortBy(_.startTime).headOption.map(_.convId)
         case Some(call) =>
@@ -240,7 +239,7 @@ class CallingService(val selfUserId:      UserId,
   }
 
   def onMetricsReady(convId: RConvId, metricsJson: String): Unit =
-    tracking.track(AVSMetricsEvent(metricsJson), Some(account))
+    tracking.track(AVSMetricsEvent(metricsJson), Some(selfUserId))
 
   def onConfigRequest(wcall: WCall): Int = {
     verbose("onConfigRequest")

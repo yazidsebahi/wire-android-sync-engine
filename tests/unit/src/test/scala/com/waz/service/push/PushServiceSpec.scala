@@ -94,7 +94,7 @@ import scala.concurrent.duration._
 
   def EmptyPushNotificationEncoded = PushNotificationEncoded(Uid(), new JSONArray)
 
-  val ws = new WebSocketClient(context, AccountId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
+  val ws = new WebSocketClient(context, UserId(), mock[AsyncClient], Uri.parse(""), mock[AccessTokenProvider]) {
     override lazy val wakeLock: WakeLock = new FakeLock
 
     override def connect(): CancellableFuture[WebSocket] = CancellableFuture.successful(mock[WebSocket])
@@ -336,8 +336,8 @@ import scala.concurrent.duration._
     }
   }
 
-  def getService = new PushServiceImpl(context, userPrefs, prefs, receivedPushes, notificationStorage,
-    client, clientId, account1Id, pipeline, otrService, websocket, network, lifeCycle, tracking, sync)
+  def getService = new PushServiceImpl(account1Id, context, userPrefs, prefs, receivedPushes, notificationStorage,
+    client, clientId, pipeline, otrService, websocket, network, lifeCycle, tracking, sync)
 
   val lastId = Uid("last-id")
   val notJson = s"""

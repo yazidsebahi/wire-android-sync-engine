@@ -20,7 +20,7 @@ package com.waz.utils
 import com.waz.Generators._
 import com.waz.model.Uid
 import com.waz.content.Preferences.Preference.PrefCodec._
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.znet.AuthenticationManager.AccessToken
 import org.scalatest.{FeatureSpec, Ignore, Matchers}
 import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
@@ -42,7 +42,7 @@ import org.threeten.bp.Instant
     }
 
     scenario("token serialization") {
-      forAll { t: Option[Token] => AuthTokenCodec.decode(AuthTokenCodec.encode(t)) shouldEqual t }
+      forAll { t: Option[AccessToken] => AuthTokenCodec.decode(AuthTokenCodec.encode(t)) shouldEqual t }
     }
 
     scenario("instant serialization") {

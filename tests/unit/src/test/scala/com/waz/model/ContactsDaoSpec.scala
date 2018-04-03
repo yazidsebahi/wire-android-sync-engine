@@ -23,11 +23,11 @@ import com.waz.db._
 import com.waz.model.Contact._
 import com.waz.model.UserData.UserDataDao
 import com.waz.service.SearchKey
-import com.waz.utils.wrappers.{DB, DBHelper}
+import com.waz.utils.wrappers.{DB}
 import org.robolectric.Robolectric
 import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
 
-@Ignore class ContactsDaoSpec extends FeatureSpec with Matchers with RobolectricTests {
+class ContactsDaoSpec extends FeatureSpec with Matchers with RobolectricTests {
 
   scenario("Loading contact information") (withDB { implicit db =>
     ContactsDao.insertOrReplace(meep)
@@ -84,7 +84,7 @@ import org.scalatest.{FeatureSpec, Ignore, Matchers, RobolectricTests}
   def contact(name: String) = Contact(ContactId(), name, NameSource.StructuredName, name, SearchKey(name), Set.empty, Set.empty)
 
   def withDB(f: DB => Unit): Unit = {
-    val dbHelper: DBHelper = new ZMessagingDB(Robolectric.application, s"dbName-$randomUUID")
+    val dbHelper = new ZMessagingDB(Robolectric.application, s"dbName-$randomUUID")
     try f(dbHelper.getWritableDatabase) finally dbHelper.close
   }
 }

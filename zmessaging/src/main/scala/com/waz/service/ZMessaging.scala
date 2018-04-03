@@ -37,9 +37,11 @@ import com.waz.service.messages._
 import com.waz.service.otr._
 import com.waz.service.push._
 import com.waz.service.teams.{TeamsService, TeamsServiceImpl}
+import com.waz.sync._
 import com.waz.sync.client._
 import com.waz.sync.handler._
-import com.waz.sync.otr.{OtrSyncHandler, OtrSyncHandlerImpl}
+import com.waz.sync.otr.{OtrClientsSyncHandler, OtrClientsSyncHandlerImpl, OtrSyncHandler, OtrSyncHandlerImpl}
+import com.waz.sync.queue.{SyncContentUpdater, SyncContentUpdaterImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.ui.UiModule
 import com.waz.utils.Locales
@@ -55,29 +57,23 @@ class ZMessagingFactory(global: GlobalModule) {
 
   implicit val tracking = global.trackingService
 
-  def baseStorage(accountId: AccountId) = new StorageModule(global.context, accountId, "", global.prefs)
+  def baseStorage(userId: UserId) = new StorageModule(global.context, userId, global.prefs)
 
-  def auth(accountId: AccountId) = new AuthenticationManager(accountId, global.accountsStorage, global.loginClient, tracking)
+  def auth(userId: UserId) = new AuthenticationManager(userId, global.accountsStorage, global.loginClient, tracking)
 
-  def client(accountId: AccountId, auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
+  def client(auth: AuthenticationManager): ZNetClient = new ZNetClientImpl(Some(auth), global.client, global.backend.baseUrl)
 
-  def usersClient(client: ZNetClient) = new UsersClient(client)
+  def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClientImpl(netClient)
 
-  def teamsClient(client: ZNetClient) = new TeamsClientImpl(client)
+  def cryptobox(userId: UserId, storage: StorageModule) = new CryptoBoxService(global.context, userId, global.metadata, storage.userPrefs)
 
-  def credentialsClient(netClient: ZNetClient) = new CredentialsUpdateClient(netClient)
-
-  def cryptobox(accountId: AccountId, storage: StorageModule) = new CryptoBoxService(global.context, accountId, global.metadata, storage.userPrefs)
-
-  def userModule(userId: UserId, account: AccountManager) = wire[UserModule]
-
-  def zmessaging(teamId: Option[TeamId], clientId: ClientId, userModule: UserModule) = wire[ZMessaging]
+  def zmessaging(teamId: Option[TeamId], clientId: ClientId, accountManager: AccountManager, storage: StorageModule, cryptoBox: CryptoBoxService) = wire[ZMessaging]
 }
 
-class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, globalPreferences: GlobalPreferences) {
-  lazy val db                                         = new ZmsDatabase(accountId, context, dbPrefix)
+class StorageModule(context: Context, val userId: UserId, globalPreferences: GlobalPreferences) {
+  lazy val db                                         = new ZmsDatabase(userId, context)
   lazy val userPrefs                                  = UserPreferences.apply(context, db, globalPreferences)
-  lazy val usersStorage:      UsersStorage        = wire[UsersStorageImpl]
+  lazy val usersStorage:      UsersStorage            = wire[UsersStorageImpl]
   lazy val otrClientsStorage: OtrClientsStorage       = wire[OtrClientsStorageImpl]
   lazy val membersStorage                             = wire[MembersStorageImpl]
   lazy val assetsStorage :    AssetsStorage           = wire[AssetsStorageImpl]
@@ -90,32 +86,31 @@ class StorageModule(context: Context, accountId: AccountId, dbPrefix: String, gl
 }
 
 
-class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userModule: UserModule) {
+class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: AccountManager, val storage: StorageModule, val cryptoBox: CryptoBoxService) {
 
   private implicit val logTag: LogTag = logTagFor[ZMessaging]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZMessaging")
 
-  val account    = userModule.account
   val global     = account.global
-  val selfUserId = userModule.userId
+  val selfUserId = account.userId
 
-  val accountId  = account.id
   val auth       = account.auth
   val zNetClient = account.netClient
-  val storage    = account.storage
   val lifecycle  = global.lifecycle
 
-  lazy val accounts             = ZMessaging.currentAccounts
-  implicit lazy val evContext   = userModule.accountContext
-  lazy val cryptoBox            = account.cryptoBox
-  lazy val sync                 = userModule.sync
-  lazy val syncHandler          = userModule.syncHandler
-  lazy val otrClientsService    = userModule.clientsService
-  lazy val syncContent          = userModule.syncContent
-  lazy val syncRequests         = userModule.syncRequests
-  lazy val otrClientsSync       = userModule.clientsSync
+  lazy val accounts           = ZMessaging.currentAccounts
+  implicit lazy val evContext = account.accountContext
+
+  lazy val sync:              SyncServiceHandle       = wire[AndroidSyncServiceHandle]
+  lazy val syncHandler:       AccountSyncHandler      = new AccountSyncHandler(this)
+  lazy val otrClientsService: OtrClientsService       = wire[OtrClientsService]
+  lazy val syncContent:       SyncContentUpdater      = wire[SyncContentUpdaterImpl]
+  lazy val syncRequests:      SyncRequestService      = wire[SyncRequestServiceImpl]
+  lazy val otrClientsSync:    OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl]
+  lazy val credentialsClient: CredentialsUpdateClientImpl = account.credentialsClient
 
   def context           = global.context
+  def accountStorage    = global.accountsStorage
   def contextWrapper    = new AndroidContext(context)
   def googleApi         = global.googleApi
   def globalToken       = global.tokenService
@@ -132,7 +127,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   def network           = global.network
   def blacklist         = global.blacklist
   def backend           = global.backend
-  def accountsStorage   = global.accountsStorage
+  def accountsStorage   = global.accountsStorageOld
   def teamsStorage      = global.teamsStorage
   def videoTranscoder   = global.videoTranscoder
   def audioTranscader   = global.audioTranscoder
@@ -172,7 +167,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val abClient           = wire[AddressBookClient]
   lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
-  lazy val invitationClient   = wire[InvitationClient]
+  lazy val invitationClient   = account.invitationClient
   lazy val giphyClient        = wire[GiphyClient]
   lazy val userSearchClient   = wire[UserSearchClient]
   lazy val connectionsClient  = wire[ConnectionsClient]
@@ -191,7 +186,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val push: PushService                          = wire[PushServiceImpl]
   lazy val pushToken: PushTokenService                = wire[PushTokenService]
   lazy val errors                                     = wire[ErrorsServiceImpl]
-  lazy val reporting                                  = new ZmsReportingService(accountId, global.reporting)
+  lazy val reporting                                  = new ZmsReportingService(selfUserId, global.reporting)
   lazy val pingInterval: PingIntervalService          = wire[PingIntervalService]
   lazy val websocket: WebSocketClientService          = wire[WebSocketClientServiceImpl]
   lazy val userSearch                                 = wire[UserSearchService]
@@ -230,7 +225,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
   lazy val usersearchSync                             = wire[UserSearchSyncHandler]
   lazy val usersSync                                  = wire[UsersSyncHandler]
   lazy val conversationSync                           = wire[ConversationsSyncHandler]
-  lazy val teamsSync                                  = wire[TeamsSyncHandler]
+  lazy val teamsSync:       TeamsSyncHandler          = wire[TeamsSyncHandlerImpl]
   lazy val connectionsSync                            = wire[ConnectionsSyncHandler]
   lazy val addressbookSync                            = wire[AddressBookSyncHandler]
   lazy val gcmSync                                    = wire[PushTokenSyncHandler]
@@ -316,7 +311,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, val userMod
 
 object ZMessaging { self =>
 
-  def accountTag[A: reflect.Manifest](accountId: AccountId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${accountId.str.take(8)}"
+  def accountTag[A: reflect.Manifest](userId: UserId): LogTag = s"${implicitly[reflect.Manifest[A]].runtimeClass.getSimpleName}#${userId.str.take(8)}"
 
   private implicit val logTag: LogTag = logTagFor(ZMessaging)
 

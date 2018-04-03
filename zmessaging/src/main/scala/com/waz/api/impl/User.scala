@@ -32,10 +32,7 @@ class User(val id: UserId, var data: UserData)(implicit ui: UiModule) extends co
   // XXX: listen to storage directly if no ZMessaging is available
   // this is needed for Self.getUser to work, UI accesses it before zms is fully logged in
   accountLoader { acc =>
-    acc.zmessaging flatMap {
-      case None => acc.storage.usersStorage.signal(id)
-      case Some(zms) => zms.users.userSignal(id)
-    }
+    acc.storage.usersStorage.signal(id)
   } { set }
 
   def set(d: UserData): Unit = {

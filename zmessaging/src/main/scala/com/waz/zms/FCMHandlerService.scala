@@ -61,10 +61,10 @@ class FCMHandlerService extends FirebaseMessagingService with ZMessagingService 
         case Some(glob) if glob.backend.pushSenderId == remoteMessage.getFrom =>
           data.get(UserKey).map(UserId) match {
             case Some(target) =>
-              accounts.loggedInAccounts.head.flatMap { accs =>
-                accs.find(_.userId.exists(_ == target)).map(_.id) match {
+              accounts.accountsWithManagers.head.flatMap { accs =>
+                accs.find(_ == target) match {
                   case Some(acc) =>
-                    accounts.getZMessaging(acc).flatMap {
+                    accounts.getZms(acc).flatMap {
                       case Some(zms) => FCMHandler(zms, data, Instant.ofEpochMilli(remoteMessage.getSentTime))
                       case _ =>
                         warn("Couldn't instantiate zms instance")
@@ -103,11 +103,10 @@ object FCMHandlerService {
 
   val UserKeyMissingMsg = "Notification did not contain user key - discarding"
 
-  class FCMHandler(accountId:      AccountId,
+  class FCMHandler(userId:         UserId,
                    otrService:     OtrService,
                    accounts:       AccountsService,
                    push:           PushService,
-                   self:           UserId,
                    network:        NetworkModeService,
                    receivedPushes: ReceivedPushStorage,
                    convsContent:   ConversationsContentUpdater,
@@ -146,7 +145,7 @@ object FCMHandlerService {
 
     private def addNotificationToProcess(nId: Option[Uid]): Future[Unit] =
       for {
-        false <- accounts.accountState(accountId).map(_ == InForeground).head
+        false <- accounts.accountState(userId).map(_ == InForeground).head
         drift <- push.beDrift.head
         nw    <- network.networkMode.head
         now   = clock.instant + drift
@@ -170,13 +169,13 @@ object FCMHandlerService {
           * online at once. For that reason, we start a job which can run for as long as we need to avoid the app from being
           * killed mid-processing messages.
           */
-        _ <- if (idle) push.syncHistory("fetch from device idle") else Serialized.future("fetch")(Future(FetchJob(accountId)))
+        _ <- if (idle) push.syncHistory("fetch from device idle") else Serialized.future("fetch")(Future(FetchJob(userId)))
       } yield {}
   }
 
   object FCMHandler {
     def apply(zms: ZMessaging, data: Map[String, String], sentTime: Instant): Future[Unit] =
-      new FCMHandler(zms.accountId, zms.otrService, zms.accounts, zms.push, zms.selfUserId, zms.network, zms.receivedPushStorage, zms.convsContent, sentTime).handleMessage(data)
+      new FCMHandler(zms.selfUserId, zms.otrService, zms.accounts, zms.push, zms.network, zms.receivedPushStorage, zms.convsContent, sentTime).handleMessage(data)
   }
 
   val DataKey = "data"

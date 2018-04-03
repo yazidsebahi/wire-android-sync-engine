@@ -23,14 +23,17 @@ import com.waz.ZLog._
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
+import com.waz.model.AccountDataOld.PermissionsMasks
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
+import com.waz.model.otr.ClientId
+import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{Signal, SourceSignal}
 import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
-import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
@@ -44,6 +47,8 @@ trait Preferences {
 
   //protected for test prefs
   protected var cache = Map.empty[PrefKey[_], Preference[_]]
+
+  final def apply[A: PrefCodec](key: PrefKey[A]): Preference[A] = preference(key)
 
   final def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] =
     cache.getOrElse(key, returning(buildPreference(key))(cache += key -> _)).asInstanceOf[Preference[A]]
@@ -69,6 +74,8 @@ object Preferences {
 
     def :=(value: A):      Future[Unit] = update(value)
     def mutate(f: A => A): Future[Unit] = apply().flatMap(cur => update(f(cur)))
+
+    def flatMutate(f: A => Future[A]) = apply().flatMap(cur => f(cur).flatMap(n => update(n)))
 
     lazy val signal: SourceSignal[A] = {
       returning(Signal[A]()) { s =>
@@ -104,9 +111,9 @@ object Preferences {
       implicit lazy val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
       implicit lazy val DurationCodec = apply[Duration](d => String.valueOf(d.toMillis), s => Duration.ofMillis(java.lang.Long.parseLong(s)), Duration.ZERO)
 
-      implicit lazy val AuthTokenCodec = apply[Option[Token]] (
-        { t => optCodec[String].encode(t map Token.Encoder.apply map (_.toString)) },
-        { s => optCodec[String].decode(s) map (new JSONObject(_)) map (Token.Decoder.apply(_)) },
+      implicit lazy val AuthTokenCodec = apply[Option[AccessToken]] (
+        { t => optCodec[String].encode(t map AccessToken.Encoder.apply map (_.toString)) },
+        { s => optCodec[String].decode(s) map (new JSONObject(_)) map (AccessToken.Decoder.apply(_)) },
         None)
       implicit lazy val AuthCookieCodec = apply[Cookie] (_.str, Cookie, Cookie(""))
 
@@ -114,6 +121,22 @@ object Preferences {
 
       //TODO use an enumcodec somehow
       implicit lazy val IntensityLevelCodec = apply[IntensityLevel](_.toString, IntensityLevel.valueOf, IntensityLevel.FULL)
+
+      import com.waz.service.AccountManager.ClientRegistrationState._
+      implicit lazy val SelfClientIdCodec = apply[ClientRegistrationState] ({
+        case Unregistered    => "Unregistered"
+        case PasswordMissing => "PasswordMissing"
+        case LimitReached    => "LimitReached"
+        case Registered(id)  => id.str
+      }, {
+        case "Unregistered"    => Unregistered
+        case "PasswordMissing" => PasswordMissing
+        case "LimitReached"    => LimitReached
+        case id                => Registered(ClientId(id))
+      }, Unregistered)
+
+      implicit lazy val EmailAddressCodec = apply[EmailAddress](_.str, EmailAddress(_), EmailAddress(""))
+      implicit lazy val PhoneNumberCodec = apply[PhoneNumber](_.str, PhoneNumber(_), PhoneNumber(""))
     }
   }
 
@@ -307,8 +330,11 @@ object GlobalPreferences {
     returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
   }
 
-  lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
+  lazy val ActiveAccountPef      = PrefKey[Option[UserId]]("active_account")
+  lazy val CurrentAccountPrefOld = PrefKey[Option[AccountId]]("CurrentUserPref")
+
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
+  lazy val DatabasesRenamed   = PrefKey[Boolean]("databases_renamed", customDefault = false)
 
   lazy val BackendDrift       = PrefKey[Duration]("backend_drift")
 
@@ -343,6 +369,14 @@ object UserPreferences {
 
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
+
+  lazy val SelfClient               = PrefKey[ClientRegistrationState]("self_client")
+  lazy val PrivateMode              = PrefKey[Boolean]("private_mode")
+  lazy val SelfPermissions          = PrefKey[Long]("self_permissions")
+  lazy val CopyPermissions          = PrefKey[Long]("copy_permissions")
+
+  lazy val PendingEmail             = PrefKey[Option[EmailAddress]]("pending_email")
+  lazy val PendingPhone             = PrefKey[Option[PhoneNumber]]("pending_phone")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
   lazy val ShowShareContacts        = PrefKey[Boolean]       ("show_share_contacts", customDefault = true) //whether to ask for permission or not

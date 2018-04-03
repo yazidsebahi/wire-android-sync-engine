@@ -18,6 +18,8 @@
 package com.waz.content
 
 import android.content.Context
+import com.waz.ZLog.verbose
+import com.waz.ZLog.ImplicitTag._
 import com.waz.api.Verification
 import com.waz.model.UserId
 import com.waz.model.otr.{Client, ClientId, UserClients}
@@ -26,16 +28,19 @@ import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.Signal
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
 
+import scala.collection.breakOut
+import scala.collection.immutable.Map
 import scala.concurrent.Future
 
 trait OtrClientsStorage extends CachedStorage[UserId, UserClients] {
   def incomingClientsSignal(userId: UserId, clientId: ClientId): Signal[Seq[Client]]
   def getClients(user: UserId): Future[Seq[Client]]
   def updateVerified(userId: UserId, clientId: ClientId, verified: Boolean): Future[Option[(UserClients, UserClients)]]
+  def updateClients(ucs: Map[UserId, Seq[Client]], replace: Boolean = false): Future[Set[UserClients]]
 
 }
 
-class OtrClientsStorageImpl(context: Context, storage: Database) extends CachedStorageImpl[UserId, UserClients](new TrimmingLruCache(context, Fixed(2000)), storage)(UserClientsDao, "OtrClientsStorage") with OtrClientsStorage {
+class OtrClientsStorageImpl(userId: UserId, context: Context, storage: Database) extends CachedStorageImpl[UserId, UserClients](new TrimmingLruCache(context, Fixed(2000)), storage)(UserClientsDao, "OtrClientsStorage") with OtrClientsStorage {
   import com.waz.threading.Threading.Implicits.Background
 
   override def incomingClientsSignal(userId: UserId, clientId: ClientId) =
@@ -52,4 +57,20 @@ class OtrClientsStorageImpl(context: Context, storage: Database) extends CachedS
       uc.copy(clients = uc.clients + (client.id -> client.copy(verified = if (verified) Verification.VERIFIED else Verification.UNVERIFIED)))
     }
   })
+
+  override def updateClients(ucs: Map[UserId, Seq[Client]], replace: Boolean = false) = {
+
+    def updateOrCreate(user: UserId, clients: Seq[Client]): (Option[UserClients] => UserClients) = {
+      case Some(cs) =>
+        val prev = cs.clients
+        val updated: Map[ClientId, Client] = clients.map { c => c.id -> prev.get(c.id).fold(c)(_.updated(c)) }(breakOut)
+        cs.copy(clients = if (replace) updated else prev ++ updated)
+      case None =>
+        UserClients(user, clients.map(c => c.id -> c)(breakOut))
+    }
+
+    verbose(s"updateClients: $ucs, replace = $replace")
+
+    updateOrCreateAll(ucs.map { case (u, cs) => u -> updateOrCreate(u, cs) } (breakOut))
+  }
 }

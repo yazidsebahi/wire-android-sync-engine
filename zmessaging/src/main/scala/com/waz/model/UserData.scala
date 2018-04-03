@@ -91,25 +91,6 @@ case class UserData(id:                    UserId,
     handle = Some(user.handle)
   )
 
-  def updated(name:           Option[String] = None,
-              email:          Option[EmailAddress] = None,
-              phone:          Option[PhoneNumber] = None,
-              accent:         Option[AccentColor] = None,
-              picture:        Option[AssetId] = None,
-              trackingId:     Option[String] = None,
-              handle:         Option[Handle] = None): UserData = copy(
-    name = name.getOrElse(this.name),
-    email = email.orElse(this.email),
-    phone = phone.orElse(this.phone),
-    accent = accent.fold(this.accent)(_.id),
-    picture = picture.orElse(this.picture),
-    searchKey = SearchKey(name.getOrElse(this.name)),
-    handle = handle match {
-      case Some(h) if !h.toString.isEmpty => Some(h)
-      case _ => this.handle
-    }
-  )
-
   def updated(teamId: Option[TeamId]): UserData = copy(teamId = teamId)
 
   def updateConnectionStatus(status: UserData.ConnectionStatus, time: Option[Date] = None, message: Option[String] = None): UserData = {

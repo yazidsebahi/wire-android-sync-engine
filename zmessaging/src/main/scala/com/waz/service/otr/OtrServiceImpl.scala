@@ -53,7 +53,6 @@ trait OtrService {
   def encryptTargetedMessage(user: UserId, client: ClientId, msg: GenericMessage): Future[Option[OtrClient.EncryptedContent]]
   def deleteClients(userMap: Map[UserId, Seq[ClientId]]): Future[Any]
   def fingerprintSignal(userId: UserId, cId: ClientId): Signal[Option[Array[Byte]]]
-  def clients: OtrClientsService
   def encryptConvMessage(convId: ConvId, msg: GenericMessage, useFakeOnError: Boolean = false,
                          partialResult: EncryptedContent = EncryptedContent.Empty,
                          recipients: Option[Set[UserId]] = None): Future[OtrClient.EncryptedContent]
@@ -69,7 +68,7 @@ trait OtrService {
 
 class OtrServiceImpl(selfUserId:     UserId,
                      clientId:       ClientId,
-                     val clients:    OtrClientsService,
+                     clients:        OtrClientsService,
                      cryptoBox:      CryptoBoxService,
                      members:        MembersStorageImpl,
                      sync:           SyncServiceHandle,

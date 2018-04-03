@@ -23,8 +23,8 @@ import android.os.IBinder
 import android.support.v4.content.WakefulBroadcastReceiver
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.model.AccountId
-import com.waz.service.{AccountManager, ZMessaging}
+import com.waz.model.UserId
+import com.waz.service.ZMessaging
 import com.waz.threading.Threading
 import com.waz.utils.WakeLockImpl
 
@@ -70,10 +70,10 @@ trait ZMessagingService extends Service {
 
   private def accounts = ZMessaging.currentAccounts
 
-  def onAccountIntent[Result](intent: Intent)(execute: AccountManager => Future[Result]): Future[Result] =
+  def onZmsIntent[Result](intent: Intent)(execute: ZMessaging => Future[Result]): Future[Result] =
     if (intent != null && intent.hasExtra(ZmsUserIdExtra)) {
-      val userId = AccountId(intent.getStringExtra(ZmsUserIdExtra))
-      accounts.getAccountManager(userId) flatMap {
+      val userId = UserId(intent.getStringExtra(ZmsUserIdExtra))
+      accounts.getZms(userId) flatMap {
         case Some(acc) => execute(acc)
         case None =>
           error(s"zmessaging not available")
@@ -83,22 +83,12 @@ trait ZMessagingService extends Service {
       error("intent has no ZUserId extra")
       Future.failed(InvalidIntentException)
     }
-
-  def onZmsIntent[Result](intent: Intent)(execute: ZMessaging => Future[Result]): Future[Result] =
-    onAccountIntent(intent) { acc =>
-      acc.getZMessaging flatMap {
-        case Some(zms) => execute(zms)
-        case None =>
-          error(s"zmessaging not available")
-          Future.failed(NoZMessagingException(acc.id))
-      }
-    }
 }
 
 object ZMessagingService {
   val ZmsUserIdExtra = "zms_user_id"
 
   case object InvalidIntentException extends Exception(s"Invalid ZMessagingService intent") with NoStackTrace
-  case class NoZMessagingException(id: AccountId) extends Exception(s"ZMessaging instance not available with id: $id") with NoStackTrace
-  case class NoAccountException(id: AccountId) extends Exception(s"AccountService instance not available with id: $id") with NoStackTrace
+  case class NoZMessagingException(id: UserId) extends Exception(s"ZMessaging instance not available with id: $id") with NoStackTrace
+  case class NoAccountException(id: UserId) extends Exception(s"AccountService instance not available with id: $id") with NoStackTrace
 }

@@ -32,7 +32,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
 
-@Ignore class ZNetClientSimpleSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
+@Ignore
+class ZNetClientSimpleSpec extends FeatureSpecLike with Matchers with BeforeAndAfter with RobolectricTests {
 
   val wireMockPort = 9000 + Random.nextInt(3000)
   val wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig()

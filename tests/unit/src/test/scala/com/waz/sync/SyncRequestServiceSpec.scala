@@ -22,7 +22,7 @@ import java.io.PrintWriter
 import com.waz.ZLog.LogTag
 import com.waz.api.NetworkMode
 import com.waz.api.NetworkMode.UNKNOWN
-import com.waz.content.Database
+import com.waz.content.{Database, UserPreferences}
 import com.waz.model._
 import com.waz.model.sync.{SerialExecutionWithinConversation, SyncJob, SyncRequest}
 import com.waz.service._
@@ -32,6 +32,7 @@ import com.waz.threading.CancellableFuture
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.{Context, DB}
 import com.waz.ZLog.ImplicitTag._
+import com.waz.testutils.TestUserPreferences
 
 import scala.concurrent.Future
 
@@ -44,6 +45,9 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
   val network   = mock[NetworkModeService]
   val sync      = mock[SyncHandler]
   val reporting = mock[ReportingService]
+  val prefs     = new TestUserPreferences {
+    result(this.preference(UserPreferences.ShouldSyncInitial) := false)
+  }
 
   val timeouts = new Timeouts
 
@@ -79,6 +83,6 @@ class SyncRequestServiceSpec extends AndroidFreeSpec {
 
     val content = new SyncContentUpdaterImpl(db)
     val service = new SyncRequestServiceImpl(context, account1Id, content, network, sync, reporting, accounts, tracking)
-    (new AndroidSyncServiceHandle(service, timeouts), service)
+    (new AndroidSyncServiceHandle(service, timeouts, prefs), service)
   }
 }
