@@ -21,12 +21,10 @@ import java.util.Date
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.ImageAssetFactory.getImageAsset
 import com.waz.api.impl.AccentColor
 import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, PendingEmail, ShouldSyncUsers}
 import com.waz.content._
 import com.waz.model.AccountData.Password
-import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
 import com.waz.service.EventScheduler.Stage
@@ -266,11 +264,7 @@ class UserServiceImpl(selfUserId:        UserId,
         case None => UserData(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else ConnectionStatus.Unconnected)
       }
 
-      val selfInfo = users.find(_.id == selfUserId)
-      val newEmail = selfInfo.flatMap(_.email)
-
       for {
-        _   <- if (newEmail.isDefined) userPrefs(PendingEmail) := None else Future.successful({})
         res <- usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
         _   <- res.find(_.id == selfUserId).fold(Future.successful({})) { self =>
           if (self.picture.isDefined) Future.successful({}) else addUnsplashPicture()
@@ -282,11 +276,7 @@ class UserServiceImpl(selfUserId:        UserId,
   override def setEmail(email: EmailAddress, password: Password) = {
     verbose(s"setEmail: $email, password: $password")
     credentialsClient.updateEmail(email).future.flatMap {
-      case Right(_) =>
-        for {
-          _ <- userPrefs(PendingEmail) := Some(email)
-          resp <- credentialsClient.updatePassword(password, None).future
-        } yield resp
+      case Right(_) => credentialsClient.updatePassword(password, None).future
       case Left(e) => Future.successful(Left(e))
     }
   }
