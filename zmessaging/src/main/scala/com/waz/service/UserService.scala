@@ -76,6 +76,7 @@ trait UserService {
   def updateEmail(email: EmailAddress): ErrorOr[Unit]
   def updatePhone(phone: PhoneNumber): ErrorOr[Unit]
   def clearPhone(): ErrorOr[Unit]
+  def setPassword(password: Password): ErrorOr[Unit]
   def changePassword(newPassword: Password, oldPassword: Password): ErrorOr[Unit]
   def updateHandle(handle: Handle): ErrorOr[Unit]
 
@@ -276,7 +277,7 @@ class UserServiceImpl(selfUserId:        UserId,
   override def setEmail(email: EmailAddress, password: Password) = {
     verbose(s"setEmail: $email, password: $password")
     credentialsClient.updateEmail(email).future.flatMap {
-      case Right(_) => credentialsClient.updatePassword(password, None).future
+      case Right(_) => setPassword(password)
       case Left(e) => Future.successful(Left(e))
     }
   }
@@ -301,6 +302,14 @@ class UserServiceImpl(selfUserId:        UserId,
     credentialsClient.updatePassword(newPassword, Some(currentPassword)).future.flatMap {
       case Left(err) => Future.successful(Left(err))
       case Right(_)  => accsStorage.update(selfUserId, _.copy(password = Some(newPassword))).map(_ => Right({}))
+    }
+  }
+
+  override def setPassword(password: Password) = {
+    verbose(s"setPassword: $password")
+    credentialsClient.updatePassword(password, None).future.flatMap {
+      case Left(err) => Future.successful(Left(err))
+      case Right(_)  => accsStorage.update(selfUserId, _.copy(password = Some(password))).map(_ => Right({}))
     }
   }
 
