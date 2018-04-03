@@ -19,8 +19,6 @@ package com.waz.utils.events
 
 import android.app.{Activity, Fragment, Service}
 import android.view.View
-import com.waz.ZLog
-import com.waz.ZLog.ImplicitTag._
 
 trait EventContext {
   private object lock
@@ -74,11 +72,8 @@ trait EventContext {
     }
   }
 
-  def unregister(observer: Subscription): Unit = {
-    ZLog.verbose(s"unregister, observers count: ${observers.size}")
-    lock.synchronized { observers -= observer }
-    ZLog.verbose(s"removed, new count: ${observers.size}")
-  }
+  def unregister(observer: Subscription): Unit =
+    lock.synchronized(observers -= observer)
 
   def isContextStarted: Boolean = lock.synchronized(started && ! destroyed)
 }
