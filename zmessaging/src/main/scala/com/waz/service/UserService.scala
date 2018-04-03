@@ -21,6 +21,7 @@ import java.util.Date
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
+import com.waz.api.ImageAssetFactory.getImageAsset
 import com.waz.api.impl.AccentColor
 import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, PendingEmail}
 import com.waz.content._
@@ -38,6 +39,7 @@ import com.waz.sync.client.UserSearchClient.UserSearchEntry
 import com.waz.sync.client.{CredentialsUpdateClient, UsersClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events._
+import com.waz.utils.wrappers.AndroidURIUtil
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.ZNetClient.ErrorOr
 
@@ -86,7 +88,7 @@ trait UserService {
 }
 
 /**
-  * TODO improve accuracy of sync logic wrt to conencted and unconnected users
+  * TODO improve accuracy of sync logic wrt to connected and unconnected users
   * Currently, we sync all users on full-sync or if, when retrieving them via this class, we detect it's been a while since
   * their last sync. This is both inefficient and incorrect. An improvement would be:
   * 1. Since we get update events for all connected/team users, we don't need to bother syncing them outside of a full-sync.
@@ -121,7 +123,7 @@ class UserServiceImpl(selfUserId:        UserId,
 
   lazy val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
 
-  override val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent]((c, e) => for {
+  override val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent]((_, e) => for {
       _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
     } yield {}
   )
@@ -258,6 +260,9 @@ class UserServiceImpl(selfUserId:        UserId,
       for {
         _   <- if (newEmail.isDefined) userPrefs(PendingEmail) := None else Future.successful({})
         res <- usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
+        _   <- res.find(_.id == selfUserId).fold(Future.successful({})) { self =>
+          if (self.picture.isDefined) Future.successful({}) else updateSelfPicture(getImageAsset(AndroidURIUtil.parse(UnsplashUrl)))
+        }
       } yield res
     }
   }
@@ -339,6 +344,8 @@ class UserServiceImpl(selfUserId:        UserId,
 
 object UserService {
   val DefaultUserName: String = ""
+
+  val UnsplashUrl = "https://source.unsplash.com/800x800/?landscape"
 
   lazy val AcceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
 }
