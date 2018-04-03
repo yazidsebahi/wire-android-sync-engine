@@ -33,6 +33,7 @@ import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{RichOption, Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
+import com.waz.znet.LoginClient
 import com.waz.znet.ZNetClient._
 
 import scala.concurrent.Future
@@ -92,6 +93,8 @@ trait AccountsService {
   def activeAccount:        Signal[Option[AccountData]]
   def activeAccountManager: Signal[Option[AccountManager]]
   def activeZms:            Signal[Option[ZMessaging]]
+
+  def loginClient: LoginClient
 }
 
 object AccountsService {

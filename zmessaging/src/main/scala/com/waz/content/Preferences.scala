@@ -376,6 +376,7 @@ object UserPreferences {
   lazy val CopyPermissions          = PrefKey[Long]("copy_permissions")
 
   lazy val PendingEmail             = PrefKey[Option[EmailAddress]]("pending_email")
+  lazy val PendingPassword          = PrefKey[Boolean]("pending_password") //true if the user needs to set a password
   lazy val PendingPhone             = PrefKey[Option[PhoneNumber]]("pending_phone")
 
   lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")

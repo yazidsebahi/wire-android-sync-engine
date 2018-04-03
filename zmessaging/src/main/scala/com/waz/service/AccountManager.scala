@@ -201,6 +201,13 @@ class AccountManager(val userId:   UserId,
       case None => CancellableFuture.successful(Left(ErrorResponse.internalError("Not a team account")))
     }
 
+  def getSelf: ErrorOr[UserInfo] = {
+    auth.currentToken().flatMap {
+      case Right(token) => accounts.loginClient.getSelfUserInfo(token)
+      case Left(err) => Future.successful(Left(err))
+    }
+  }
+
   private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {
       case Some(cb) => Future.successful(Some(cb))
