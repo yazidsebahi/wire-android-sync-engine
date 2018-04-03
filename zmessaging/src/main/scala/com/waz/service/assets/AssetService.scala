@@ -331,7 +331,6 @@ class AssetServiceImpl(storage:         AssetsStorage,
       }
     } else successful(None)
   }
-
 }
 
 object AssetService {

@@ -90,8 +90,10 @@ object AssetClient {
 
   sealed abstract class Retention(val value: String)
   object Retention {
-    case object Eternal extends Retention("eternal")
+    case object Eternal extends Retention("eternal") //Only used for profile pics currently
+    case object EternalInfrequentAccess extends Retention("eternal-infrequent_access")
     case object Persistent extends Retention("persistent")
+    case object Expiring extends Retention("expiring")
     case object Volatile extends Retention("volatile")
   }
 

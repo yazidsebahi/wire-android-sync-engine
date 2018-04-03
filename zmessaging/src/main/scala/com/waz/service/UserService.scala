@@ -22,7 +22,7 @@ import java.util.Date
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
-import com.waz.content.UserPreferences.LastSlowSyncTimeKey
+import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, ShouldSyncUsers}
 import com.waz.content._
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model._
@@ -91,6 +91,17 @@ class UserServiceImpl(val selfUserId:    UserId,
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
   import userPrefs._
+
+  private val shouldSyncUsers = userPrefs.preference(ShouldSyncUsers)
+
+  for {
+    shouldSync <- shouldSyncUsers()
+  } if (shouldSync) {
+    verbose("Syncing user data to get team ids")
+    usersStorage.list()
+      .flatMap(users => sync.syncUsers(users.map(_.id):_*))
+      .flatMap(_ => shouldSyncUsers := false)
+  }
 
   val selfUser: Signal[UserData] = usersStorage.optSignal(selfUserId) flatMap {
     case Some(data) => Signal.const(data)
@@ -170,7 +181,7 @@ class UserServiceImpl(val selfUserId:    UserId,
     }
   }
 
-  def userSignal(id: UserId): Signal[UserData] =
+  override def userSignal(id: UserId): Signal[UserData] =
     usersStorage.optSignal(id) flatMap {
       case None =>
         sync.syncUsers(id)
@@ -258,7 +269,7 @@ class UserServiceImpl(val selfUserId:    UserId,
   def updateSyncedUsersPictures(users: UserInfo*): Future[_] = assets.updateAssets(users.flatMap(_.picture.getOrElse(Seq.empty[AssetData])))
 
   def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
-    debug(s"update synced users: $users, service: $this")
+    debug(s"update synced users: ${users.size}, service: $this")
     updateSyncedUsersPictures(users: _*) flatMap { _ =>
       def updateOrCreate(info: UserInfo): Option[UserData] => UserData = {
         case Some(user: UserData) => user.updated(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else user.connection)
