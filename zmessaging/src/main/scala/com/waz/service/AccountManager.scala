@@ -17,6 +17,8 @@
  */
 package com.waz.service
 
+import java.util.Locale
+
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
@@ -28,16 +30,19 @@ import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
 import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, PasswordMissing, Registered, Unregistered}
+import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.tracking.LoggedOutEvent
-import com.waz.sync.client.OtrClient
-import com.waz.threading.SerialDispatchQueue
+import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
+import com.waz.sync.client.{InvitationClient, OtrClient}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
 
+import scala.collection.immutable.ListMap
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Right
@@ -75,6 +80,9 @@ class AccountManager(val userId:   UserId,
   val reporting      = global.reporting
   val tracking       = global.trackingService
   val clientsStorage = storage.otrClientsStorage
+
+  val invitationClient = new InvitationClient(netClient)
+  val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
   val zmessaging: Future[ZMessaging] = {
     for {
@@ -177,6 +185,20 @@ class AccountManager(val userId:   UserId,
           case res => Future.successful(res)
         }
       case _ => Future.successful(Left(ErrorResponse.internalError("Client does not belong to current user or was already deleted")))
+    }
+
+  def inviteToTeam(emailAddress: EmailAddress, name: Option[String], locale: Option[Locale] = None): ErrorOrResponse[ConfirmedTeamInvitation] =
+    teamId match {
+      case Some(tid) =>
+        val invitation = TeamInvitation(tid, emailAddress, name.getOrElse(" "), locale)
+        invitationClient.postTeamInvitation(invitation).map {
+          returning(_) { r =>
+            if (r.isRight) invitedToTeam.mutate {
+              _ ++ ListMap(invitation -> Some(r))
+            }
+          }
+        }
+      case None => CancellableFuture.successful(Left(ErrorResponse.internalError("Not a team account")))
     }
 
   private def checkCryptoBox() =

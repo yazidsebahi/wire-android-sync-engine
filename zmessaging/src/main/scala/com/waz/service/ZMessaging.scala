@@ -167,7 +167,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val abClient           = wire[AddressBookClient]
   lazy val gcmClient          = wire[PushTokenClient]
   lazy val typingClient       = wire[TypingClient]
-  lazy val invitationClient   = wire[InvitationClient]
+  lazy val invitationClient   = account.invitationClient
   lazy val giphyClient        = wire[GiphyClient]
   lazy val userSearchClient   = wire[UserSearchClient]
   lazy val connectionsClient  = wire[ConnectionsClient]

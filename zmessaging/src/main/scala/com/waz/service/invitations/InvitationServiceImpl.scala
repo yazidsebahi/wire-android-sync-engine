@@ -63,8 +63,6 @@ class InvitationServiceImpl(storage:       Database,
   private lazy val invitedContactsSource = Signal[Set[ContactId]]()
   def invitedContacts: Signal[Set[ContactId]] = invitedContactsSource
 
-  val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
-
   storage.read { implicit db =>
     returning(InvitedContacts.load)(invited => verbose(s"loaded ${invited.size} previous invitation(s)"))
   } foreach (invitedContactsSource ! _)
@@ -103,17 +101,6 @@ class InvitationServiceImpl(storage:       Database,
         Future.successful(())
     }
 
-  def inviteToTeam(emailAddress: EmailAddress, name: Option[String], locale: Option[Locale] = None): ErrorOrResponse[ConfirmedTeamInvitation] =
-    teamId match {
-      case Some(tid) =>
-        val invitation = TeamInvitation(tid, emailAddress, name.getOrElse(" "), locale)
-        client.postTeamInvitation(invitation).map { returning(_) { r =>
-            if(r.isRight) invitedToTeam.mutate { _ ++ ListMap(invitation -> Some(r)) }
-        }
-      }
-      case None => CancellableFuture.successful(Left(ErrorResponse.internalError("Not a team account")))
-    }
-
   def onInvitationSuccess(inv: Invitation, genesis: Instant): Future[Unit] = {
     verbose(s"invitation of ${inv.id} succeeded at $genesis")
     for {
@@ -141,10 +128,6 @@ class InvitationServiceImpl(storage:       Database,
       _  <- contacts.addContactsOnWire(cs.iterator.map(c => (event.to, c)).to[ArrayBuffer])
       _   = invitedContactsSource mutate (_ -- cs)
     } yield ()
-  }
-
-  def onTeamInvitationResponse(invitation: TeamInvitation, response: Either[ErrorResponse, ConfirmedTeamInvitation]): Unit = {
-    invitedToTeam.mutate { _ ++ Map(invitation -> Some(response)) }
   }
 
   private def similarTo(method: Either[EmailAddress, PhoneNumber]) = storage.read(db => method.fold(EmailAddressesDao.findBy(_)(db), PhoneNumbersDao.findBy(_)(db)))

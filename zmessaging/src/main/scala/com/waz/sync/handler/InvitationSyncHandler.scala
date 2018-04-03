@@ -59,12 +59,4 @@ class InvitationSyncHandler(invitationService: InvitationServiceImpl, userServic
     }
 
   private def shouldRetry(e: ErrorResponse) = (e.code != Status.Created) && (e.code != Status.SeeOther) && ! e.isFatal
-
-  def postTeamInvitations(invitations: Seq[TeamInvitation]): Future[SyncResult] = {
-    CancellableFuture.sequence(invitations.map { i =>
-      client.postTeamInvitation(i).map { response =>
-        invitationService.onTeamInvitationResponse(i, response)
-      }
-    }).map(_ => SyncResult.Success).future
-  }
 }
