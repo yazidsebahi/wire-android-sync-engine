@@ -18,6 +18,7 @@
 package com.waz.model
 
 import android.util.Base64
+import com.waz.model.AssetMetaData.Image.Tag
 import com.waz.utils.wrappers.DBCursor
 //import com.waz.ZLog.ImplicitTag._
 //import com.waz.ZLog.verbose
@@ -167,7 +168,7 @@ object AssetData {
   //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
   def newImageAsset(id: AssetId = AssetId(), tag: Image.Tag) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), tag)))
 
-  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag, uri: URI) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
+  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag = Tag.Medium, uri: URI) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
 
   val Empty = AssetData()
 
