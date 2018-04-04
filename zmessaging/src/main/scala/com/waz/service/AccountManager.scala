@@ -131,7 +131,7 @@ class AccountManager(val userId:   UserId,
 
     //TODO - even if we call this, we'll do a slow sync once we get a client. For now, that's necessary, but maybe we can avoid the
     //unnecessary extra fetch?
-    def getOtherClients: ErrorOr[Unit] = {
+    def getSelfClients: ErrorOr[Unit] = {
       for {
         resp <- otrClient.loadClients().future
         _    <- resp.fold(_ => Future.successful({}), cs => clientsStorage.updateClients(Map(userId -> cs), replace = true))
@@ -154,15 +154,16 @@ class AccountManager(val userId:   UserId,
                 otrClient.postClient(userId, c, lastKey, keys, pw).future.flatMap {
                   case Right(cl) =>
                     for {
-                      _   <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
-                      ucs <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
-                    } yield Right(Registered(cl.id))
+                      _    <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
+                      _    <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
+                      resp <- getSelfClients //TODO - does this make syncing clients in slow sync unecessary?
+                    } yield resp.fold(err => Left(err), _ => Right(Registered(cl.id)))
                   case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
                     verbose(s"client registration not allowed: $error, password missing")
                     Future.successful(Right(PasswordMissing))
                   case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
                     verbose(s"client registration not allowed: $error, loading other clients")
-                    getOtherClients.map {
+                    getSelfClients.map {
                       case Right(_) => Right(LimitReached)
                       case Left(err) => Left(err)
                     }
@@ -235,6 +236,7 @@ class AccountManager(val userId:   UserId,
     }
   }
 
+  //TODO should only have one request at a time?
   def checkEmailActivation(email: EmailAddress): ErrorOrResponse[Unit] = {
     verbose("checkEmailActivation")
     CancellableFuture.lift(getSelf).flatMap {
