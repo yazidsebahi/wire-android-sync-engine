@@ -23,12 +23,13 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
+import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.UserPreferences
-import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
+import com.waz.content.UserPreferences.{ClientRegVersion, PendingEmail, SelfClient}
 import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
-import com.waz.service.AccountManager.ClientRegistrationState
+import com.waz.service.AccountManager.{ActivationThrottling, ClientRegistrationState}
 import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, PasswordMissing, Registered, Unregistered}
 import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.service.otr.OtrService.sessionId
@@ -148,7 +149,7 @@ class AccountManager(val userId:   UserId,
             pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
             client   <- cryptoBox.createClient()
             resp <- client match {
-              case None => Future.successful(Left(ErrorResponse.internalError("CryptoBox missing")))
+              case None => Future.successful(Left(internalError("CryptoBox missing")))
               case Some((c, lastKey, keys)) =>
                 otrClient.postClient(userId, c, lastKey, keys, pw).future.flatMap {
                   case Right(cl) =>
@@ -184,7 +185,7 @@ class AccountManager(val userId:   UserId,
           } yield Right(())
           case res => Future.successful(res)
         }
-      case _ => Future.successful(Left(ErrorResponse.internalError("Client does not belong to current user or was already deleted")))
+      case _ => Future.successful(Left(internalError("Client does not belong to current user or was already deleted")))
     }
 
   def inviteToTeam(emailAddress: EmailAddress, name: Option[String], locale: Option[Locale] = None): ErrorOrResponse[ConfirmedTeamInvitation] =
@@ -198,7 +199,7 @@ class AccountManager(val userId:   UserId,
             }
           }
         }
-      case None => CancellableFuture.successful(Left(ErrorResponse.internalError("Not a team account")))
+      case None => CancellableFuture.successful(Left(internalError("Not a team account")))
     }
 
   def getSelf: ErrorOr[UserInfo] = {
@@ -231,6 +232,15 @@ class AccountManager(val userId:   UserId,
     credentialsClient.updatePassword(password, None).future.flatMap {
       case Left(err) => Future.successful(Left(err))
       case Right(_) => global.accountsStorage.update(userId, _.copy(password = Some(password))).map(_ => Right({}))
+    }
+  }
+
+  def checkEmailActivation(email: EmailAddress): ErrorOrResponse[Unit] = {
+    verbose("checkEmailActivation")
+    CancellableFuture.lift(getSelf).flatMap {
+      case Right(user) if !user.email.contains(email) => CancellableFuture.delay(3.seconds).flatMap(_ => checkEmailActivation(email))
+      case Right(_)                                   => CancellableFuture.successful(Right({}))
+      case Left(err)                                  => CancellableFuture.successful(Left(err))
     }
   }
 }
