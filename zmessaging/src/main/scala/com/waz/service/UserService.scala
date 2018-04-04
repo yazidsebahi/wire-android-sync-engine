@@ -265,12 +265,10 @@ class UserServiceImpl(selfUserId:        UserId,
         case None => UserData(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else ConnectionStatus.Unconnected)
       }
 
-      for {
-        res <- usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
-        _   <- res.find(_.id == selfUserId).fold(Future.successful({})) { self =>
-          if (self.picture.isDefined) Future.successful({}) else addUnsplashPicture()
-        }
-      } yield res
+      usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut)).map { res =>
+        res.find(_.id == selfUserId).fold(Future.successful({}))(self => if (self.picture.isDefined) Future.successful({}) else addUnsplashPicture())
+        res
+      }
     }
   }
 
