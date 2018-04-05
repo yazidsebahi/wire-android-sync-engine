@@ -140,8 +140,10 @@ class UserServiceImpl(selfUserId:        UserId,
   )
 
   override val userDeleteEventsStage: Stage.Atomic = EventScheduler.Stage[UserDeleteEvent] { (c, e) =>
-    //TODO handle self user deletion event
-    usersStorage.updateAll2(e.map(_.user)(breakOut), _.copy(deleted = true))
+    //TODO handle deleting db and stuff?
+    Future.sequence(e.map(event => accounts.logout(event.user))).flatMap { _ =>
+      usersStorage.updateAll2(e.map(_.user)(breakOut), _.copy(deleted = true))
+    }
   }
 
   //Update user data for other accounts
