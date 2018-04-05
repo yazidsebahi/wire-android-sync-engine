@@ -22,10 +22,12 @@ import java.util.TimerTask
 import com.waz.ZLog._
 import com.waz.service.tracking.TrackingService.NoReporting
 import com.waz.utils.LoggedTry
+import com.waz.utils.events.{BaseSubscription, EventContext}
 
 import scala.collection.generic.CanBuild
 import scala.concurrent._
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.ref.WeakReference
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success, Try}
 
@@ -156,6 +158,22 @@ class CancellableFuture[+A](promise: Promise[A]) extends Awaitable[A] { self =>
     onComplete(_ => f.cancel()(tag))
     this
   }
+
+  //TODO: think on this possibility
+  def withAutoCanceling(implicit eventContext: EventContext): Unit = {
+    eventContext.register(new BaseSubscription(WeakReference(eventContext)) {
+      import com.waz.ZLog.ImplicitTag._
+      override def onUnsubscribe(): Unit = {
+        verbose("Cancel this future.")
+        cancel()
+        eventContext.unregister(this)
+      }
+      override def onSubscribe(): Unit = {
+        verbose("We are must never reached this point!")
+      }
+    })
+  }
+
 }
 
 object CancellableFuture {
