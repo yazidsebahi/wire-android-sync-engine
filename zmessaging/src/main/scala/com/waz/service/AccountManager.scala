@@ -238,7 +238,7 @@ class AccountManager(val userId:   UserId,
 
   //TODO should only have one request at a time?
   def checkEmailActivation(email: EmailAddress): ErrorOrResponse[Unit] = {
-    verbose("checkEmailActivation")
+    verbose(s"checkEmailActivation $email")
     CancellableFuture.lift(getSelf).flatMap {
       case Right(user) if !user.email.contains(email) => CancellableFuture.delay(3.seconds).flatMap(_ => checkEmailActivation(email))
       case Right(_)                                   => CancellableFuture.successful(Right({}))
