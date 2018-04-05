@@ -306,7 +306,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       case Some(id) =>
         activeAccountId.head.flatMap {
           case Some(cur) if cur == id => Future.successful({})
-          case Some(_)   => accountManagers.head.map(_.find(_.userId == userId)).flatMap {
+          case Some(_)   => accountManagers.head.map(_.find(_.userId == id)).flatMap {
             case Some(_) => activeAccountPref := Some(id)
             case _ =>
               warn(s"Tried to set active user who is not logged in: $userId, not changing account")
