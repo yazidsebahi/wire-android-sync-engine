@@ -413,7 +413,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
               case Right(access) => getTeam(access).flatMap {
                 case Right(tId) =>
                   storage
-                    .flatMap(_.insert(AccountData(user.id, tId, cookie, token, password = credentials.maybePassword)))
+                    .flatMap(_.insert(AccountData(user.id, tId, cookie, Some(access), password = credentials.maybePassword)))
                     .map(_ => Right({}))
                 case Left(err) => Future.successful(Left(err))
               }

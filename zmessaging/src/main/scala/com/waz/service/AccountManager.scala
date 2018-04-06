@@ -24,14 +24,12 @@ import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
-import com.waz.content.UserPreferences
-import com.waz.content.UserPreferences.{ClientRegVersion, PendingEmail, SelfClient}
+import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
 import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
-import com.waz.service.AccountManager.{ActivationThrottling, ClientRegistrationState}
+import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, PasswordMissing, Registered, Unregistered}
-import com.waz.service.invitations.InvitationServiceImpl
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
@@ -127,7 +125,8 @@ class AccountManager(val userId:   UserId,
           cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
 
-  def registerClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
+  def getOrRegisterClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
+    verbose(s"registerClient: pw: $password")
 
     //TODO - even if we call this, we'll do a slow sync once we get a client. For now, that's necessary, but maybe we can avoid the
     //unnecessary extra fetch?
@@ -138,7 +137,6 @@ class AccountManager(val userId:   UserId,
       } yield resp.fold(err => Left(err), _ => Right({}))
     }
 
-    verbose(s"registerClient: pw: $password")
     Serialized.future("register-client", this) {
       clientState.head.flatMap {
         case st@Registered(_) =>
@@ -146,38 +144,37 @@ class AccountManager(val userId:   UserId,
           Future.successful(Right(st))
         case _ =>
           for {
-            pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
-            client   <- cryptoBox.createClient()
-            resp <- client match {
-              case None => Future.successful(Left(internalError("CryptoBox missing")))
-              case Some((c, lastKey, keys)) =>
-                otrClient.postClient(userId, c, lastKey, keys, pw).future.flatMap {
-                  case Right(cl) =>
-                    for {
-                      _    <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
-                      _    <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
-                      resp <- getSelfClients //TODO - does this make syncing clients in slow sync unecessary?
-                    } yield resp.fold(err => Left(err), _ => Right(Registered(cl.id)))
-                  case Left(error@ErrorResponse(Status.Forbidden, _, "missing-auth")) =>
-                    verbose(s"client registration not allowed: $error, password missing")
-                    Future.successful(Right(PasswordMissing))
-                  case Left(error@ErrorResponse(Status.Forbidden, _, "too-many-clients")) =>
-                    verbose(s"client registration not allowed: $error, loading other clients")
-                    getSelfClients.map {
-                      case Right(_) => Right(LimitReached)
-                      case Left(err) => Left(err)
-                    }
-                  case Left(error) =>
-                    Future.successful(Left(error))
-                }
-            }
-            _ <- resp.fold(_ => Future.successful({}), userPrefs(SelfClient) := _)
-          } yield resp
+            resp1 <- getSelfClients
+            resp2 <- resp1.fold(e => Future.successful(Left(e)), _ => registerNewClient(password))
+            _ <- resp2.fold(_ => Future.successful({}), userPrefs(SelfClient) := _)
+          } yield resp2
       }
     }
   }
 
-  def deleteClient(id: ClientId, password: Password) =
+  //Note: this method should only be externally called from tests and debug preferences. User `registerClient` for all normal flows.
+  def registerNewClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
+    for {
+      pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
+      client   <- cryptoBox.createClient()
+      resp <- client match {
+        case None => Future.successful(Left(internalError("CryptoBox missing")))
+        case Some((c, lastKey, keys)) =>
+          otrClient.postClient(userId, c, lastKey, keys, pw).future.flatMap {
+            case Right(cl) =>
+              for {
+                _    <- userPrefs(ClientRegVersion) := ZmsVersion.ZMS_MAJOR_VERSION
+                _    <- clientsStorage.updateClients(Map(userId -> Seq(c.copy(id = cl.id).updated(cl))))
+              } yield Right(Registered(cl.id))
+            case Left(ErrorResponse(Status.Forbidden, _, "missing-auth"))     => Future.successful(Right(PasswordMissing))
+            case Left(ErrorResponse(Status.Forbidden, _, "too-many-clients")) => Future.successful(Right(LimitReached))
+            case Left(error)                                                  => Future.successful(Left(error))
+          }
+      }
+    } yield resp
+  }
+
+  def deleteClient(id: ClientId, password: Password): ErrorOr[Unit] =
     clientsStorage.get(userId).flatMap {
       case Some(cs) if cs.clients.contains(id) =>
         otrClient.deleteClient(id, password).future.flatMap {

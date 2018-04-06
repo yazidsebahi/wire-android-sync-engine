@@ -20,14 +20,12 @@ package com.waz.znet
 import com.koushikdutta.async.http.AsyncHttpRequest
 import com.waz.ZLog._
 import com.waz.api.impl.ErrorResponse
-import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.AccountStorage
 import com.waz.model.{AccountData, UserId}
 import com.waz.service.ZMessaging.{accountTag, clock}
 import com.waz.service.tracking.TrackingService
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.JsonEncoder.encodeInstant
-import com.waz.utils.events.EventStream
 import com.waz.utils.{JsonDecoder, JsonEncoder, _}
 import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.LoginClient.LoginResult

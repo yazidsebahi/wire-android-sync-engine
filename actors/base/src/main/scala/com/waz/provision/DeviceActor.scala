@@ -188,7 +188,7 @@ class DeviceActor(val deviceName: String,
       case Right(userId) => accountsService.enterAccount(userId, None).map(am => Right(am))
       case Left(err)     => Future.successful(Left(err))
     }.flatMap {
-      case Right(Some(am)) => am.registerClient().map(_.fold(e => Left(e), s => Right((am, s))))
+      case Right(Some(am)) => am.getOrRegisterClient().map(_.fold(e => Left(e), s => Right((am, s))))
       case Right(None)     => Future.successful(Left(impl.ErrorResponse.internalError("Failed to create account manager")))
       case Left(e)         => Future.successful(Left(e))
     }.map {
