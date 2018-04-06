@@ -51,7 +51,7 @@ class ZGlobalDB(context: Context, dbNameSuffix: String = "")
 
 object ZGlobalDB {
   val DbName = "ZGlobal.db"
-  val DbVersion = 21
+  val DbVersion = 22
 
   lazy val daos = Seq(AccountDataDao, CacheEntryDao, TeamDataDoa)
 
@@ -84,6 +84,9 @@ object ZGlobalDB {
       },
       Migration(20, 21) { db =>
         db.execSQL("ALTER TABLE Accounts ADD COLUMN pending_team_name TEXT DEFAULT NULL")
+      },
+      Migration(21, 22) { db =>
+        db.execSQL("CREATE TABLE IF NOT EXISTS ActiveAccounts (_id TEXT PRIMARY KEY, team_id TEXT, cookie TEXT NOT NULL, access_token TEXT, registered_push TEXT)")
       }
     )
 

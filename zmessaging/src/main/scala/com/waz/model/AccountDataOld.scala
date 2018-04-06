@@ -84,7 +84,7 @@ object AccountData {
   implicit object AccountDataDao extends Dao[AccountData, UserId] {
     val Id = id[UserId]('_id, "PRIMARY KEY").apply(_.id)
 
-    val TeamId         = opt(id[TeamId]('user_id)).apply(_.teamId)
+    val TeamId         = opt(id[TeamId]('team_id)).apply(_.teamId)
     val Cookie         = text[Cookie]('cookie, _.str, AuthenticationManager.Cookie)(_.cookie)
     val Token          = opt(text[AccessToken]('access_token, JsonEncoder.encodeString[AccessToken], JsonDecoder.decode[AccessToken]))(_.accessToken)
     val RegisteredPush = opt(id[PushToken]('registered_push))(_.pushToken)
@@ -110,7 +110,7 @@ case class AccountDataOld(id:              AccountId                       = Acc
                           pendingPhone:    Option[PhoneNumber]             = None,
                           cookie:          Option[Cookie]                  = None,
                           password:        Option[String]                  = None,
-                          accessToken:     Option[AccessToken]                   = None,
+                          accessToken:     Option[AccessToken]             = None,
                           userId:          Option[UserId]                  = None,
                           clientId:        Option[ClientId]                = None, //DEPRECATED! use the client id (state) stored in userpreferences instead
                           clientRegState:  String                          = "UNKNOWN", //DEPRECATED! use the client id (state) stored in userpreferences instead
