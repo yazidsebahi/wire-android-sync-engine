@@ -19,7 +19,7 @@ package com.waz.service
 
 import java.io._
 import java.util.Locale
-import java.util.zip.ZipOutputStream
+import java.util.zip.{ZipException, ZipOutputStream}
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -213,29 +213,57 @@ class AccountManager(val userId:   UserId,
     }
   }
 
-  def exportDatabase: Future[File] = (for {
-    zms <- zmessaging
-    user <- zms.users.selfUser.head
-  } yield user.handle.map(_.string).getOrElse("")).map { handle =>
-    returning(new File(context.getExternalCacheDir, s"Wire-$handle-Backup_${Instant.now().toString}.Android_wbu")) { zipFile =>
-      zipFile.deleteOnExit()
+  // The current solution writes the database file(s) directly to the newly created zip file.
+  // This way we save memory, but it means that it takes longer before we can release the lock.
+  // If this becomes the problem, we might consider first copying the database file(s) to the
+  // external storage directory, release the lock, and then safely proceed with zipping them.
+  def exportDatabase: Future[Either[DatabaseBackupError, File]] = {
 
+    def handle: Future[String] = for {
+      zms  <- zmessaging
+      user <- zms.users.selfUser.head
+    } yield user.handle.fold("")(_.string)
+
+    def zipDatabase(zipFile: File): Option[DatabaseBackupError] = try {
       withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
+        val dbFile = context.getDatabasePath(userId.str)
         withResource(
-          new BufferedInputStream(new FileInputStream(context.getDatabasePath(userId.str)))
+          new BufferedInputStream(new FileInputStream(dbFile))
         ) {
-          IoUtils.writeZipEntry(_, zip, s"${userId.str}.db")
+          IoUtils.writeZipEntry(_, zip, s"${userId.str}")
         }
+
+        val walFile = new File(dbFile.getAbsolutePath + "-wal")
+        verbose(s"WAL file: ${walFile.getAbsolutePath} exists: ${walFile.exists}, length: ${if (walFile.exists) walFile.length else 0}")
+
+        if (walFile.exists)
+          withResource(
+            new BufferedInputStream(new FileInputStream(walFile))
+          ) {
+            IoUtils.writeZipEntry(_, zip, s"${userId.str}-wal")
+          }
 
         withResource(
           new ByteArrayInputStream(BackupMetadataEncoder(BackupMetadata(userId)).toString.getBytes("utf8"))
         ) {
           IoUtils.writeZipEntry(_, zip, "export.json")
         }
-      }
 
-      verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
+        verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
+        None
+      }
+    } catch {
+      case ex: ZipException => Some(ZipError(ex.getMessage))
+      case ex: IOException  => Some(IOError(ex.getMessage))
+      case ex: Throwable    => Some(OtherError(ex.getMessage))
     }
+
+    for {
+      h    <- handle
+      file = returning(new File(context.getExternalCacheDir, s"Wire-$h-Backup_${Instant.now().toString}.Android_wbu")) { _.deleteOnExit() }
+      res  <- db(_ => zipDatabase(file))
+    } yield res.fold[Either[DatabaseBackupError, File]](Right(file))(Left(_))
+
   }
 
   private def checkCryptoBox() =
@@ -321,4 +349,11 @@ object AccountManager {
       )
     }
   }
+
+  sealed trait DatabaseBackupError { def msg: String }
+
+  case class ZipError  (override val msg: String) extends DatabaseBackupError
+  case class IOError   (override val msg: String) extends DatabaseBackupError
+  case class OtherError(override val msg: String) extends DatabaseBackupError
+
 }
