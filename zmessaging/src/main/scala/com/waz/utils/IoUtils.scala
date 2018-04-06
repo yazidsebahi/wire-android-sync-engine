@@ -133,6 +133,8 @@ object IoUtils {
 
   def withResource[I : Resource, O](in: I)(op: I => O): O = try op(in) finally implicitly[Resource[I]].close(in)
   def withResource[I <: Closeable, O](in: I)(op: I => O): O = try op(in) finally in.close()
+  def withResources[I1 <: Closeable, I2 <: Closeable, O](in1: I1, in2: I2)(op: (I1, I2) => O): O =
+    withResource(in1) { res1 => withResource(in2) { res2 => op(res1, res2) } }
 
   def counting[A](o: => OutputStream)(op: OutputStream => A): (Long, A) = {
     var written = 0L

@@ -22,6 +22,19 @@ import org.json.{JSONArray, JSONObject}
 
 object Json {
 
+  object syntax {
+
+    def decode[T](str: String)(implicit decoder: JsonDecoder[T]): T = decode(new JSONObject(str))
+
+    def decode[T](json: JSONObject)(implicit decoder: JsonDecoder[T]): T = decoder(json)
+
+    implicit class Encodable[T](value: T) {
+      def toJson(implicit encoder: JsonEncoder[T]): JSONObject = encoder(value)
+      def toJsonString(implicit encoder: JsonEncoder[T]): String = toJson.toString
+    }
+
+  }
+
   // TODO: re-implement as macro for typesafety and performance
   def apply(entries: (String, Any)*): JSONObject = apply(entries.toMap)
 
