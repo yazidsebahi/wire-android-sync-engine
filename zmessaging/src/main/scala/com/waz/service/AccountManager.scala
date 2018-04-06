@@ -17,7 +17,9 @@
  */
 package com.waz.service
 
+import java.io._
 import java.util.Locale
+import java.util.zip.ZipOutputStream
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
@@ -25,21 +27,24 @@ import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
+import com.waz.db.ZMessagingDB
 import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
-import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, PasswordMissing, Registered, Unregistered}
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
 import com.waz.sync.client.{InvitationClient, OtrClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
+import com.waz.utils.IoUtils.withResource
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
+import org.json.JSONObject
+import org.threeten.bp.Instant
 
 import scala.collection.immutable.ListMap
 import scala.concurrent.Future
@@ -50,6 +55,7 @@ class AccountManager(val userId:   UserId,
                      val teamId:   Option[TeamId],
                      val global:   GlobalModule,
                      val accounts: AccountsService) {
+  import AccountManager._
 
   implicit val dispatcher = new SerialDispatchQueue()
   implicit val accountContext: AccountContext = new AccountContext(userId, accounts)
@@ -207,6 +213,31 @@ class AccountManager(val userId:   UserId,
     }
   }
 
+  def exportDatabase: Future[File] = (for {
+    zms <- zmessaging
+    user <- zms.users.selfUser.head
+  } yield user.handle.map(_.string).getOrElse("")).map { handle =>
+    returning(new File(context.getExternalCacheDir, s"Wire-$handle-Backup_${Instant.now().toString}.Android_wbu")) { zipFile =>
+      zipFile.deleteOnExit()
+
+      withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
+        withResource(
+          new BufferedInputStream(new FileInputStream(context.getDatabasePath(userId.str)))
+        ) {
+          IoUtils.writeZipEntry(_, zip, s"${userId.str}.db")
+        }
+
+        withResource(
+          new ByteArrayInputStream(BackupMetadataEncoder(BackupMetadata(userId)).toString.getBytes("utf8"))
+        ) {
+          IoUtils.writeZipEntry(_, zip, "export.json")
+        }
+      }
+
+      verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
+    }
+  }
+
   private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {
       case Some(cb) => Future.successful(Some(cb))
@@ -260,4 +291,34 @@ object AccountManager {
   }
 
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
+
+  case class BackupMetadata(userId: UserId,
+                            version: String = ZMessagingDB.DbVersion.toString,
+                            clientId: Option[ClientId] = None,
+                            creationTime: Instant = Instant.now(),
+                            platform: String = "Android")
+
+  lazy val BackupMetadataEncoder: JsonEncoder[BackupMetadata] = new JsonEncoder[BackupMetadata] {
+    override def apply(data: BackupMetadata): JSONObject = JsonEncoder { o =>
+      o.put("user_id",        data.userId.str)
+      o.put("version",        data.version)
+
+      data.clientId.foreach { id => o.put("client_id", id.str) }
+      o.put("creation_time",  JsonEncoder.encodeISOInstant(data.creationTime))
+      o.put("platform",       data.platform)
+    }
+  }
+
+  lazy val BackupMetadataDecoder: JsonDecoder[BackupMetadata] = new JsonDecoder[BackupMetadata] {
+    import JsonDecoder._
+    override def apply(implicit js: JSONObject): BackupMetadata = {
+      BackupMetadata(
+        decodeUserId('user_id),
+        'version,
+        decodeOptClientId('client_id),
+        JsonDecoder.decodeISOInstant('creation_time),
+        'platform
+      )
+    }
+  }
 }

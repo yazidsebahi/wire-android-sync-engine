@@ -20,11 +20,12 @@ package com.waz.utils
 import java.io._
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.zip.GZIPOutputStream
+import java.util.zip.{GZIPOutputStream, ZipEntry, ZipOutputStream}
 
 import com.waz.ZLog._
 import com.waz.threading.CancellableFuture
 
+import scala.annotation.tailrec
 import scala.collection.Iterator.continually
 import scala.concurrent.{ExecutionContext, Promise}
 import scala.util.control.NonFatal
@@ -80,6 +81,22 @@ object IoUtils {
     new CancellableFuture(promise) {
       override def cancel()(implicit tag: LogTag): Boolean = cancelled.compareAndSet(false, true)
     }
+  }
+
+  // this method assumes that both streams will be properly closed outside
+  @tailrec
+  def write(in: InputStream, out: OutputStream, buff: Array[Byte] = buffer.get()): Unit =
+    in.read(buff, 0, buff.length) match {
+      case len if len > 0 =>
+        out.write(buff, 0, len)
+        write(in, out, buff)
+      case _ =>
+    }
+
+  def writeZipEntry(in: InputStream, zip: ZipOutputStream, entryName: String): Unit = {
+    zip.putNextEntry(new ZipEntry(entryName))
+    write(in, zip)
+    zip.closeEntry()
   }
 
   def toByteArray(in: InputStream) = {
