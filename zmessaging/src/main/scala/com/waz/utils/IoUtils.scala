@@ -20,7 +20,7 @@ package com.waz.utils
 import java.io._
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.zip.{GZIPOutputStream, ZipEntry, ZipOutputStream}
+import java.util.zip.{GZIPOutputStream, ZipEntry, ZipInputStream, ZipOutputStream}
 
 import com.waz.ZLog._
 import com.waz.threading.CancellableFuture
