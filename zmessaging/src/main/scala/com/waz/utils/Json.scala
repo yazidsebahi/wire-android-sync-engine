@@ -20,13 +20,19 @@ package com.waz.utils
 import org.json
 import org.json.{JSONArray, JSONObject}
 
+import scala.util.Try
+
 object Json {
 
   object syntax {
 
-    def decode[T](str: String)(implicit decoder: JsonDecoder[T]): T = decode(new JSONObject(str))
+    def decode[T](json: JSONObject)(implicit decoder: JsonDecoder[T]): Try[T] = Try(decoder(json))
 
-    def decode[T](json: JSONObject)(implicit decoder: JsonDecoder[T]): T = decoder(json)
+    def decode[T](str: String)(implicit decoder: JsonDecoder[T]): Try[T] = Try(new JSONObject(str)).flatMap((o: JSONObject) => decode(o))
+
+    def decodeUnsafe[T](json: JSONObject)(implicit decoder: JsonDecoder[T]): T = decode(json).get
+
+    def decodeUnsafe[T](str: String)(implicit decoder: JsonDecoder[T]): T = decodeUnsafe(new JSONObject(str))
 
     implicit class Encodable[T](value: T) {
       def toJson(implicit encoder: JsonEncoder[T]): JSONObject = encoder(value)

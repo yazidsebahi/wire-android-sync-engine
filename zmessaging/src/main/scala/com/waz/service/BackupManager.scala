@@ -25,6 +25,7 @@ import com.waz.ZLog.verbose
 import com.waz.db.ZMessagingDB
 import com.waz.model.UserId
 import com.waz.model.otr.ClientId
+import com.waz.service.BackupManager.InvalidBackup.{DbEntryNotFound, MetadataEntryNotFound}
 import com.waz.utils.IoUtils.withResource
 import com.waz.utils.Json.syntax._
 import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, returning}
@@ -33,16 +34,37 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
+import scala.util.Failure
 
 object BackupManager {
 
+  sealed trait Error extends IllegalArgumentException
+
+  sealed trait InvalidBackup extends Error
+  object InvalidBackup {
+    case object DbEntryNotFound extends InvalidBackup
+    case object MetadataEntryNotFound extends InvalidBackup
+  }
+
+  sealed trait InvalidMetadata extends Error
+  object InvalidMetadata {
+    case class WrongFormat(cause: Throwable) extends InvalidMetadata
+    case object UserId extends InvalidMetadata
+    case object DbVersion extends InvalidMetadata
+    case object Platform extends InvalidMetadata
+  }
+
   case class BackupMetadata(userId: UserId,
-                            version: String = ZMessagingDB.DbVersion.toString,
+                            version: Int = BackupMetadata.currentDbVersion,
                             clientId: Option[ClientId] = None,
                             creationTime: Instant = Instant.now(),
-                            platform: String = "Android")
+                            platform: String = BackupMetadata.currentPlatform)
 
   object BackupMetadata {
+
+    def currentPlatform: String = "Android"
+    def currentDbVersion: Int = ZMessagingDB.DbVersion
+
     implicit def backupMetadataEncoder: JsonEncoder[BackupMetadata] = new JsonEncoder[BackupMetadata] {
       override def apply(data: BackupMetadata): JSONObject = JsonEncoder { o =>
         o.put("user_id", data.userId.str)
@@ -106,38 +128,33 @@ object BackupManager {
     }
   }
 
-  def importDatabase(userId: UserId, exportFile: File, targetDirectory: File)(implicit ec: ExecutionContext): Future[File] = Future {
-    withResource(new ZipFile(exportFile)) { zip =>
-      val metadataEntry = Option(zip.getEntry(exportMetadataFileName)).getOrElse {
-        throw new IllegalArgumentException(s"Cannot find metadata zip entry.")
-      }
+  def importDatabase(userId: UserId, exportFile: File, targetDirectory: File, currentDbVersion: Int = BackupMetadata.currentDbVersion)
+                    (implicit ec: ExecutionContext): Future[File] =
+    Future {
+      withResource(new ZipFile(exportFile)) { zip =>
+        val metadataEntry = Option(zip.getEntry(exportMetadataFileName)).getOrElse { throw MetadataEntryNotFound }
 
-      val metadataStr = withResource(zip.getInputStream(metadataEntry))(Source.fromInputStream(_).mkString)
-      val metadata = decode[BackupMetadata](metadataStr)
+        val metadataStr = withResource(zip.getInputStream(metadataEntry))(Source.fromInputStream(_).mkString)
+        val metadata = decode[BackupMetadata](metadataStr).recoverWith {
+          case err => Failure(InvalidMetadata.WrongFormat(err))
+        }.get
 
-      val isMetadataValid: Boolean = {
-        val currentMetadata = BackupMetadata(userId)
+        if (userId != metadata.userId) throw InvalidMetadata.UserId
+        if (BackupMetadata.currentPlatform != metadata.platform) throw InvalidMetadata.Platform
+        if (currentDbVersion < metadata.version) throw InvalidMetadata.DbVersion
 
-        currentMetadata.userId == metadata.userId &&
-        currentMetadata.platform == metadata.platform &&
-        currentMetadata.version >= metadata.version
-      }
-      if (!isMetadataValid) throw new IllegalArgumentException("Metadata is invalid.")
+        val dbEntry = Option(zip.getEntry(exportDbFileName(userId))).getOrElse { throw DbEntryNotFound }
 
-      val dbEntry = Option(zip.getEntry(exportDbFileName(userId))).getOrElse {
-        throw new IllegalArgumentException(s"Cannot find database zip entry.")
-      }
+        val walFileName = exportWalFileName(userId)
+        Option(zip.getEntry(walFileName)).foreach { walEntry =>
+          IoUtils.copy(zip.getInputStream(walEntry), new File(targetDirectory, walFileName))
+        }
 
-      val walFileName = exportWalFileName(userId)
-      Option(zip.getEntry(walFileName)).foreach { walEntry =>
-        IoUtils.copy(zip.getInputStream(walEntry), new File(targetDirectory, walFileName))
-      }
-
-      returning(new File(targetDirectory, exportDbFileName(userId))) { dbFile =>
-        IoUtils.copy(zip.getInputStream(dbEntry), dbFile)
+        returning(new File(targetDirectory, exportDbFileName(userId))) { dbFile =>
+          IoUtils.copy(zip.getInputStream(dbEntry), dbFile)
+        }
       }
     }
-  }
 
 
 }
