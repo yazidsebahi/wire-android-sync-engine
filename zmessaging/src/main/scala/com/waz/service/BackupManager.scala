@@ -32,9 +32,8 @@ import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, returning}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.io.Source
-import scala.util.Failure
+import scala.util.{Failure, Try}
 
 object BackupManager {
 
@@ -102,35 +101,35 @@ object BackupManager {
   // This way we save memory, but it means that it takes longer before we can release the lock.
   // If this becomes the problem, we might consider first copying the database file(s) to the
   // external storage directory, release the lock, and then safely proceed with zipping them.
-  def exportDatabase(userId: UserId, userHandle: String, database: File, targetDir: File)(implicit ec: ExecutionContext): Future[File] = Future {
-    returning(new File(targetDir, exportZipFileName(userHandle))) { zipFile =>
-      zipFile.deleteOnExit()
+  def exportDatabase(userId: UserId, userHandle: String, database: File, targetDir: File): Try[File] =
+    Try {
+      returning(new File(targetDir, exportZipFileName(userHandle))) { zipFile =>
+        zipFile.deleteOnExit()
 
-      withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
+        withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
 
-        withResource(new ByteArrayInputStream(BackupMetadata(userId).toJsonString.getBytes("utf8"))) {
-          IoUtils.writeZipEntry(_, zip, exportMetadataFileName)
+          withResource(new ByteArrayInputStream(BackupMetadata(userId).toJsonString.getBytes("utf8"))) {
+            IoUtils.writeZipEntry(_, zip, exportMetadataFileName)
+          }
+
+          withResource(new BufferedInputStream(new FileInputStream(database))) {
+            IoUtils.writeZipEntry(_, zip, exportDbFileName(userId))
+          }
+
+          val walFile = new File(createWalFilePath(database.getAbsolutePath))
+          verbose(s"WAL file: ${walFile.getAbsolutePath} exists: ${walFile.exists}, length: ${if (walFile.exists) walFile.length else 0}")
+
+          if (walFile.exists) withResource(new BufferedInputStream(new FileInputStream(walFile))) {
+            IoUtils.writeZipEntry(_, zip, exportWalFileName(userId))
+          }
         }
 
-        withResource(new BufferedInputStream(new FileInputStream(database))) {
-          IoUtils.writeZipEntry(_, zip, exportDbFileName(userId))
-        }
-
-        val walFile = new File(createWalFilePath(database.getAbsolutePath))
-        verbose(s"WAL file: ${walFile.getAbsolutePath} exists: ${walFile.exists}, length: ${if (walFile.exists) walFile.length else 0}")
-
-        if (walFile.exists) withResource(new BufferedInputStream(new FileInputStream(walFile))) {
-          IoUtils.writeZipEntry(_, zip, exportWalFileName(userId))
-        }
+        verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
       }
-
-      verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
     }
-  }
 
-  def importDatabase(userId: UserId, exportFile: File, targetDirectory: File, currentDbVersion: Int = BackupMetadata.currentDbVersion)
-                    (implicit ec: ExecutionContext): Future[File] =
-    Future {
+  def importDatabase(userId: UserId, exportFile: File, targetDirectory: File, currentDbVersion: Int = BackupMetadata.currentDbVersion): Try[File] =
+    Try {
       withResource(new ZipFile(exportFile)) { zip =>
         val metadataEntry = Option(zip.getEntry(exportMetadataFileName)).getOrElse { throw MetadataEntryNotFound }
 

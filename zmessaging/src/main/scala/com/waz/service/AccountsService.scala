@@ -40,6 +40,8 @@ import scala.concurrent.Future
 import scala.util.Right
 import scala.util.control.NonFatal
 
+import scala.async.Async.{async, await}
+
 /**
   * There are a few possible states that an account can progress through for the purposes of log in and registration.
   *
@@ -254,23 +256,46 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     _   <- Future.sequence(ids.map(createAccountManager(_, None)))
   } yield Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutateOrDefault(identity, Set.empty[AccountManager])))
 
-  override def createAccountManager(userId: UserId, importDbFile: Option[File]) = {
-    //TODO import dbFile and create ZMessagingDb
-    Serialized.future(AccountManagersKey) {
-      verbose(s"createAccountManager: $userId")
-      accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head.map(_.find(_.userId == userId)).flatMap {
-        case Some(am) =>
-          warn(s"AccountManager for: $userId already created")
-          Future.successful(Some(am))
-        case _ =>
-          verbose(s"No AccountManager for: $userId, creating new one")
-          storage.flatMap(_.get(userId).map {
-            case Some(acc) =>
-              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountManagers.mutateOrDefault(_ + am, Set(am))))
-            case _ =>
-              warn(s"No logged in account for user: $userId, not creating account manager")
-              None
-          })
+//  override def enterAccount(userId: UserId, importDbFile: Option[File]) = {
+//    Serialized.future(AccountManagersKey) {
+//      verbose(s"getOrCreateAccountManager: $userId")
+//      accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head.map(_.find(_.userId == userId)).flatMap {
+//        case Some(am) =>
+//          warn(s"AccountManager for: $userId already created")
+//          Future.successful(Some(am))
+//        case _ =>
+//          verbose(s"No AccountManager for: $userId, creating new one")
+//          storage.flatMap(_.get(userId).map {
+//            case Some(acc) =>
+//              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountManagers.mutateOrDefault(_ + am, Set(am))))
+//            case _ =>
+//              warn(s"No logged in account for user: $userId, not creating account manager")
+//              None
+//          })
+//      }
+//    }
+//  }
+
+  override def createAccountManager(userId: UserId, importDbFile: Option[File]) = Serialized.future(AccountManagersKey) {
+    async {
+      if (importDbFile.nonEmpty)
+        BackupManager.importDatabase(userId, importDbFile.get, context.getDatabasePath(userId.toString).getParentFile).get
+
+      verbose(s"getOrCreateAccountManager: $userId")
+      val managers = await { accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head }
+      val manager = managers.find(_.userId == userId)
+      if (manager.nonEmpty) {
+        warn(s"AccountManager for: $userId already created")
+        manager
+      } else {
+        verbose(s"No AccountManager for: $userId, creating new one")
+        val account = await { storage.flatMap(_.get(userId)) }
+        if (account.isEmpty) warn(s"No logged in account for user: $userId, not creating account manager")
+        account.map { acc =>
+          val newManager = new AccountManager(userId, acc.teamId, global, this, startedJustAfterBackup = importDbFile.nonEmpty)
+          accountManagers.mutateOrDefault(_ + newManager, Set(newManager))
+          newManager
+        }
       }
     }
   }

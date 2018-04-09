@@ -19,15 +19,14 @@ package com.waz.service
 
 import java.io._
 import java.util.Locale
-import java.util.zip.{ZipException, ZipOutputStream}
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
+import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
-import com.waz.db.ZMessagingDB
 import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
@@ -37,14 +36,11 @@ import com.waz.service.tracking.LoggedOutEvent
 import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
 import com.waz.sync.client.{InvitationClient, OtrClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.IoUtils.withResource
 import com.waz.utils._
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.znet.Response.Status
 import com.waz.znet.ZNetClient._
-import org.json.JSONObject
-import org.threeten.bp.Instant
 
 import scala.collection.immutable.ListMap
 import scala.concurrent.Future
@@ -54,7 +50,8 @@ import scala.util.Right
 class AccountManager(val userId:   UserId,
                      val teamId:   Option[TeamId],
                      val global:   GlobalModule,
-                     val accounts: AccountsService) {
+                     val accounts: AccountsService,
+                     val startedJustAfterBackup: Boolean) {
   import AccountManager._
 
   implicit val dispatcher = new SerialDispatchQueue()
@@ -62,12 +59,24 @@ class AccountManager(val userId:   UserId,
 
   verbose(s"Creating for: $userId")
 
+  private def doAfterBackupCleanup() =
+    Future.traverse(List(
+      UserPreferences.OtrLastPrekey.str,
+      UserPreferences.ClientRegVersion.str,
+      UserPreferences.LastSelfClientsSyncRequestedTime.str,
+      UserPreferences.LastStableNotification.str
+    ))(userPrefs.remove)
+
   val storage   = global.factory.baseStorage(userId)
   val db        = storage.db
   val userPrefs = storage.userPrefs
 
   val account     = global.accountsStorage.signal(userId)
-  val clientState = userPrefs(SelfClient).signal
+  val clientState = for {
+    _ <- Signal.future(doAfterBackupCleanup())
+    state <- userPrefs(SelfClient).signal
+  } yield state
+
   val clientId    = clientState.map(_.clientId)
 
   val context        = global.context
@@ -213,58 +222,16 @@ class AccountManager(val userId:   UserId,
     }
   }
 
-  // The current solution writes the database file(s) directly to the newly created zip file.
-  // This way we save memory, but it means that it takes longer before we can release the lock.
-  // If this becomes the problem, we might consider first copying the database file(s) to the
-  // external storage directory, release the lock, and then safely proceed with zipping them.
-  def exportDatabase: Future[Either[DatabaseBackupError, File]] = {
-
-    def handle: Future[String] = for {
-      zms  <- zmessaging
-      user <- zms.users.selfUser.head
-    } yield user.handle.fold("")(_.string)
-
-    def zipDatabase(zipFile: File): Option[DatabaseBackupError] = try {
-      withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
-        val dbFile = context.getDatabasePath(userId.str)
-        withResource(
-          new BufferedInputStream(new FileInputStream(dbFile))
-        ) {
-          IoUtils.writeZipEntry(_, zip, s"${userId.str}")
-        }
-
-        val walFile = new File(dbFile.getAbsolutePath + "-wal")
-        verbose(s"WAL file: ${walFile.getAbsolutePath} exists: ${walFile.exists}, length: ${if (walFile.exists) walFile.length else 0}")
-
-        if (walFile.exists)
-          withResource(
-            new BufferedInputStream(new FileInputStream(walFile))
-          ) {
-            IoUtils.writeZipEntry(_, zip, s"${userId.str}-wal")
-          }
-
-        withResource(
-          new ByteArrayInputStream(BackupMetadataEncoder(BackupMetadata(userId)).toString.getBytes("utf8"))
-        ) {
-          IoUtils.writeZipEntry(_, zip, "export.json")
-        }
-
-        verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
-        None
-      }
-    } catch {
-      case ex: ZipException => Some(ZipError(ex.getMessage))
-      case ex: IOException  => Some(IOError(ex.getMessage))
-      case ex: Throwable    => Some(OtherError(ex.getMessage))
-    }
-
-    for {
-      h    <- handle
-      file = returning(new File(context.getExternalCacheDir, s"Wire-$h-Backup_${Instant.now().toString}.Android_wbu")) { _.deleteOnExit() }
-      res  <- db(_ => zipDatabase(file))
-    } yield res.fold[Either[DatabaseBackupError, File]](Right(file))(Left(_))
-
-  }
+  def exportDatabase: Future[File] = for {
+    zms <- zmessaging
+    user <- zms.users.selfUser.head
+    userHandle = user.handle.map(_.string).getOrElse("")
+  } yield BackupManager.exportDatabase(
+    userId,
+    userHandle,
+    database = context.getDatabasePath(userId.str),
+    targetDir = context.getExternalCacheDir
+  ).get
 
   private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {
@@ -319,41 +286,4 @@ object AccountManager {
   }
 
   val ActivationThrottling = new ExponentialBackoff(2.seconds, 15.seconds)
-
-  case class BackupMetadata(userId: UserId,
-                            version: String = ZMessagingDB.DbVersion.toString,
-                            clientId: Option[ClientId] = None,
-                            creationTime: Instant = Instant.now(),
-                            platform: String = "Android")
-
-  lazy val BackupMetadataEncoder: JsonEncoder[BackupMetadata] = new JsonEncoder[BackupMetadata] {
-    override def apply(data: BackupMetadata): JSONObject = JsonEncoder { o =>
-      o.put("user_id",        data.userId.str)
-      o.put("version",        data.version)
-
-      data.clientId.foreach { id => o.put("client_id", id.str) }
-      o.put("creation_time",  JsonEncoder.encodeISOInstant(data.creationTime))
-      o.put("platform",       data.platform)
-    }
-  }
-
-  lazy val BackupMetadataDecoder: JsonDecoder[BackupMetadata] = new JsonDecoder[BackupMetadata] {
-    import JsonDecoder._
-    override def apply(implicit js: JSONObject): BackupMetadata = {
-      BackupMetadata(
-        decodeUserId('user_id),
-        'version,
-        decodeOptClientId('client_id),
-        JsonDecoder.decodeISOInstant('creation_time),
-        'platform
-      )
-    }
-  }
-
-  sealed trait DatabaseBackupError { def msg: String }
-
-  case class ZipError  (override val msg: String) extends DatabaseBackupError
-  case class IOError   (override val msg: String) extends DatabaseBackupError
-  case class OtherError(override val msg: String) extends DatabaseBackupError
-
 }

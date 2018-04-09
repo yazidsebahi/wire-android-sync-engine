@@ -26,9 +26,6 @@ import com.waz.utils.Json.syntax._
 import com.waz.utils.{IoUtils, returning}
 import org.scalatest._
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Awaitable}
 import scala.util.Try
 
 class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAfterEach with MustMatchers {
@@ -94,14 +91,12 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
     directory.listFiles().map(_.getName).toSet
   }
 
-  private def await[T](awaitable: Awaitable[T], timeout: Duration = 5.seconds): T = Await.result(awaitable, timeout)
-
   "Exporting database" should {
 
     "create an export zip file with metadata and all database related files." in {
       val fakeDatabase = createFakeDatabase()
       createFakeDatabaseWal()
-      val zipFile = await { exportDatabase(testUserId, userHandle = "TEST", database = fakeDatabase, targetDir = testDirectory) }
+      val zipFile = exportDatabase(testUserId, userHandle = "TEST", database = fakeDatabase, targetDir = testDirectory).get
 
       withClue("Zip file should exist.") { zipFile.exists() mustBe true }
       withResource(new ZipFile(zipFile)) { zip =>
@@ -122,51 +117,36 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
     "unzip backup file and fail if metadata file and db file not found." in {
       val fakeBackup = createFakeBackup(metadata = None, database = None)
 
-      an [InvalidBackup] should be thrownBy await {
-        importDatabase(testUserId, fakeBackup, testDirectory)
-      }
+      an [InvalidBackup] should be thrownBy importDatabase(testUserId, fakeBackup, testDirectory).get
     }
 
     "unzip backup file and fail if metadata file not found." in {
       val fakeBackup = createFakeBackup(metadata = None)
-
-      an [InvalidBackup.MetadataEntryNotFound.type] should be thrownBy await {
-        importDatabase(testUserId, fakeBackup, testDirectory)
-      }
+      an [InvalidBackup.MetadataEntryNotFound.type] should be thrownBy importDatabase(testUserId, fakeBackup, testDirectory).get
     }
 
     "unzip backup file and fail if db file not found." in {
       val fakeBackup = createFakeBackup(database = None)
-
-      an [InvalidBackup.DbEntryNotFound.type] should be thrownBy await {
-        importDatabase(testUserId, fakeBackup, testDirectory)
-      }
+      an [InvalidBackup.DbEntryNotFound.type] should be thrownBy importDatabase(testUserId, fakeBackup, testDirectory).get
     }
 
     "unzip backup file and fail if metadata format is invalid." in {
       val fakeBackup = createFakeBackup(metadata = Some(Array(1,2,3,4,5)))
-
-      an [InvalidMetadata.WrongFormat] should be thrownBy await {
-        importDatabase(testUserId, fakeBackup, testDirectory)
-      }
+      an [InvalidMetadata.WrongFormat] should be thrownBy importDatabase(testUserId, fakeBackup, testDirectory).get
     }
 
     "unzip backup file and fail if user ids are not the same." in {
       val metadataWithRandomUserId = BackupMetadata(UserId())
       val fakeBackup = createFakeBackup(metadata = Some(metadataWithRandomUserId.toJsonString.getBytes("utf-8")))
 
-      an [InvalidMetadata.UserId.type] should be thrownBy await {
-        importDatabase(testUserId, fakeBackup, testDirectory)
-      }
+      an [InvalidMetadata.UserId.type] should be thrownBy importDatabase(testUserId, fakeBackup, testDirectory).get
     }
 
     "unzip backup file and fail if current database version is less then from metadata." in {
       val metadataWithDbVersionGreaterThenCurrent = BackupMetadata(testUserId, version = BackupMetadata.currentDbVersion + 1)
       val fakeBackup = createFakeBackup(metadata = Some(metadataWithDbVersionGreaterThenCurrent.toJsonString.getBytes("utf-8")))
 
-      an [InvalidMetadata.DbVersion.type] should be thrownBy await {
-        importDatabase(testUserId, fakeBackup, testDirectory)
-      }
+      an [InvalidMetadata.DbVersion.type] should be thrownBy importDatabase(testUserId, fakeBackup, testDirectory).get
     }
 
     "unzip backup file successfully if all needed files are present and metadata is valid." in {
@@ -174,7 +154,7 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
       val targetDirectory = new File(testDirectory, "test_target_dir")
       if (!targetDirectory.mkdir()) throw new RuntimeException("Cannot create target directory for test.")
 
-      await { importDatabase(testUserId, fakeBackup, targetDirectory) }
+      importDatabase(testUserId, fakeBackup, targetDirectory).get
       withClue("Files inside target directory: " + getAllFileNames(targetDirectory)) {
         getAllFileNames(targetDirectory) mustBe Set(
           exportDbFileName(testUserId),
@@ -188,7 +168,7 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
       val targetDirectory = new File(testDirectory, "test_target_dir")
       if (!targetDirectory.mkdir()) throw new RuntimeException("Cannot create target directory for test.")
 
-      await { importDatabase(testUserId, fakeBackup, targetDirectory) }
+      importDatabase(testUserId, fakeBackup, targetDirectory).get
       withClue("Files inside target directory: " + getAllFileNames(targetDirectory)) {
         getAllFileNames(targetDirectory) mustBe Set(exportDbFileName(testUserId))
       }
@@ -200,7 +180,7 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
       val targetDirectory = new File(testDirectory, "test_target_dir")
       if (!targetDirectory.mkdir()) throw new RuntimeException("Cannot create target directory for test.")
 
-      await { importDatabase(testUserId, fakeBackup, targetDirectory) }
+      importDatabase(testUserId, fakeBackup, targetDirectory).get
       withClue("Files inside target directory: " + getAllFileNames(targetDirectory)) {
         getAllFileNames(targetDirectory) mustBe Set(
           exportDbFileName(testUserId),
