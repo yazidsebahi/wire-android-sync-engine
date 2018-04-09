@@ -23,6 +23,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import android.net.Uri
 import com.waz.RobolectricUtils
+import com.waz.api.EmailCredentials
 import com.waz.model.UserId
 import com.waz.testutils.Slow
 import com.waz.utils.{ExponentialBackoff, returning}
@@ -56,7 +57,7 @@ import scala.util.Try
   var authResult: ErrorOr[AccessToken] = Future.successful(Right(AccessToken("test_token", "Bearer")))
   val auth = new AccessTokenProvider {
     override def currentToken() = authResult
-    override def checkLoggedIn(token: Option[AccessToken]) = authResult
+    override def onPasswordReset(emailCredentials: Option[EmailCredentials]) = Future.successful(Right({}))
   }
 
   val port = 9982

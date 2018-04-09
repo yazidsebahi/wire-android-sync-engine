@@ -17,15 +17,16 @@
  */
 package com.waz.znet
 
+import com.waz.api.EmailCredentials
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.AccountStorage
-import com.waz.model.AccountData.Label
+import com.waz.model.AccountData.{Label, Password}
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.{RichInstant, Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
-import com.waz.znet.Response.Status
+import com.waz.znet.Response.{Cancelled, Status}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -117,11 +118,9 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       }
 
       (accStorage.update _).expects(*, *).onCall { (id, updater) =>
-        println("Updating account")
         Serialized.future("update-account") {
           val old = account
           account = updater(account)
-          println(s"account: $account")
           Future.successful(Some((old, account)))
         }
       }
@@ -154,6 +153,52 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       val manager = getManager
 
       result(manager.currentToken()) shouldEqual Left(ErrorResponse(Status.Forbidden, "", ""))
+    }
+
+    scenario("Account logout should cancel authentication attempts") {
+
+      (accStorage.get _).expects(account1Id).anyNumberOfTimes().returning(Future.successful(None))
+
+      val manager = getManager
+      result(manager.currentToken()) shouldEqual Left(ErrorResponse.Cancelled)
+    }
+  }
+
+  feature ("on reset password") {
+    scenario("call onResetPassword with password still in memory concurrently with currentToken request") {
+
+      val oldToken = AccessToken("token", "token", clock.instant())
+      val newToken = AccessToken("newToken", "token", clock.instant() + 15.minutes)
+
+      val oldCookie = Cookie("cookie")
+      val newCookie = Cookie("newCookie")
+
+      val emailCredentials = EmailCredentials(EmailAddress("test@123.com"), Password("password"))
+
+      @volatile var account = AccountData(
+        account1Id,
+        cookie      = oldCookie,
+        accessToken = Some(oldToken))
+
+      (accStorage.get _).expects(*).anyNumberOfTimes().onCall { id: UserId =>
+        println("hmm")
+        Threading.Background(Some(account)).future
+      }
+
+      (accStorage.update _).expects(*, *).onCall { (id, updater) =>
+        Serialized.future("update-account") {
+          val old = account
+          account = updater(account)
+          Future.successful(Some((old, account)))
+        }
+      }
+
+      (loginClient.access _).expects(account.cookie, None).once().returning(CancellableFuture.successful(Left(ErrorResponse(Status.Forbidden, "", ""))))
+      (loginClient.login _).expects(emailCredentials).once().returning(CancellableFuture.successful(Right((newToken, Some(newCookie), Some(Label("label"))))))
+      val manager = getManager
+
+      manager.onPasswordReset(Some(emailCredentials))
+      result(manager.currentToken()) shouldEqual Right(newToken)
     }
   }
 
