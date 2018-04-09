@@ -61,6 +61,7 @@ class AccountManager(val userId:   UserId,
 
   private def doAfterBackupCleanup() =
     Future.traverse(List(
+      UserPreferences.SelfClient.str,
       UserPreferences.OtrLastPrekey.str,
       UserPreferences.ClientRegVersion.str,
       UserPreferences.LastSelfClientsSyncRequestedTime.str,
