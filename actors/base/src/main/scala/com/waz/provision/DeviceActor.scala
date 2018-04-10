@@ -185,7 +185,7 @@ class DeviceActor(val deviceName: String,
     case Echo(msg, _) => Future.successful(Echo(msg, deviceName))
 
     case Login(email, pass) => accountsService.loginEmail(email, pass).flatMap {
-      case Right(userId) => accountsService.enterAccount(userId, None).map(am => Right(am))
+      case Right(userId) => accountsService.createAccountManager(userId, None).map(am => Right(am))
       case Left(err)     => Future.successful(Left(err))
     }.flatMap {
       case Right(Some(am)) => am.getOrRegisterClient().map(_.fold(e => Left(e), s => Right((am, s))))
