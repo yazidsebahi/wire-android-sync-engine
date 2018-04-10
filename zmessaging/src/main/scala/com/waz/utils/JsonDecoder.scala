@@ -76,10 +76,6 @@ object JsonDecoder {
     override def apply(implicit js: JSONObject): A = f(js)
   }
 
-  def build[A](implicit f: JSONObject => A): JsonDecoder[A] = new JsonDecoder[A] {
-    override def apply(implicit js: JSONObject): A = f(js)
-  }
-
   def array[A: JsonDecoder](arr: JSONArray): Seq[A] = arrayColl[A, Vector](arr)
 
   def arrayColl[A, B[_]](arr: JSONArray)(implicit dec: JsonDecoder[A], cbf: CanBuild[A, B[A]]): B[A] = {
