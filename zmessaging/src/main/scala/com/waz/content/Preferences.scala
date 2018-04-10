@@ -330,7 +330,7 @@ object GlobalPreferences {
     returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
   }
 
-  lazy val ActiveAccountPef      = PrefKey[Option[UserId]]("active_account")
+  lazy val ActiveAccountPref     = PrefKey[Option[UserId]]("active_account")
   lazy val CurrentAccountPrefOld = PrefKey[Option[AccountId]]("CurrentUserPref")
 
   lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)

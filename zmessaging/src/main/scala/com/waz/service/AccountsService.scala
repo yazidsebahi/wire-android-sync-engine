@@ -24,7 +24,7 @@ import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{ErrorResponse => _, _}
 import com.waz.client.RegistrationClientImpl.ActivateResult
-import com.waz.content.GlobalPreferences.{ActiveAccountPef, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
+import com.waz.content.GlobalPreferences.{ActiveAccountPref, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
 import com.waz.content.UserPreferences
 import com.waz.model.AccountData.{Label, Password}
 import com.waz.model._
@@ -123,7 +123,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  private val activeAccountPref      = prefs(ActiveAccountPef)
+  private val activeAccountPref      = prefs(ActiveAccountPref)
   private val firstTimeWithTeamsPref = prefs(FirstTimeWithTeams)
   private val databasesRenamedPref   = prefs(DatabasesRenamed)
 
@@ -132,7 +132,21 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     renamed <- databasesRenamedPref.signal
   } yield !first && renamed
 
-  private val storage = migrationDone.head.map(_ => global.accountsStorage)
+  private val storage = migrationDone.filter(identity).head.map(_ => global.accountsStorage)
+
+  private def filterLatestDb(accounts: Future[Seq[AccountDataOld]]): Future[Iterable[AccountDataOld]] =
+    accounts.map { _.groupBy(_.userId).map { case (userId, accounts) =>
+      if (accounts.size > 1) {
+        accounts
+          .map(acc => (acc, context.getDatabasePath(acc.id.str)))
+          .sortBy(_._2.lastModified())
+          .reverse
+          .head
+          ._1
+      } else {
+        accounts.head
+      }
+    }}
 
   //TODO can be removed after a (very long) while
   databasesRenamedPref().flatMap {
@@ -140,7 +154,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     case false =>
       for {
         active <- prefs.preference(CurrentAccountPrefOld).apply()
-        accs <- storageOld.list()
+        accs <- filterLatestDb(storageOld.list())
         _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
           val userId = acc.userId.get
           //migrate the databases
@@ -153,7 +167,17 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
           val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
 
           val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
-            f.renameTo(new File(dbFileOld.getParent, s"${userId.str}$ext"))
+            val fileToMove = new File(dbFileOld.getParent, s"${userId.str}$ext")
+            val res = f.renameTo(fileToMove)
+            if(!res && !ext.equals(exts.last)) {
+              error(s"Failed to rename file ${f.getAbsolutePath}")
+              res
+            } else if (!res && ext.equals(exts.last)) {
+              //journal is not always present, so if copying it fails, and it the original file doesn't exist, then just skip it
+              true
+            } else {
+              res
+            }
           }.forall(identity)
 
           //migrate cryptobox dirs
@@ -179,7 +203,22 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
               Unregistered
           }
 
-          global.factory.baseStorage(acc.userId.get).userPrefs.preference(UserPreferences.SelfClient) := state
+          val teamId = acc.teamId match {
+            case Left(_) => None
+            case Right(opt) => opt
+          }
+
+          val stor = global.factory.baseStorage(acc.userId.get)
+          val prefs = stor.userPrefs
+          for {
+            _ <- acc.cookie.fold(Future.successful(()))(cookie => global.accountsStorage.insert(AccountData(acc.userId.get, teamId, cookie, acc.accessToken, acc.registeredPush, Some(Password("")))).map(_ => ()))
+            _ <- prefs.preference(UserPreferences.SelfClient) := state
+            _ <- prefs.preference(UserPreferences.PrivateMode) := acc.privateMode
+            _ <- prefs.preference(UserPreferences.SelfPermissions) := AccountDataOld.encodeBitmask(acc.selfPermissions)
+            _ <- prefs.preference(UserPreferences.CopyPermissions) := AccountDataOld.encodeBitmask(acc.copyPermissions)
+          } yield {
+            stor.db.close()
+          }
         })
         //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
         _ <- firstTimeWithTeamsPref().map {
