@@ -66,7 +66,7 @@ class AccountManager(val userId:   UserId,
       UserPreferences.ClientRegVersion.str,
       UserPreferences.LastSelfClientsSyncRequestedTime.str,
       UserPreferences.LastStableNotification.str
-    ))(userPrefs.remove)
+    ))(userPrefs.remove).map(_ => ())
 
   val storage   = global.factory.baseStorage(userId)
   val db        = storage.db
@@ -74,7 +74,7 @@ class AccountManager(val userId:   UserId,
 
   val account     = global.accountsStorage.signal(userId)
   val clientState = for {
-    _ <- Signal.future(doAfterBackupCleanup())
+    _ <- if (startedJustAfterBackup) Signal.future(doAfterBackupCleanup()) else Signal.const(())
     state <- userPrefs(SelfClient).signal
   } yield state
 
