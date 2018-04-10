@@ -38,12 +38,12 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
   private val testMetadata = BackupMetadata(testUserId, version = 20)
 
   private def createFakeDatabase(targetDirectory: File = testDirectory): File =
-    returning(new File(targetDirectory, exportDbFileName(testUserId))) { file =>
+    returning(new File(targetDirectory, getDbFileName(testUserId))) { file =>
       withResource(new PrintWriter(file)) { _.write("some content") }
   }
 
   private def createFakeDatabaseWal(targetDirectory: File = testDirectory): File =
-    returning(new File(targetDirectory, exportWalFileName(testUserId))) { file =>
+    returning(new File(targetDirectory, getDbWalFileName(testUserId))) { file =>
       withResource(new PrintWriter(file)) { _.write("some content") }
     }
 
@@ -55,19 +55,19 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
       withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
         metadata foreach { md =>
           withResource(new ByteArrayInputStream(md)) {
-            IoUtils.writeZipEntry(_, zip, exportMetadataFileName)
+            IoUtils.writeZipEntry(_, zip, backupMetadataFileName)
           }
         }
 
         database foreach { db =>
           withResource(new BufferedInputStream(new FileInputStream(db))) {
-            IoUtils.writeZipEntry(_, zip, exportDbFileName(testUserId))
+            IoUtils.writeZipEntry(_, zip, getDbFileName(testUserId))
           }
         }
 
         databaseWal foreach { wal =>
           withResource(new BufferedInputStream(new FileInputStream(wal))) {
-            IoUtils.writeZipEntry(_, zip, exportWalFileName(testUserId))
+            IoUtils.writeZipEntry(_, zip, getDbWalFileName(testUserId))
           }
         }
       }
@@ -96,15 +96,15 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
     "create an export zip file with metadata and all database related files." in {
       val fakeDatabase = createFakeDatabase()
       createFakeDatabaseWal()
-      val zipFile = exportDatabase(testUserId, userHandle = "TEST", database = fakeDatabase, targetDir = testDirectory).get
+      val zipFile = exportDatabase(testUserId, userHandle = "TEST", databaseDir = fakeDatabase.getParentFile, targetDir = testDirectory).get
 
       withClue("Zip file should exist.") { zipFile.exists() mustBe true }
       withResource(new ZipFile(zipFile)) { zip =>
         withClue("Files inside test directory: " + getAllFileNames(testDirectory)) {
           getZipFileEntryNames(zip) mustBe Set(
-            exportMetadataFileName,
-            exportDbFileName(testUserId),
-            exportWalFileName(testUserId)
+            backupMetadataFileName,
+            getDbFileName(testUserId),
+            getDbWalFileName(testUserId)
           )
         }
       }
@@ -157,8 +157,8 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
       importDatabase(testUserId, fakeBackup, targetDirectory).get
       withClue("Files inside target directory: " + getAllFileNames(targetDirectory)) {
         getAllFileNames(targetDirectory) mustBe Set(
-          exportDbFileName(testUserId),
-          exportWalFileName(testUserId)
+          getDbFileName(testUserId),
+          getDbWalFileName(testUserId)
         )
       }
     }
@@ -170,7 +170,7 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
 
       importDatabase(testUserId, fakeBackup, targetDirectory).get
       withClue("Files inside target directory: " + getAllFileNames(targetDirectory)) {
-        getAllFileNames(targetDirectory) mustBe Set(exportDbFileName(testUserId))
+        getAllFileNames(targetDirectory) mustBe Set(getDbFileName(testUserId))
       }
     }
 
@@ -183,8 +183,8 @@ class BackupManagerSpec extends WordSpec with BeforeAndAfterAll with BeforeAndAf
       importDatabase(testUserId, fakeBackup, targetDirectory).get
       withClue("Files inside target directory: " + getAllFileNames(targetDirectory)) {
         getAllFileNames(targetDirectory) mustBe Set(
-          exportDbFileName(testUserId),
-          exportWalFileName(testUserId)
+          getDbFileName(testUserId),
+          getDbWalFileName(testUserId)
         )
       }
     }

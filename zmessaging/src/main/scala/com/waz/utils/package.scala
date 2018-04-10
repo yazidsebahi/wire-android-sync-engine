@@ -42,6 +42,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
 import scala.math.{Ordering, abs}
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import scala.{PartialFunction => =/>}
@@ -144,9 +145,15 @@ package object utils {
   }
 
   implicit class RichTry[A](val t: Try[A]) extends AnyVal {
+    import scala.reflect._
     def toRight[L](f: Throwable => L): Either[L, A] = t match {
       case Success(s) => Right(s)
       case Failure(t) => Left(f(t))
+    }
+    def mapFailure(f: Throwable => Throwable): Try[A] = t.recoverWith { case err => Failure(err) }
+    def mapFailureIfNot[T: ClassTag](f: Throwable => Throwable): Try[A] = t.recoverWith {
+      case err: T => Failure(err)
+      case err    => Failure(f(err))
     }
   }
 

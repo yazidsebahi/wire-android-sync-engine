@@ -230,7 +230,7 @@ class AccountManager(val userId:   UserId,
   } yield BackupManager.exportDatabase(
     userId,
     userHandle,
-    database = context.getDatabasePath(userId.str),
+    databaseDir = context.getDatabasePath(userId.str).getParentFile,
     targetDir = context.getExternalCacheDir
   ).get
 

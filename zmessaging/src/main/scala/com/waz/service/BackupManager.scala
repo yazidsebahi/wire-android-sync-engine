@@ -28,7 +28,7 @@ import com.waz.model.otr.ClientId
 import com.waz.service.BackupManager.InvalidBackup.{DbEntryNotFound, MetadataEntryNotFound}
 import com.waz.utils.IoUtils.withResource
 import com.waz.utils.Json.syntax._
-import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, returning}
+import com.waz.utils.{IoUtils, JsonDecoder, JsonEncoder, returning, RichTry}
 import org.json.JSONObject
 import org.threeten.bp.Instant
 
@@ -37,15 +37,17 @@ import scala.util.{Failure, Try}
 
 object BackupManager {
 
-  sealed trait Error extends IllegalArgumentException
+  sealed trait BackupError extends Exception
 
-  sealed trait InvalidBackup extends Error
+  case class UnknownBackupError(cause: Throwable) extends BackupError
+
+  sealed trait InvalidBackup extends BackupError
   object InvalidBackup {
     case object DbEntryNotFound extends InvalidBackup
     case object MetadataEntryNotFound extends InvalidBackup
   }
 
-  sealed trait InvalidMetadata extends Error
+  sealed trait InvalidMetadata extends BackupError
   object InvalidMetadata {
     case class WrongFormat(cause: Throwable) extends InvalidMetadata
     case object UserId extends InvalidMetadata
@@ -91,47 +93,49 @@ object BackupManager {
     }
   }
 
-  def exportZipFileName(userHandle: String): String = s"Wire-$userHandle-Backup_${Instant.now().toString}.Android_wbu"
-  def exportMetadataFileName: String = "export.json"
-  def exportDbFileName(userId: UserId): String = s"${userId.str}.db"
-  def exportWalFileName(userId: UserId): String = exportDbFileName(userId) + "-wal"
-  def createWalFilePath(dbFilePath: String): String = dbFilePath + "-wal"
+  def backupZipFileName(userHandle: String): String = s"Wire-$userHandle-Backup_${Instant.now().toString}.Android_wbu"
+  def backupMetadataFileName: String = "export.json"
+
+  def getDbFileName(id: UserId): String = id.str
+  def getDbWalFileName(id: UserId): String = id.str + "-wal"
 
   // The current solution writes the database file(s) directly to the newly created zip file.
   // This way we save memory, but it means that it takes longer before we can release the lock.
   // If this becomes the problem, we might consider first copying the database file(s) to the
   // external storage directory, release the lock, and then safely proceed with zipping them.
-  def exportDatabase(userId: UserId, userHandle: String, database: File, targetDir: File): Try[File] =
+  def exportDatabase(userId: UserId, userHandle: String, databaseDir: File, targetDir: File): Try[File] =
     Try {
-      returning(new File(targetDir, exportZipFileName(userHandle))) { zipFile =>
+      returning(new File(targetDir, backupZipFileName(userHandle))) { zipFile =>
         zipFile.deleteOnExit()
 
         withResource(new ZipOutputStream(new FileOutputStream(zipFile))) { zip =>
 
           withResource(new ByteArrayInputStream(BackupMetadata(userId).toJsonString.getBytes("utf8"))) {
-            IoUtils.writeZipEntry(_, zip, exportMetadataFileName)
+            IoUtils.writeZipEntry(_, zip, backupMetadataFileName)
           }
 
-          withResource(new BufferedInputStream(new FileInputStream(database))) {
-            IoUtils.writeZipEntry(_, zip, exportDbFileName(userId))
+          val dbFileName = getDbFileName(userId)
+          withResource(new BufferedInputStream(new FileInputStream(new File(databaseDir, dbFileName)))) {
+            IoUtils.writeZipEntry(_, zip, dbFileName)
           }
 
-          val walFile = new File(createWalFilePath(database.getAbsolutePath))
+          val walFileName = getDbWalFileName(userId)
+          val walFile = new File(databaseDir, walFileName)
           verbose(s"WAL file: ${walFile.getAbsolutePath} exists: ${walFile.exists}, length: ${if (walFile.exists) walFile.length else 0}")
 
           if (walFile.exists) withResource(new BufferedInputStream(new FileInputStream(walFile))) {
-            IoUtils.writeZipEntry(_, zip, exportWalFileName(userId))
+            IoUtils.writeZipEntry(_, zip, walFileName)
           }
         }
 
         verbose(s"database export finished: ${zipFile.getAbsolutePath} . Data contains: ${zipFile.length} bytes")
       }
-    }
+    } mapFailureIfNot[BackupError] UnknownBackupError.apply
 
-  def importDatabase(userId: UserId, exportFile: File, targetDirectory: File, currentDbVersion: Int = BackupMetadata.currentDbVersion): Try[File] =
+  def importDatabase(userId: UserId, exportFile: File, targetDir: File, currentDbVersion: Int = BackupMetadata.currentDbVersion): Try[File] =
     Try {
       withResource(new ZipFile(exportFile)) { zip =>
-        val metadataEntry = Option(zip.getEntry(exportMetadataFileName)).getOrElse { throw MetadataEntryNotFound }
+        val metadataEntry = Option(zip.getEntry(backupMetadataFileName)).getOrElse { throw MetadataEntryNotFound }
 
         val metadataStr = withResource(zip.getInputStream(metadataEntry))(Source.fromInputStream(_).mkString)
         val metadata = decode[BackupMetadata](metadataStr).recoverWith {
@@ -142,18 +146,19 @@ object BackupManager {
         if (BackupMetadata.currentPlatform != metadata.platform) throw InvalidMetadata.Platform
         if (currentDbVersion < metadata.version) throw InvalidMetadata.DbVersion
 
-        val dbEntry = Option(zip.getEntry(exportDbFileName(userId))).getOrElse { throw DbEntryNotFound }
+        val dbFileName = getDbFileName(userId)
+        val dbEntry = Option(zip.getEntry(dbFileName)).getOrElse { throw DbEntryNotFound }
 
-        val walFileName = exportWalFileName(userId)
+        val walFileName = getDbWalFileName(userId)
         Option(zip.getEntry(walFileName)).foreach { walEntry =>
-          IoUtils.copy(zip.getInputStream(walEntry), new File(targetDirectory, walFileName))
+          IoUtils.copy(zip.getInputStream(walEntry), new File(targetDir, walFileName))
         }
 
-        returning(new File(targetDirectory, exportDbFileName(userId))) { dbFile =>
+        returning(new File(targetDir, dbFileName)) { dbFile =>
           IoUtils.copy(zip.getInputStream(dbEntry), dbFile)
         }
       }
-    }
+    } mapFailureIfNot[BackupError] UnknownBackupError.apply
 
 
 }
