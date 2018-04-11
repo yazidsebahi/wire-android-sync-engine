@@ -257,6 +257,8 @@ object SyncRequest {
 
   case class SyncUser(users: Set[UserId]) extends BaseRequest(Cmd.SyncUser) {
 
+    override def toString = s"SyncUser(${users.size} users: ${users.take(5)}...)"
+
     override def merge(req: SyncRequest) = mergeHelper[SyncUser](req) { other =>
       if (other.users.forall(users)) Merged(this)
       else {

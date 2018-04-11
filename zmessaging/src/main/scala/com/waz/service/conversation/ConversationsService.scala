@@ -216,7 +216,8 @@ class ConversationsServiceImpl(teamId:          Option[TeamId],
       }
     }
   }.map { vs =>
-    verbose(s"updated conversations: ${vs.flatten}")
+    val cs = vs.flatten
+    verbose(s"updated ${cs.size} conversations: ${cs.take(5)}...")
     vs.foldLeft(Vector.empty[ConversationData])(_ ++ _)
   }
 
