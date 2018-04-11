@@ -93,7 +93,7 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
   }
 
   def getUpdatedConversation(service: ConnectionServiceImpl, event: UserConnectionEvent): ConversationData = {
-    var updatedConversation = ConversationData.Empty//.copy(lastEventTime = Instant.EPOCH)
+    var updatedConversation = ConversationData.Empty
 
     (convsStorage.update _).expects(*,*).once().onCall { (convId, updater) =>
       val old = ConversationData(convId, RConvId(convId.str), None, selfUserId, ConversationType.Unknown, lastEventTime = Instant.EPOCH)

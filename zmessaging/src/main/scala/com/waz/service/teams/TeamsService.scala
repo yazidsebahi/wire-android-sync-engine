@@ -55,7 +55,6 @@ trait TeamsService {
 class TeamsServiceImpl(selfUser:           UserId,
                        teamId:             Option[TeamId],
                        teamStorage:        TeamsStorage,
-                       accStorage:         AccountsStorageOld,
                        userStorage:        UsersStorage,
                        convsStorage:       ConversationStorage,
                        convMemberStorage:  MembersStorage,
