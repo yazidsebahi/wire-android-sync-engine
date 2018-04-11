@@ -30,7 +30,7 @@ import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
-import com.waz.utils.RichFuture
+import com.waz.utils.{RichFuture, RichInstant}
 import com.waz.utils.events.EventContext
 import org.threeten.bp.Instant
 
@@ -115,7 +115,7 @@ class ConnectionServiceImpl(selfUserId:      UserId,
     val hidden = user.connection == ConnectionStatus.Ignored || user.connection == ConnectionStatus.Blocked || user.connection == ConnectionStatus.Cancelled
     convs.getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
       members.add(conv.id, Set(selfUserId, user.id)).flatMap { _ =>
-        convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden, lastEventTime = Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
+        convStorage.update(conv.id, c => c.copy(convType = convType, hidden = hidden, lastEventTime = c.lastEventTime max Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
             case None if convType == ConversationType.Incoming =>
               addConnectRequestMessage(conv.id, user.id, selfUserId, user.connectionMessage.getOrElse(""), user.getDisplayName, fromSync = fromSync)
