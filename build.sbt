@@ -114,6 +114,7 @@ lazy val zmessaging = project
     },
     libraryDependencies ++= Seq(
       Deps.supportV4 % Provided,
+      "org.scala-lang.modules" %% "scala-async" % "0.9.7",
       "com.evernote" % "android-job" % "1.2.0",
       "com.koushikdutta.async" % "androidasync" % "2.2.1",
       "com.googlecode.libphonenumber" % "libphonenumber" % "7.1.1", // 7.2.x breaks protobuf
