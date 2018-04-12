@@ -17,8 +17,6 @@
  */
 package com.waz.api.impl
 
-import java.io.ByteArrayOutputStream
-
 import android.graphics.Bitmap
 import android.media.ExifInterface
 import android.os.Parcel
@@ -33,14 +31,13 @@ import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
 import com.waz.service.images.{BitmapSignal, ImageLoader}
-import com.waz.threading.Threading
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Single}
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.ref.WeakReference
 
@@ -120,29 +117,11 @@ class LocalImageAssetWithPreview(preview: Option[AssetData], medium: AssetData)(
 
 class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) {
 
-  import Threading.Implicits.Background
-
   verbose(s"creating asset from bitmap, orientation: $orientation")
 
   val mime   = Mime(BitmapUtils.getMime(bitmap))
   val (w, h) = if (ImageLoader.Metadata.shouldSwapDimens(orientation)) (bitmap.getHeight, bitmap.getWidth) else (bitmap.getWidth, bitmap.getHeight)
-
-  val req = Regular(bitmap.getWidth)
-
-  val imageData = Future {
-    ui.imageCache.reserve(id, req, bitmap.getWidth, bitmap.getHeight)
-    val img: Bitmap = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
-    ui.imageCache.add(id, req, img)
-    verbose(s"compressing $id")
-    val before = System.nanoTime
-    val bos = new ByteArrayOutputStream(65536)
-    val format = BitmapUtils.getCompressFormat(mime.str)
-    img.compress(format, 85, bos)
-    val bytes = bos.toByteArray
-    val duration = (System.nanoTime - before) / 1e6d
-    debug(s"compression took: $duration ms (${img.getWidth} x ${img.getHeight}, ${img.getByteCount} bytes -> ${bytes.length} bytes, ${img.getConfig}, $mime, $format)")
-    bytes
-  }(Threading.ImageDispatcher)
+  val imageData = ui.assetLoader.loadFromBitmap(data.id, bitmap, orientation)
 
   data = AssetData(
     id,

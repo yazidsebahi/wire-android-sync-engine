@@ -21,32 +21,39 @@ import java.io._
 import java.security.{DigestOutputStream, MessageDigest}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import android.media.ExifInterface
 import com.waz.ZLog.ImplicitTag._
-import com.waz.ZLog.{LogTag, verbose, warn}
+import com.waz.ZLog.{LogTag, debug, verbose, warn}
 import com.waz.api.NetworkMode
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.impl.ProgressIndicator.Callback
+import com.waz.bitmap.{BitmapDecoder, BitmapUtils}
 import com.waz.bitmap.video.VideoTranscoder
 import com.waz.cache.{CacheEntry, CacheService}
 import com.waz.content.UserPreferences.DownloadImagesAlways
 import com.waz.content.WireContentProvider.CacheUri
 import com.waz.model.AssetData.{RemoteData, WithExternalUri, WithProxy, WithRemoteData}
 import com.waz.model._
-import com.waz.service.{NetworkModeService, ZMessaging}
+import com.waz.service.{NetworkModeService, UserService, ZMessaging}
 import com.waz.service.assets.AudioTranscoder
 import com.waz.service.tracking.TrackingService
 import com.waz.sync.client.AssetClient
 import com.waz.threading.CancellableFuture.CancelException
 import com.waz.threading.{CancellableFuture, Threading}
-import com.waz.utils.CancellableStream
+import com.waz.ui.MemoryImageCache
+import com.waz.ui.MemoryImageCache.BitmapRequest
+import com.waz.utils.{CancellableStream, Deprecated}
 import com.waz.utils.events.{EventStream, Signal}
 import com.waz.utils.wrappers.{Context, URI}
+import com.waz.zms.R
 import com.waz.znet.Response.{DefaultResponseBodyDecoder, ResponseBodyDecoder}
 import com.waz.znet.ResponseConsumer.{FileConsumer, JsonConsumer}
 import com.waz.znet.{FileResponse, Request}
 
-import scala.concurrent.Promise
+import scala.concurrent.{Future, Promise}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -58,6 +65,7 @@ trait AssetLoader {
 
   //guarantees to either return a defined cache entry, or throw an exception
   def loadAsset(asset: AssetData, callback: Callback, force: Boolean): CancellableFuture[CacheEntry]
+  def loadFromBitmap(assetId: AssetId, bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL): Future[Array[Byte]]
 }
 
 class AssetLoaderImpl(context:         Context,
@@ -66,6 +74,8 @@ class AssetLoaderImpl(context:         Context,
                       audioTranscoder: AudioTranscoder,
                       videoTranscoder: VideoTranscoder,
                       cache:           CacheService,
+                      imgCache:        MemoryImageCache,
+                      bitmapDecoder:   BitmapDecoder,
                       tracking:        TrackingService) extends AssetLoader {
 
   private lazy val downloadAlways = Option(ZMessaging.currentAccounts).map(_.activeZms).map {
@@ -132,7 +142,19 @@ class AssetLoaderImpl(context:         Context,
       case WithExternalUri(uri) =>
         verbose(s"Downloading external asset: ${asset.id}: $uri")
         val decoder = new AssetBodyDecoder(cache)
-        client.loadAsset(Request[Unit](baseUri = Some(uri), requiresAuthentication = false, decoder = Some(decoder), downloadCallback = Some(callback)))
+
+        val resp = client.loadAsset(Request[Unit](baseUri = Some(uri), requiresAuthentication = false, decoder = Some(decoder), downloadCallback = Some(callback)))
+
+        if (uri == UserService.UnsplashUrl) resp.flatMap {
+          case Right(entry) => CancellableFuture.successful(Right(entry))
+          case Left(_) =>
+            Try(Deprecated.getDrawable(context, R.drawable.unsplash_default).asInstanceOf[BitmapDrawable].getBitmap).toOption match {
+              case Some(bm) => CancellableFuture.lift(loadFromBitmap(asset.id, bm).flatMap { data =>
+                cache.addData(asset.cacheKey, data).map(Right(_))
+              })
+              case _ => CancellableFuture.successful(Left(internalError("Failed to load default unsplash image")))
+            }
+        } else resp
 
       case WithProxy(proxy) =>
         verbose(s"Downloading asset from proxy: ${asset.id}: $proxy")
@@ -203,6 +225,24 @@ class AssetLoaderImpl(context:         Context,
     verbose(s"loadFromUri: cacheKey: $cacheKey, mime: $mime, name: $name, uri: $uri")
     addStreamToCache(cacheKey, mime, name, openStream(uri))
   }
+
+  override def loadFromBitmap(assetId: AssetId, bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL) = Future {
+    val req = BitmapRequest.Regular(bitmap.getWidth)
+    val mime = Mime(BitmapUtils.getMime(bitmap))
+
+    imgCache.reserve(assetId, req, bitmap.getWidth, bitmap.getHeight)
+    val img: Bitmap = bitmapDecoder.withFixedOrientation(bitmap, orientation)
+    imgCache.add(assetId, req, img)
+    verbose(s"compressing $assetId")
+    val before = System.nanoTime
+    val bos = new ByteArrayOutputStream(65536)
+    val format = BitmapUtils.getCompressFormat(mime.str)
+    img.compress(format, 85, bos)
+    val bytes = bos.toByteArray
+    val duration = (System.nanoTime - before) / 1e6d
+    debug(s"compression took: $duration ms (${img.getWidth} x ${img.getHeight}, ${img.getByteCount} bytes -> ${bytes.length} bytes, ${img.getConfig}, $mime, $format)")
+    bytes
+  }(Threading.ImageDispatcher)
 
 }
 

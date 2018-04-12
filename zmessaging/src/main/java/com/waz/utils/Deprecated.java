@@ -18,10 +18,11 @@
 package com.waz.utils;
 
 import android.content.Context;
-import android.media.AudioFormat;
+import android.graphics.drawable.Drawable;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
+import android.os.Build;
 
 import java.nio.ByteBuffer;
 
@@ -44,5 +45,9 @@ public class Deprecated {
 
     public static MediaCodecInfo codecInfoAtIndex(int n) {
         return MediaCodecList.getCodecInfoAt(n);
+    }
+
+    public static Drawable getDrawable(Context context, int resId) {
+        return context.getResources().getDrawable(resId);
     }
 }

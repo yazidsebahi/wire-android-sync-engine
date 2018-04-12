@@ -85,6 +85,7 @@ class UiModule(val accounts: AccountsServiceImpl) extends UiEventContext with ZM
   def imageCache = global.imageCache
   def bitmapDecoder = global.bitmapDecoder
   val tracking = global.trackingService
+  val assetLoader = global.globalLoader
 
   val currentAccount = accounts.activeAccountManager
   val currentZms = accounts.activeZms

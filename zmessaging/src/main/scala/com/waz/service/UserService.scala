@@ -348,7 +348,7 @@ class UserServiceImpl(selfUserId:        UserId,
 
   private def addUnsplashPicture(): Future[Unit] = {
     verbose(s"addUnsplashPicture")
-    val asset = AssetData.newImageAssetFromUri(uri = AndroidURIUtil.parse(UnsplashUrl))
+    val asset = AssetData.newImageAssetFromUri(uri = UnsplashUrl)
     assets.addImage(asset, isProfilePic = true) flatMap { asset =>
       updateAndSync(_.copy(picture = Some(asset.id)), _ => sync.postSelfPicture(Some(asset.id)))
     }
@@ -365,7 +365,7 @@ class UserServiceImpl(selfUserId:        UserId,
 object UserService {
   val DefaultUserName: String = ""
 
-  val UnsplashUrl = "https://source.unsplash.com/800x800/?landscape"
+  val UnsplashUrl = AndroidURIUtil.parse("https://source.unsplash_default.com/800x800/?landscape")
 
   lazy val AcceptedOrBlocked = Set(ConnectionStatus.Accepted, ConnectionStatus.Blocked)
 }

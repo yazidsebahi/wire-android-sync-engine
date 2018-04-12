@@ -148,7 +148,7 @@ object AssetData {
     * Do not use these URIs as cache keys, as they do not provide a unique identifier to the asset downloaded from them
     */
   val NonKeyURIs = Set(
-    "https://source.unsplash.com/800x800/?landscape"
+    "https://source.unsplash_default.com/800x800/?landscape"
   ).map(URI.parse)
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
