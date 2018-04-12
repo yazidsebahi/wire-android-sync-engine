@@ -166,7 +166,7 @@ class TeamsServiceSpec extends AndroidFreeSpec {
   }
 
   def createService = {
-    new TeamsServiceImpl(selfUser, teamId, teamStorage, accStorage, userStorage, convsStorage, convMembers, convsContent, sync, syncRequests, userPrefs)
+    new TeamsServiceImpl(selfUser, teamId, teamStorage, userStorage, convsStorage, convMembers, convsContent, sync, syncRequests, userPrefs)
   }
 
 }
