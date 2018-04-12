@@ -17,23 +17,31 @@
  */
 package com.waz.api.impl
 
+import java.io.ByteArrayOutputStream
+
 import android.graphics.Bitmap
+import android.media.ExifInterface
 import android.os.Parcel
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.ImageAsset.{BitmapLoadHandle, Parcelable}
 import com.waz.api.{BitmapCallback, LoadHandle}
+import com.waz.bitmap.BitmapUtils
+import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model._
 import com.waz.service.ZMessaging
 import com.waz.service.assets.AssetService.BitmapResult
 import com.waz.service.assets.AssetService.BitmapResult.{BitmapLoaded, LoadingFailed}
-import com.waz.service.images.BitmapSignal
+import com.waz.service.images.{BitmapSignal, ImageLoader}
+import com.waz.threading.Threading
 import com.waz.ui.MemoryImageCache.BitmapRequest
 import com.waz.ui.MemoryImageCache.BitmapRequest.{Regular, Single}
 import com.waz.ui._
 import com.waz.utils._
 import com.waz.utils.events.Signal
 
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 import scala.ref.WeakReference
 
 class ImageAsset(val id: AssetId)(implicit ui: UiModule) extends com.waz.api.ImageAsset with UiFlags with BitmapLoading with UiObservable with SignalLoading {
@@ -107,6 +115,54 @@ class LocalImageAssetWithPreview(preview: Option[AssetData], medium: AssetData)(
     p.writeInt(Parcelable.FlagLocalWithPreview)
     p.writeString(JsonEncoder.encodeString(medium))
     preview.foreach(v => p.writeString(JsonEncoder.encodeString(v)))
+  }
+}
+
+class LocalBitmapAsset(bitmap: Bitmap, orientation: Int = ExifInterface.ORIENTATION_NORMAL)(implicit ui: UiModule) extends ImageAsset(AssetId()) {
+
+  import Threading.Implicits.Background
+
+  verbose(s"creating asset from bitmap, orientation: $orientation")
+
+  val mime   = Mime(BitmapUtils.getMime(bitmap))
+  val (w, h) = if (ImageLoader.Metadata.shouldSwapDimens(orientation)) (bitmap.getHeight, bitmap.getWidth) else (bitmap.getWidth, bitmap.getHeight)
+
+  val req = Regular(bitmap.getWidth)
+
+  val imageData = Future {
+    ui.imageCache.reserve(id, req, bitmap.getWidth, bitmap.getHeight)
+    val img: Bitmap = ui.bitmapDecoder.withFixedOrientation(bitmap, orientation)
+    ui.imageCache.add(id, req, img)
+    verbose(s"compressing $id")
+    val before = System.nanoTime
+    val bos = new ByteArrayOutputStream(65536)
+    val format = BitmapUtils.getCompressFormat(mime.str)
+    img.compress(format, 85, bos)
+    val bytes = bos.toByteArray
+    val duration = (System.nanoTime - before) / 1e6d
+    debug(s"compression took: $duration ms (${img.getWidth} x ${img.getHeight}, ${img.getByteCount} bytes -> ${bytes.length} bytes, ${img.getConfig}, $mime, $format)")
+    bytes
+  }(Threading.ImageDispatcher)
+
+  data = AssetData(
+    id,
+    mime = mime,
+    metaData = Some(AssetMetaData.Image(Dim2(w, h), Medium)),
+    data = {
+      verbose(s"data requested, compress completed: ${imageData.isCompleted}")
+      // XXX: this is ugly, but will only be accessed from bg thread and very rarely, so we should be fine with that hack
+      LoggedTry(Await.result(imageData, 15.seconds)).toOption
+    }
+  )
+
+  override def getBitmap(req: BitmapRequest, callback: BitmapCallback): LoadHandle = {
+    verbose(s"get bitmap")
+    new BitmapLoadHandle(_ => Signal.future(imageData) flatMap { _ => BitmapSignal(data, req, ui.globalImageLoader, ui.network) }, callback)
+  }
+
+  override def writeToParcel(p: Parcel, flags: Int): Unit = {
+    p.writeInt(Parcelable.FlagLocal)
+    p.writeString(JsonEncoder.encodeString(data))
   }
 }
 
