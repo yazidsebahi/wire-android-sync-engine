@@ -21,7 +21,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api._
 import com.waz.api.impl.ErrorResponse
-import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.model.AccountData.Label
 import com.waz.model._
 import com.waz.service.BackendConfig
@@ -31,16 +30,15 @@ import com.waz.utils.JsonEncoder
 import com.waz.utils.Locales._
 import com.waz.znet.AuthenticationManager.Cookie
 import com.waz.znet.ContentEncoder.JsonContentEncoder
-import com.waz.znet.Response.{Status, SuccessHttpStatus}
+import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet.ZNetClient.ErrorOr
 import com.waz.znet._
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 trait RegistrationClient {
-  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): Future[ActivateResult]
-  def requestEmailCode(email: EmailAddress): Future[ActivateResult] //for now only used for registration
+  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): ErrorOr[Unit]
+  def requestEmailCode(email: EmailAddress): ErrorOr[Unit] //for now only used for registration
 
   def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
 
@@ -99,15 +97,13 @@ class RegistrationClientImpl(client: AsyncClient, backend: BackendConfig) extend
     client(Request.Post(if (login) LoginSendPath else ActivateSendPath, JsonContentEncoder(params), baseUri = Some(backend.baseUrl), timeout = timeout)).map {
       case resp @ Response(SuccessHttpStatus(), _, _) =>
         debug(s"confirmation code requested: $resp")
-        ActivateResult.Success
-      case Response(_, ErrorResponse(Status.Forbidden, _, "password-exists"), _) =>
-        ActivateResult.PasswordExists
+        Right({})
       case Response(_, ErrorResponse(code, msg, label), headers) =>
         warn(s"requestCode: login=$login failed with error: ($code, $msg, $label), headers: $headers")
-        ActivateResult.Failure(ErrorResponse(code, msg, label))
+        Left(ErrorResponse(code, msg, label))
       case other =>
         error(s"Unexpected response from requestCode: login=$login: $other")
-        ActivateResult.Failure(ErrorResponse(other.status.status, other.toString, "unknown"))
+        Left(ErrorResponse(other.status.status, other.toString, "unknown"))
     }.future
   }
 
@@ -157,11 +153,4 @@ object RegistrationClientImpl {
   val LoginSendPath = "/login/send"
 
   val timeout = 15.seconds
-
-  sealed trait ActivateResult
-  object ActivateResult {
-    case object Success extends ActivateResult
-    case object PasswordExists extends ActivateResult
-    case class Failure(err: ErrorResponse) extends ActivateResult
-  }
 }

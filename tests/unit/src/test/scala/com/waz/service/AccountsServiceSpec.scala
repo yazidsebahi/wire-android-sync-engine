@@ -20,7 +20,6 @@ package com.waz.service
 import com.waz.api.PhoneCredentials
 import com.waz.api.impl.ErrorResponse
 import com.waz.client.RegistrationClient
-import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.{AccountStorage, AccountsStorageOld, GlobalPreferences}
 import com.waz.model._
 import com.waz.specs.AndroidFreeSpec

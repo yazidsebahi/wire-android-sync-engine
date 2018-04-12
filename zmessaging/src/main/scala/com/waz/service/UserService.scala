@@ -260,7 +260,7 @@ class UserServiceImpl(selfUserId:        UserId,
     }
 
   override def updateSyncedUsers(users: Seq[UserInfo], timestamp: Long = System.currentTimeMillis()): Future[Set[UserData]] = {
-    debug(s"update synced users: $users, service: $this")
+    verbose(s"update synced ${users.size} users")
     assets.updateAssets(users.flatMap(_.picture.getOrElse(Seq.empty[AssetData]))).flatMap { _ =>
       def updateOrCreate(info: UserInfo): Option[UserData] => UserData = {
         case Some(user: UserData) => user.updated(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else user.connection)

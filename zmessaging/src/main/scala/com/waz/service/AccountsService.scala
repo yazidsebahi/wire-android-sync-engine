@@ -23,7 +23,6 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{ErrorResponse => _, _}
-import com.waz.client.RegistrationClientImpl.ActivateResult
 import com.waz.content.GlobalPreferences.{ActiveAccountPref, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
 import com.waz.content.UserPreferences
 import com.waz.model.AccountData.{Label, Password}
@@ -63,8 +62,8 @@ trait AccountsService {
 
   def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
 
-  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): Future[ActivateResult]
-  def requestEmailCode(email: EmailAddress): Future[ActivateResult]
+  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): ErrorOr[Unit]
+  def requestEmailCode(email: EmailAddress): ErrorOr[Unit]
 
   def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
   def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
