@@ -434,7 +434,12 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       case Right((user, Some((cookie, _)))) =>
         for {
           resp <- addAccountEntry(user, cookie, None, registerCredentials)
-          _    <- resp.fold(_ => Future.successful({}), _ => createAccountManager(user.id, None).flatMap(_ => setAccount(Some(user.id))))
+          _    <- resp.fold(_ => Future.successful({}), _ =>
+            for {
+              am <- createAccountManager(user.id, None)
+              _ <- am.fold(Future.successful({}))(_.getOrRegisterClient(registerCredentials.maybePassword).map(_ => ()))
+              _ <- setAccount(Some(user.id))
+            } yield ())
         } yield resp
       case Right(_) =>
         warn("Register didn't return a cookie")
