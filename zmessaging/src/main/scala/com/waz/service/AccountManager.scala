@@ -269,6 +269,12 @@ class AccountManager(val userId:   UserId,
       case Left(err)                                  => CancellableFuture.successful(Left(err))
     }
   }
+
+  def hasPassword(): CancellableFuture[Option[Boolean]] =
+    credentialsClient.hasPassword().flatMap {
+      case Left(ex) => CancellableFuture(None)
+      case Right(hasPass) => CancellableFuture(Some(hasPass))
+    }
 }
 
 object AccountManager {
