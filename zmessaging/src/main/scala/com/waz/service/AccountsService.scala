@@ -73,7 +73,7 @@ trait AccountsService {
 
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
-  def createAccountManager(userId: UserId, dbFile: Option[File], initialUser: Option[UserInfo] = None): Future[Option[AccountManager]] //TODO return error codes on failure?
+  def createAccountManager(userId: UserId, dbFile: Option[File], isLogin: Option[Boolean], initialUser: Option[UserInfo] = None): Future[Option[AccountManager]] //TODO return error codes on failure?
 
   //Set to None in order to go to the login screen without logging out the current users
   def setAccount(userId: Option[UserId]): Future[Unit]
@@ -250,10 +250,10 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   //create account managers for all logged in accounts on app start, or initialise the signal to an empty set
   for {
     ids <- storage.flatMap(_.list().map(_.map(_.id).toSet))
-    _   <- Future.sequence(ids.map(createAccountManager(_, None)))
+    _   <- Future.sequence(ids.map(createAccountManager(_, None, None)))
   } yield Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutateOrDefault(identity, Set.empty[AccountManager])))
 
-  override def createAccountManager(userId: UserId, importDbFile: Option[File], initialUser: Option[UserInfo] = None) = Serialized.future(AccountManagersKey) {
+  override def createAccountManager(userId: UserId, importDbFile: Option[File], isLogin: Option[Boolean], initialUser: Option[UserInfo] = None) = Serialized.future(AccountManagersKey) {
     async {
       if (importDbFile.nonEmpty)
         BackupManager.importDatabase(userId, importDbFile.get, context.getDatabasePath(userId.toString).getParentFile).get
@@ -275,7 +275,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         }
         if (account.isEmpty) warn(s"No logged in account for user: $userId, not creating account manager")
         account.map { acc =>
-          val newManager = new AccountManager(userId, acc.teamId, global, this, startedJustAfterBackup = importDbFile.nonEmpty, user)
+          val newManager = new AccountManager(userId, acc.teamId, global, this, startedJustAfterBackup = importDbFile.nonEmpty, user, isLogin)
           accountManagers.mutateOrDefault(_ + newManager, Set(newManager))
           newManager
         }
@@ -415,7 +415,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       case Right((user, Some((cookie, _)))) =>
         for {
           _  <- addAccountEntry(user, cookie, None, registerCredentials)
-          am <- createAccountManager(user.id, None, Some(user))
+          am <- createAccountManager(user.id, None, Some(false), Some(user))
           _  <- am.fold(Future.successful({}))(_.getOrRegisterClient().map(_ => ()))
           _  <- setAccount(Some(user.id))
         } yield Right({})

@@ -374,6 +374,9 @@ object UserPreferences {
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
+  lazy val IsLogin                          = PrefKey[Boolean]("is_login")
+  lazy val IsNewClient                      = PrefKey[Boolean]("is_new_client")
+
   lazy val SelfClient                       = PrefKey[ClientRegistrationState]("self_client")
   lazy val PrivateMode                      = PrefKey[Boolean]("private_mode")
   lazy val SelfPermissions                  = PrefKey[Long]("self_permissions")

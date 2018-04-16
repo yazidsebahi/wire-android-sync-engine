@@ -26,7 +26,7 @@ import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.content.UserPreferences
-import com.waz.content.UserPreferences.{ClientRegVersion, SelfClient}
+import com.waz.content.UserPreferences._
 import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.model.otr.{Client, ClientId}
@@ -52,7 +52,8 @@ class AccountManager(val userId:   UserId,
                      val global:   GlobalModule,
                      val accounts: AccountsService,
                      val startedJustAfterBackup: Boolean,
-                     initialUser: Option[UserInfo]) {
+                     initialUser: Option[UserInfo],
+                     isLogin:     Option[Boolean]) {
   import AccountManager._
 
   implicit val dispatcher = new SerialDispatchQueue()
@@ -62,11 +63,11 @@ class AccountManager(val userId:   UserId,
 
   private def doAfterBackupCleanup() =
     Future.traverse(List(
-      UserPreferences.SelfClient.str,
-      UserPreferences.OtrLastPrekey.str,
-      UserPreferences.ClientRegVersion.str,
-      UserPreferences.LastSelfClientsSyncRequestedTime.str,
-      UserPreferences.LastStableNotification.str
+      SelfClient.str,
+      OtrLastPrekey.str,
+      ClientRegVersion.str,
+      LastSelfClientsSyncRequestedTime.str,
+      LastStableNotification.str
     ))(userPrefs.remove).map(_ => ())
 
   val storage   = global.factory.baseStorage(userId)
@@ -100,7 +101,10 @@ class AccountManager(val userId:   UserId,
   val invitationClient = new InvitationClient(netClient)
   val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
-  private val initSelf = initialUser.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u), UserData(u)))
+  private val initSelf = for {
+    _ <- initialUser.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u), UserData(u)))
+    _ <- isLogin.fold2(Future.successful({}), storage.userPrefs(IsLogin) := _)
+  } yield {}
 
   val zmessaging: Future[ZMessaging] = {
     for {
@@ -145,11 +149,9 @@ class AccountManager(val userId:   UserId,
           cryptoBox.sessions.remoteFingerprint(sessionId(uId, cId))
     } yield fingerprint
 
-  def getOrRegisterClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
-    verbose(s"registerClient: pw: $password")
+  def getOrRegisterClient(): ErrorOr[ClientRegistrationState] = {
+    verbose(s"registerClient()")
 
-    //TODO - even if we call this, we'll do a slow sync once we get a client. For now, that's necessary, but maybe we can avoid the
-    //unnecessary extra fetch?
     def getSelfClients: ErrorOr[Unit] = {
       for {
         resp <- otrClient.loadClients().future
@@ -164,18 +166,27 @@ class AccountManager(val userId:   UserId,
           Future.successful(Right(st))
         case _ =>
           for {
-            resp1 <- getSelfClients
-            resp2 <- resp1.fold(e => Future.successful(Left(e)), _ => registerNewClient(password))
-            _ <- resp2.fold(_ => Future.successful({}), userPrefs(SelfClient) := _)
-          } yield resp2
+            r1 <- registerNewClient()
+            r2 <- r1 match {
+              case Right(r@Registered(_)) =>
+                for {
+                  isLogin <- userPrefs(IsLogin).apply()
+                  _       <- if (isLogin) userPrefs(IsNewClient) := true else Future.successful({})
+                } yield Right(r)
+              case Right(LimitReached) => getSelfClients.map(_.fold(e => Left(e), _ => Right(LimitReached)))
+              case Right(st)           => Future.successful(Right(st))
+              case Left(e)             => Future.successful(Left(e))
+            }
+            _ <- r2.fold(_ => Future.successful({}), userPrefs(SelfClient) := _)
+          } yield r2
       }
     }
   }
 
   //Note: this method should only be externally called from tests and debug preferences. User `registerClient` for all normal flows.
-  def registerNewClient(password: Option[Password] = None): ErrorOr[ClientRegistrationState] = {
+  def registerNewClient(): ErrorOr[ClientRegistrationState] = {
     for {
-      pw       <- password.fold2(account.map(_.password).head, p => Future.successful(Some(p)))
+      pw       <- account.map(_.password).head
       client   <- cryptoBox.createClient()
       resp <- client match {
         case None => Future.successful(Left(internalError("CryptoBox missing")))
