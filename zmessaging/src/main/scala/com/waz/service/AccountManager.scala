@@ -51,7 +51,8 @@ class AccountManager(val userId:   UserId,
                      val teamId:   Option[TeamId],
                      val global:   GlobalModule,
                      val accounts: AccountsService,
-                     val startedJustAfterBackup: Boolean) {
+                     val startedJustAfterBackup: Boolean,
+                     initialUser: Option[UserInfo]) {
   import AccountManager._
 
   implicit val dispatcher = new SerialDispatchQueue()
@@ -99,8 +100,11 @@ class AccountManager(val userId:   UserId,
   val invitationClient = new InvitationClient(netClient)
   val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
+  private val initSelf = initialUser.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u), UserData(u)))
+
   val zmessaging: Future[ZMessaging] = {
     for {
+      _       <- initSelf
       cId     <- clientId.collect { case Some(id) => id }.head
       Some(_) <- checkCryptoBox()
     } yield {
@@ -216,9 +220,15 @@ class AccountManager(val userId:   UserId,
       case None => CancellableFuture.successful(Left(internalError("Not a team account")))
     }
 
-  def getSelf: ErrorOr[UserInfo] = {
+  def getSelf: Future[UserData] =
+    initSelf.flatMap(_ => storage.usersStorage.get(userId)).collect { case Some(u) => u } //self should always be defined at this point
+
+  def updateSelf(): ErrorOr[UserInfo] = {
     auth.currentToken().flatMap {
       case Right(token) => accounts.loginClient.getSelfUserInfo(token)
+      case Left(err) => Future.successful(Left(err))
+    }.flatMap {
+      case Right(info) => storage.usersStorage.update(userId, _.updated(info)).map(_ => Right(info))
       case Left(err) => Future.successful(Left(err))
     }
   }
@@ -263,7 +273,7 @@ class AccountManager(val userId:   UserId,
   //TODO should only have one request at a time?
   def checkEmailActivation(email: EmailAddress): ErrorOrResponse[Unit] = {
     verbose(s"checkEmailActivation $email")
-    CancellableFuture.lift(getSelf).flatMap {
+    CancellableFuture.lift(updateSelf).flatMap {
       case Right(user) if !user.email.contains(email) => CancellableFuture.delay(3.seconds).flatMap(_ => checkEmailActivation(email))
       case Right(_)                                   => CancellableFuture.successful(Right({}))
       case Left(err)                                  => CancellableFuture.successful(Left(err))

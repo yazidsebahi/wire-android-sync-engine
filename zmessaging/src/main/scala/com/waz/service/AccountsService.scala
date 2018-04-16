@@ -23,23 +23,22 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl._
 import com.waz.api.{ErrorResponse => _, _}
-import com.waz.content.GlobalPreferences.{ActiveAccountPref, CurrentAccountPrefOld, DatabasesRenamed, FirstTimeWithTeams}
+import com.waz.content.GlobalPreferences._
 import com.waz.content.UserPreferences
-import com.waz.model.AccountData.{Label, Password}
+import com.waz.model.AccountData.Password
 import com.waz.model._
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
-import com.waz.utils.{RichOption, Serialized, returning}
+import com.waz.utils.{Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
-import com.waz.znet.{LoginClient, Request, Response}
+import com.waz.znet.LoginClient
 import com.waz.znet.ZNetClient._
 
-import scala.concurrent.{Future}
-import scala.util.{Success, Failure, Right}
-import scala.util.control.NonFatal
-
 import scala.async.Async.{async, await}
+import scala.concurrent.Future
+import scala.util.Right
+import scala.util.control.NonFatal
 
 /**
   * There are a few possible states that an account can progress through for the purposes of log in and registration.
@@ -74,8 +73,7 @@ trait AccountsService {
 
   def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
-  def hasDatabase(userId: UserId): Future[Boolean] = ???
-  def createAccountManager(userId: UserId, dbFile: Option[File]): Future[Option[AccountManager]] //TODO return error codes on failure?
+  def createAccountManager(userId: UserId, dbFile: Option[File], initialUser: Option[UserInfo] = None): Future[Option[AccountManager]] //TODO return error codes on failure?
 
   //Set to None in order to go to the login screen without logging out the current users
   def setAccount(userId: Option[UserId]): Future[Unit]
@@ -255,27 +253,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     _   <- Future.sequence(ids.map(createAccountManager(_, None)))
   } yield Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutateOrDefault(identity, Set.empty[AccountManager])))
 
-//  override def enterAccount(userId: UserId, importDbFile: Option[File]) = {
-//    Serialized.future(AccountManagersKey) {
-//      verbose(s"getOrCreateAccountManager: $userId")
-//      accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head.map(_.find(_.userId == userId)).flatMap {
-//        case Some(am) =>
-//          warn(s"AccountManager for: $userId already created")
-//          Future.successful(Some(am))
-//        case _ =>
-//          verbose(s"No AccountManager for: $userId, creating new one")
-//          storage.flatMap(_.get(userId).map {
-//            case Some(acc) =>
-//              Some(returning(new AccountManager(userId, acc.teamId, global, this))(am => accountManagers.mutateOrDefault(_ + am, Set(am))))
-//            case _ =>
-//              warn(s"No logged in account for user: $userId, not creating account manager")
-//              None
-//          })
-//      }
-//    }
-//  }
-
-  override def createAccountManager(userId: UserId, importDbFile: Option[File]) = Serialized.future(AccountManagersKey) {
+  override def createAccountManager(userId: UserId, importDbFile: Option[File], initialUser: Option[UserInfo] = None) = Serialized.future(AccountManagersKey) {
     async {
       if (importDbFile.nonEmpty)
         BackupManager.importDatabase(userId, importDbFile.get, context.getDatabasePath(userId.toString).getParentFile).get
@@ -288,10 +266,16 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
         manager
       } else {
         verbose(s"No AccountManager for: $userId, creating new one")
-        val account = await { storage.flatMap(_.get(userId)) }
+        val account = await(storage.flatMap(_.get(userId)))
+        val user = await {
+          for {
+            user <- prefs(LoggingInUser).apply().map(_.orElse(initialUser))
+            _    <- prefs(LoggingInUser) := None
+          } yield user
+        }
         if (account.isEmpty) warn(s"No logged in account for user: $userId, not creating account manager")
         account.map { acc =>
-          val newManager = new AccountManager(userId, acc.teamId, global, this, startedJustAfterBackup = importDbFile.nonEmpty)
+          val newManager = new AccountManager(userId, acc.teamId, global, this, startedJustAfterBackup = importDbFile.nonEmpty, user)
           accountManagers.mutateOrDefault(_ + newManager, Set(newManager))
           newManager
         }
@@ -413,10 +397,8 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     loginClient.login(loginCredentials).future.flatMap {
       case Right((token, Some(cookie), _)) => //TODO handle label
         loginClient.getSelfUserInfo(token).flatMap {
-          case Right(user) =>
-            addAccountEntry(user, cookie, Some(token), loginCredentials)
-              .map(_.right.map(_ => user.id))
-          case Left(err) => Future.successful(Left(err))
+          case Right(user) => addAccountEntry(user, cookie, Some(token), loginCredentials).map(_ => Right(user.id))
+          case Left(err)   => Future.successful(Left(err))
         }
       case Right(_) =>
         warn("login didn't return with a cookie, aborting")
@@ -432,14 +414,11 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     regClient.register(registerCredentials, name, teamName).flatMap {
       case Right((user, Some((cookie, _)))) =>
         for {
-          resp <- addAccountEntry(user, cookie, None, registerCredentials)
-          _    <- resp.fold(_ => Future.successful({}), _ =>
-            for {
-              am <- createAccountManager(user.id, None)
-              _ <- am.fold(Future.successful({}))(_.getOrRegisterClient(registerCredentials.maybePassword).map(_ => ()))
-              _ <- setAccount(Some(user.id))
-            } yield ())
-        } yield resp
+          _  <- addAccountEntry(user, cookie, None, registerCredentials)
+          am <- createAccountManager(user.id, None, Some(user))
+          _  <- am.fold(Future.successful({}))(_.getOrRegisterClient().map(_ => ()))
+          _  <- setAccount(Some(user.id))
+        } yield Right({})
       case Right(_) =>
         warn("Register didn't return a cookie")
         Future.successful(Left(ErrorResponse.internalError("No cookie for user after registration - can't create account")))
@@ -449,47 +428,11 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     }
   }
 
-  private def addAccountEntry(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): ErrorOr[Unit] = {
+  private def addAccountEntry(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): Future[Unit] = {
     verbose(s"addAccountEntry: $user, $cookie, $token, $credentials")
-
-    def getTeam(accessToken: AccessToken): ErrorOr[Option[TeamId]] = {
-      loginClient.findSelfTeam(accessToken).flatMap {
-        case Right(teamOpt) =>
-          (teamOpt match {
-            case Some(t) => global.teamsStorage.updateOrCreate(t.id, _ => t, t)
-            case _ => Future.successful({})
-          }).map(_ => Right(teamOpt.map(_.id)))
-        case Left(err) =>
-          warn(s"Failed to update team information: ${err.message}")
-          Future.successful(Left(err))
-      }
-    }
-
-    for {
-      cur  <- storage.flatMap(_.get(user.id))
-      resp <- cur match {
-        case Some(_) =>
-          verbose(s"There is already an account entry for ${user.id}")
-          storage
-            .flatMap(_.update(user.id, _.copy(cookie = cookie, accessToken = token, password = credentials.maybePassword)))
-            .map(_ => Right({}))
-        case None =>
-          verbose("No account entry, getting access token if necessary and checking team")
-          for {
-            tokenResp <- token.fold2(loginClient.access(cookie, None).future, at => Future.successful(Right((at, Some(cookie), Option.empty[Label])))).map(_.right.map(_._1))
-            teamResp <- tokenResp match {
-              case Right(access) => getTeam(access).flatMap {
-                case Right(tId) =>
-                  storage
-                    .flatMap(_.insert(AccountData(user.id, tId, cookie, Some(access), password = credentials.maybePassword)))
-                    .map(_ => Right({}))
-                case Left(err) => Future.successful(Left(err))
-              }
-              case Left(err) => Future.successful(Left(err))
-            }
-          } yield teamResp
-      }
-    } yield resp
+    storage
+      .flatMap(_.updateOrCreate(user.id, _.copy(cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, user.teamId, cookie, token, password = credentials.maybePassword)))
+      .map(_ => {})
   }
 
 }

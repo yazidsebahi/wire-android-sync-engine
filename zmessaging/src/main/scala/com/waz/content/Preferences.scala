@@ -32,7 +32,7 @@ import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{Signal, SourceSignal}
-import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
+import com.waz.utils.{CachedStorageImpl, JsonDecoder, JsonEncoder, Serialized, TrimmingLruCache, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
@@ -137,6 +137,8 @@ object Preferences {
 
       implicit lazy val EmailAddressCodec = apply[EmailAddress](_.str, EmailAddress(_), EmailAddress(""))
       implicit lazy val PhoneNumberCodec = apply[PhoneNumber](_.str, PhoneNumber(_), PhoneNumber(""))
+
+      implicit lazy val UserInfoCodec = apply[UserInfo](JsonEncoder.encode(_).toString, JsonDecoder.decode[UserInfo], null.asInstanceOf[UserInfo])
     }
   }
 
@@ -329,6 +331,8 @@ object GlobalPreferences {
   def apply(context: Context): GlobalPreferences = {
     returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
   }
+
+  lazy val LoggingInUser           = PrefKey[Option[UserInfo]]("logging_in_user") //only to be used during DB import
 
   lazy val ActiveAccountPref       = PrefKey[Option[UserId]]("active_account")
   lazy val CurrentAccountPrefOld   = PrefKey[Option[AccountId]]("CurrentUserPref")

@@ -119,6 +119,7 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
               case Some(credentials) =>
                 client.login(credentials).flatMap {
                   case Right((token, c, _)) => updateCredentials(Some(token), c).map(_ => Right(token))
+                  case Left(resp@ErrorResponse(Status.Forbidden | Status.Unauthorized, _, _)) => wipeCredentials().map(_ => Left(resp)) //credentials didn't match - log user out
                   case Left(err) => CancellableFuture.successful(Left(err))
                 }
               case None =>
