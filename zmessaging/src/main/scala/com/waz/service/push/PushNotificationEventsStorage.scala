@@ -45,11 +45,11 @@ trait PushNotificationEventsStorage extends CachedStorage[(Uid, EventIndex), Pus
   def writeClosure(id: Uid, index: EventIndex): PlainWriter
   def writeError(id: Uid, index: EventIndex, error: OtrErrorEvent): Future[Unit]
   def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit]
-  def decryptedEvents: Future[Seq[PushNotificationEvent]]
   def encryptedEvents: Future[Seq[PushNotificationEvent]]
   def removeEventsWithIds(ids: Seq[Uid]): Future[Unit]
   def removeRows(rows: Iterable[(Uid, Int)]): Future[Unit]
   def registerEventHandler(handler: () => Future[Unit])(implicit ec: EventContext): Future[Unit]
+  def getDecryptedRows(limit: Int = 50): Future[IndexedSeq[PushNotificationEvent]]
 }
 
 class PushNotificationEventsStorageImpl(context: Context, storage: Database, clientId: ClientId)
@@ -106,9 +106,12 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
     insertAll(eventsToSave).map(_ => ())
   }
 
-  def decryptedEvents: Future[Seq[PushNotificationEvent]] = list().map(_.filter(_.decrypted))
-
   def encryptedEvents: Future[Seq[PushNotificationEvent]] = list().map(_.filter(!_.decrypted))
+
+  //limit amount of decrypted events we read to avoid overwhelming older phones
+  def getDecryptedRows(limit: Int = 50): Future[IndexedSeq[PushNotificationEvent]] = storage.read { implicit db =>
+    PushNotificationEventsDao.listDecrypted(limit)
+  }
 
   def removeEventsWithIds(ids: Seq[Uid]): Future[Unit] =
     storage.withTransaction { implicit db =>
@@ -130,5 +133,4 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
         processor()
       }
     }
-
 }

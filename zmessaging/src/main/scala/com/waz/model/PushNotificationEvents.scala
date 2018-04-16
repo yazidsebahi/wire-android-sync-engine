@@ -41,6 +41,8 @@ object PushNotificationEvents {
     override def onCreate(db: DB): Unit = {
       super.onCreate(db)
     }
+
+    def listDecrypted(limit: Int)(implicit db: DB) = list(db.query(table.name, null, s"${Decrypted.name} = 1", null, null, null, null, s"$limit"))
   }
 }
 

@@ -184,6 +184,7 @@ class PushServiceImpl(userId:               UserId,
     ev.getString("type").equals("conversation.otr-message-add")
 
   private def processStoredNotifications(): Future[Unit] = {
+    import scala.async.Async.{async, await}
     def decodeRow(event: PushNotificationEvent) =
       if(event.plain.isDefined) {
         val msg = GenericMessage(event.plain.get)
@@ -194,24 +195,19 @@ class PushServiceImpl(userId:               UserId,
         Some(EventDecoder(event.event))
       }
 
-    def processBlock(blocks: Iterator[Seq[((Uid, Int), Option[Event])]]): Future[Unit] = {
-      if (blocks.hasNext) {
-        val block = blocks.next()
-        val events = block.flatMap(_._2)
-        pipeline(events)
-          .flatMap(_ => notificationStorage.removeRows(block.map(_._1)))
-          .flatMap(_ => processBlock(blocks))
-          .map(_ => ())
-      } else {
-        Future.successful(())
+    def processRows(): Future[Unit] =
+      notificationStorage.getDecryptedRows().flatMap { rows =>
+        verbose(s"Processing ${rows.size} rows")
+        if (!rows.isEmpty) {
+          pipeline(rows.flatMap(decodeRow))
+            .flatMap(_ => notificationStorage.removeRows(rows.map(e => (e.pushId, e.index))))
+            .flatMap(_ => processRows())
+        } else {
+          Future.successful(())
+        }
       }
-    }
 
-    notificationStorage.decryptedEvents.map(_.map(event => ((event.pushId, event.index), decodeRow(event))))
-      .flatMap { events =>
-        processBlock(events.grouped(100))
-      }
-      .andThen { case _ => processing ! false }
+    processRows().andThen { case _ => processing ! false }
   }
 
   case class Results(notifications: Vector[PushNotificationEncoded], time: Option[Instant], firstSync: Boolean, historyLost: Boolean)
