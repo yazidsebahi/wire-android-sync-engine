@@ -32,11 +32,11 @@ import com.waz.threading.Threading
 import com.waz.utils.events.{EventContext, Signal}
 import com.waz.utils.{RichOption, Serialized, returning}
 import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
-import com.waz.znet.LoginClient
+import com.waz.znet.{LoginClient, Request, Response}
 import com.waz.znet.ZNetClient._
 
-import scala.concurrent.Future
-import scala.util.Right
+import scala.concurrent.{Future}
+import scala.util.{Success, Failure, Right}
 import scala.util.control.NonFatal
 
 import scala.async.Async.{async, await}
@@ -491,5 +491,6 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
       }
     } yield resp
   }
+
 }
 

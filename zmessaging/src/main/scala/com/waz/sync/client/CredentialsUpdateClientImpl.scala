@@ -24,6 +24,7 @@ import com.waz.threading.Threading
 import com.waz.utils.JsonEncoder
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
+import com.waz.znet.Response.{SuccessHttpStatus, NotFoundStatus}
 
 trait CredentialsUpdateClient {
 
@@ -35,6 +36,8 @@ trait CredentialsUpdateClient {
 
   def updatePassword(newPassword: Password, currentPassword: Option[Password]): ErrorOrResponse[Unit]
   def updateHandle(handle: Handle): ErrorOrResponse[Unit]
+
+  def hasPassword(): ErrorOrResponse[Boolean]
 }
 
 class CredentialsUpdateClientImpl(netClient: ZNetClient) extends CredentialsUpdateClient {
@@ -61,6 +64,12 @@ class CredentialsUpdateClientImpl(netClient: ZNetClient) extends CredentialsUpda
 
   override def updateHandle(handle: Handle): ErrorOrResponse[Unit] =
     netClient.updateWithErrorHandling("updateHandle", Request.Put(CredentialsUpdateClientImpl.handlePath, JsonEncoder { _.put("handle", handle.toString) }))
+
+  override def hasPassword(): ErrorOrResponse[Boolean] =
+    netClient.withErrorHandling("hasPassword", Request.Head(CredentialsUpdateClientImpl.passwordPath)) {
+      case Response(SuccessHttpStatus(), _, _) => true
+      case Response(NotFoundStatus(), _, _)    => false
+    }
 }
 
 object CredentialsUpdateClientImpl {
