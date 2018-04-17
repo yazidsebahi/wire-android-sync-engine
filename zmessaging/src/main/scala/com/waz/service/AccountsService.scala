@@ -397,7 +397,10 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
     loginClient.login(loginCredentials).future.flatMap {
       case Right((token, Some(cookie), _)) => //TODO handle label
         loginClient.getSelfUserInfo(token).flatMap {
-          case Right(user) => addAccountEntry(user, cookie, Some(token), loginCredentials).map(_ => Right(user.id))
+          case Right(user) => for {
+            _ <- addAccountEntry(user, cookie, Some(token), loginCredentials)
+            _ <- prefs(LoggingInUser) := Some(user)
+          } yield Right(user.id)
           case Left(err)   => Future.successful(Left(err))
         }
       case Right(_) =>

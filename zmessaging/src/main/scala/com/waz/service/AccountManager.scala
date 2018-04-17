@@ -52,14 +52,13 @@ class AccountManager(val userId:   UserId,
                      val global:   GlobalModule,
                      val accounts: AccountsService,
                      val startedJustAfterBackup: Boolean,
-                     initialUser: Option[UserInfo],
+                     initialSelf: Option[UserInfo],
                      isLogin:     Option[Boolean]) {
   import AccountManager._
 
   implicit val dispatcher = new SerialDispatchQueue()
   implicit val accountContext: AccountContext = new AccountContext(userId, accounts)
-
-  verbose(s"Creating for: $userId")
+  verbose(s"Creating for: $userId, team: $teamId, initialSelf: $initialSelf, startJustAfterBackup: $startedJustAfterBackup, isLogin: $isLogin")
 
   private def doAfterBackupCleanup() =
     Future.traverse(List(
@@ -102,7 +101,7 @@ class AccountManager(val userId:   UserId,
   val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
   private val initSelf = for {
-    _ <- initialUser.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u), UserData(u)))
+    _ <- initialSelf.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u), UserData(u)))
     _ <- isLogin.fold2(Future.successful({}), storage.userPrefs(IsLogin) := _)
   } yield {}
 
