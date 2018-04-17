@@ -22,7 +22,7 @@ import java.util.Date
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.impl.AccentColor
-import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, PendingEmail, ShouldSyncUsers}
+import com.waz.content.UserPreferences.{LastSlowSyncTimeKey, ShouldSyncUsers}
 import com.waz.content._
 import com.waz.model.AccountData.Password
 import com.waz.model.UserData.ConnectionStatus
@@ -85,6 +85,7 @@ trait UserService {
   def updateAccentColor(color: AccentColor): Future[Unit]
   def updateAvailability(availability: Availability): Future[Unit]
   def updateSelfPicture(image: com.waz.api.ImageAsset): Future[Unit] //TODO take URIs or Array[Byte]
+  def addUnsplashPicture(): Future[Unit]
 }
 
 /**
@@ -266,11 +267,7 @@ class UserServiceImpl(selfUserId:        UserId,
         case Some(user: UserData) => user.updated(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else user.connection)
         case None => UserData(info).copy(syncTimestamp = timestamp, connection = if (selfUserId == info.id) ConnectionStatus.Self else ConnectionStatus.Unconnected)
       }
-
-      usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut)).map { res =>
-        res.find(_.id == selfUserId).fold(Future.successful({}))(self => if (self.picture.isDefined) Future.successful({}) else addUnsplashPicture())
-        res
-      }
+      usersStorage.updateOrCreateAll(users.map { info => info.id -> updateOrCreate(info) }(breakOut))
     }
   }
 
@@ -346,7 +343,7 @@ class UserServiceImpl(selfUserId:        UserId,
     }
   }
 
-  private def addUnsplashPicture(): Future[Unit] = {
+  def addUnsplashPicture() = {
     verbose(s"addUnsplashPicture")
     val asset = AssetData.newImageAssetFromUri(uri = UnsplashUrl)
     assets.addImage(asset, isProfilePic = true) flatMap { asset =>

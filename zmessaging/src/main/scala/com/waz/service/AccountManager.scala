@@ -25,7 +25,6 @@ import com.waz.ZLog._
 import com.waz.api.ZmsVersion
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse.internalError
-import com.waz.content.UserPreferences
 import com.waz.content.UserPreferences._
 import com.waz.model.AccountData.Password
 import com.waz.model._
@@ -116,7 +115,9 @@ class AccountManager(val userId:   UserId,
     }
   }
 
-  val firstLogin: Signal[Boolean] = db.dbHelper.wasCreated
+  if (isLogin.contains(false)) {
+    zmessaging.flatMap(_.users.addUnsplashPicture())
+  }
 
   private val otrClients =
     storage.otrClientsStorage.signal(userId)
