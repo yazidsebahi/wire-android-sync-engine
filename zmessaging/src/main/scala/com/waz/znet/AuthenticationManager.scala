@@ -46,6 +46,8 @@ trait AccessTokenProvider {
   def onPasswordReset(emailCredentials: Option[EmailCredentials] = None): ErrorOr[Unit]
 }
 
+case class LoggedOutException(msg: String) extends Throwable
+
 /**
  * Manages authentication token, and dispatches login requests when needed.
  * Will retry login request if unsuccessful.
@@ -64,7 +66,7 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
   private def withAccount[A](f: (AccountData) => A): CancellableFuture[A] = {
     CancellableFuture.lift(accStorage.get(id)).map {
       case Some(acc) => f(acc)
-      case _         => throw new CancelException("Account has been logged out - aborting all authentication attempts")
+      case _         => throw new LoggedOutException("Account has been logged out - aborting all authentication attempts")
     }
   }
 
@@ -103,6 +105,9 @@ class AuthenticationManager(id: UserId, accStorage: AccountStorage, client: Logi
       }
     }
   }.recover {
+    case LoggedOutException(ex) =>
+      warn(s"Request failed as we are logged out")
+      Left(ErrorResponse.Unauthorized)
     case NonFatal(ex) =>
       warn(s"login failed", ex)
       Left(ErrorResponse.Cancelled)
