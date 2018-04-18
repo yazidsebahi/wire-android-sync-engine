@@ -122,7 +122,7 @@ class UserServiceImpl(selfUserId:        UserId,
   } if (shouldSync) {
     verbose("Syncing user data to get team ids")
     usersStorage.list()
-      .flatMap(users => sync.syncUsers(users.map(_.id):_*))
+      .flatMap(users => sync.syncUsers(users.map(_.id).filterNot(_ == selfUserId):_*))
       .flatMap(_ => shouldSyncUsers := false)
   }
 
