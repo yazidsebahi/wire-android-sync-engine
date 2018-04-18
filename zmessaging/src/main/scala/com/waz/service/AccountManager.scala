@@ -123,6 +123,10 @@ class AccountManager(val userId:   UserId,
     zmessaging.flatMap(_.users.addUnsplashPicture())
   }
 
+  if (startedJustAfterBackup) {
+    zmessaging.foreach(_.tracking.historyRestored(true))
+  }
+
   private val otrClients =
     storage.otrClientsStorage.signal(userId)
       .map(_.clients.values.toSet)
@@ -249,15 +253,16 @@ class AccountManager(val userId:   UserId,
   }
 
   def exportDatabase: Future[File] = for {
-    zms <- zmessaging
-    user <- zms.users.selfUser.head
-    userHandle = user.handle.map(_.string).getOrElse("")
-  } yield BackupManager.exportDatabase(
-    userId,
-    userHandle,
-    databaseDir = context.getDatabasePath(userId.str).getParentFile,
-    targetDir = context.getExternalCacheDir
-  ).get
+    zms     <- zmessaging
+    user    <- zms.users.selfUser.head
+    backup  = BackupManager.exportDatabase(
+      userId,
+      userHandle  = user.handle.map(_.string).getOrElse(""),
+      databaseDir = context.getDatabasePath(userId.str).getParentFile,
+      targetDir   = context.getExternalCacheDir
+    )
+    _       = tracking.historyBackedUp(backup.isSuccess)
+  } yield backup.get
 
   private def checkCryptoBox() =
     cryptoBox.cryptoBox.flatMap {

@@ -50,6 +50,8 @@ trait TrackingService {
 
   def integrationAdded(integrationId: IntegrationId, convId: ConvId, method: IntegrationAdded.Method): Unit
   def integrationRemoved(integrationId: IntegrationId): Unit
+  def historyBackedUp(isSuccess: Boolean): Unit
+  def historyRestored(isSuccess: Boolean): Unit
 
   def trackCallState(userId: UserId, callInfo: CallInfo): Unit
 }
@@ -121,6 +123,13 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
   }
 
   def integrationRemoved(integrationId: IntegrationId) = track(IntegrationRemoved(integrationId))
+
+  override def historyBackedUp(isSuccess: Boolean) =
+    track(if (isSuccess) HistoryBackupSucceeded else HistoryBackupFailed)
+
+  override def historyRestored(isSuccess: Boolean) =
+    if (isSuccess) track(HistoryRestoreSucceeded)
+    else events ! None -> HistoryRestoreFailed
 
   override def trackCallState(userId: UserId, callInfo: CallInfo) =
     ((callInfo.prevState, callInfo.state) match {
