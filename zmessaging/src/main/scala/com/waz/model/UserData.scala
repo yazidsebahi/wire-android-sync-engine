@@ -65,13 +65,14 @@ case class UserData(id:                    UserId,
 
   def getDisplayName = if (displayName.isEmpty) name else displayName
 
-  def updated(user: UserInfo): UserData = copy(
+  def updated(user: UserInfo): UserData = updated(user, withSearchKey = true)
+  def updated(user: UserInfo, withSearchKey: Boolean): UserData = copy(
     name = user.name.getOrElse(name),
     email = user.email.orElse(email),
     phone = user.phone.orElse(phone),
     accent = user.accentId.getOrElse(accent),
     trackingId = user.trackingId.orElse(trackingId),
-    searchKey = SearchKey(user.name.getOrElse(name)),
+    searchKey = SearchKey(if (withSearchKey) user.name.getOrElse(name) else ""),
     picture = user.mediumPicture.map(_.id).orElse(picture),
     deleted = user.deleted,
     handle = user.handle match {
@@ -155,9 +156,11 @@ object UserData {
       handle    = Some(entry.handle)
     ) // TODO: improve connection, relation, search level stuff
 
-  def apply(user: UserInfo): UserData =
+  def apply(user: UserInfo): UserData = apply(user, withSearchKey = true)
+
+  def apply(user: UserInfo, withSearchKey: Boolean): UserData =
     UserData(user.id, None, user.name.getOrElse(""), user.email, user.phone, user.trackingId, user.mediumPicture.map(_.id),
-      user.accentId.getOrElse(AccentColor().id), SearchKey(user.name.getOrElse("")), deleted = user.deleted,
+      user.accentId.getOrElse(AccentColor().id), SearchKey(if (withSearchKey) user.name.getOrElse("") else ""), deleted = user.deleted,
       handle = user.handle, providerId = user.service.map(_.provider), integrationId = user.service.map(_.id))
 
   implicit lazy val Decoder: JsonDecoder[UserData] = new JsonDecoder[UserData] {

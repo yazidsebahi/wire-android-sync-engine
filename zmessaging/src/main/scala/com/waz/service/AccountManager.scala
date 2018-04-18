@@ -100,7 +100,7 @@ class AccountManager(val userId:   UserId,
   val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
   private val initSelf = for {
-    _ <- initialSelf.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u), UserData(u)))
+    _ <- initialSelf.fold2(Future.successful({}), u => storage.usersStorage.updateOrCreate(u.id, _.updated(u, withSearchKey = false), UserData(u, withSearchKey = false))) //no search key to avoid transliteration loading
     _ <- isLogin.fold2(Future.successful({}), storage.userPrefs(IsLogin) := _)
   } yield {}
 
