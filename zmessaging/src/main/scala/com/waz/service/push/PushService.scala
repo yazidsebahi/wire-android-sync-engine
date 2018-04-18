@@ -38,7 +38,7 @@ import com.waz.threading.CancellableFuture.lift
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
 import com.waz.utils.{RichInstant, _}
-import com.waz.znet.Response.Status.NotFound
+import com.waz.znet.Response.Status.{NotFound, Unauthorized}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
@@ -240,6 +240,9 @@ class PushServiceImpl(userId:               UserId,
         case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
           warn(s"/notifications failed with 404, history lost")
           load(None).flatMap { case Results(nots, time, _, _) => futureHistoryResults(nots, time, historyLost = true) }
+        case Left(e@ErrorResponse(Unauthorized, _, _)) =>
+          warn(s"Logged out, failing sync request")
+          CancellableFuture.failed(FetchFailedException(e))
         case Left(err) =>
           warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again? $withRetries")
           if (!withRetries) CancellableFuture.failed(FetchFailedException(err))
