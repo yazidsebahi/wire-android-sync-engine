@@ -256,7 +256,9 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
   override def createAccountManager(userId: UserId, importDbFile: Option[File], isLogin: Option[Boolean], initialUser: Option[UserInfo] = None) = Serialized.future(AccountManagersKey) {
     async {
       if (importDbFile.nonEmpty)
-        BackupManager.importDatabase(userId, importDbFile.get, context.getDatabasePath(userId.toString).getParentFile).get
+        returning(BackupManager.importDatabase(userId, importDbFile.get, context.getDatabasePath(userId.toString).getParentFile)) { restore =>
+          if (restore.isFailure) global.trackingService.historyRestored(false) // HistoryRestoreSucceeded is sent from the new AccountManager
+        }.get // if the import failed this will rethrow the exception
 
       verbose(s"getOrCreateAccountManager: $userId")
       val managers = await { accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head }
