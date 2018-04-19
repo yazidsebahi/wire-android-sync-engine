@@ -17,7 +17,6 @@
  */
 package com.waz.service.conversation
 
-import android.content.Context
 import com.waz.ZLog._
 import com.waz.content._
 import com.waz.model.ConversationData.ConversationType
@@ -26,27 +25,25 @@ import com.waz.model.{ConvId, UserData, UserId}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.EventContext
 import com.waz.utils.{BiRelation, ThrottledProcessingQueue}
-import com.waz.zms.R
 
 import scala.collection.{GenTraversable, breakOut}
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.util.Try
 
 /**
  * Updates conversation names when any dependency changes (members list, user names).
  */
 class NameUpdater(selfUserId:     UserId,
-                  context:        Context,
-                  usersStorage:   UsersStorageImpl,
-                  convs:          ConversationStorageImpl,
-                  membersStorage: MembersStorageImpl) {
+                  usersStorage:   UsersStorage,
+                  convs:          ConversationStorage,
+                  membersStorage: MembersStorage) {
 
   private implicit val tag: LogTag = logTagFor[NameUpdater]
   private implicit val ev = EventContext.Global
   private implicit val dispatcher = new SerialDispatchQueue(name = "NameUpdaterQueue")
 
-  private lazy val emptyConversationName = Try(context.getResources.getString(R.string.zms_empty_conversation_name)).getOrElse("Empty conversation")
+  // TODO: Move to UI
+  //private lazy val emptyConversationName = Try(context.getResources.getString(R.string.zms_empty_conversation_name)).getOrElse("Empty conversation")
 
   // unnamed group conversations with active members
   // we are keeping that in memory, it should be fine,
@@ -147,7 +144,6 @@ class NameUpdater(selfUserId:     UserId,
   private def addMembers(members: Traversable[(ConvId, Seq[UserId])]) =
     groupMembers ++= members.flatMap { case (c, us) => us.map(c -> _) }
 
-
   private def onUsersChanged(users: Seq[UserData]) = {
 
     def updateGroups() = queue.enqueue(users.map(_.id))
@@ -184,8 +180,7 @@ class NameUpdater(selfUserId:     UserId,
   }
 
   private def generatedName(userNames: GenTraversable[Option[String]]): String = {
-    val generated = userNames.flatten.filter(_.nonEmpty).mkString(", ")
-    if (generated.isEmpty) emptyConversationName else generated
+    userNames.flatten.filter(_.nonEmpty).mkString(", ")
   }
 }
 

@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{Date, Locale}
 
-import com.waz.api.{InvitationTokenFactory, Invitations}
+import com.waz.api.Invitations
 import com.waz.model.AssetMetaData.Image.Tag.{Medium, Preview}
 import com.waz.model.ConversationData.{ConversationType, UnreadCount}
 import com.waz.model.GenericContent.{EncryptionAlgorithm, Text}
@@ -41,7 +41,7 @@ import com.waz.testutils.knownMimeTypes
 import com.waz.utils.Locales.bcp47
 import com.waz.utils.sha2
 import com.waz.utils.wrappers.URI
-import com.waz.znet.AuthenticationManager.Token
+import com.waz.znet.AuthenticationManager.AccessToken
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.Gen._
 import org.scalacheck._
@@ -293,14 +293,12 @@ object Generators {
 
   lazy val serialCounter: AtomicLong = new AtomicLong()
 
-  implicit lazy val arbToken: Arbitrary[Token] = Arbitrary(resultOf(Token))
+  implicit lazy val arbToken: Arbitrary[AccessToken] = Arbitrary(resultOf(AccessToken))
 
   implicit lazy val arbEmailAddress: Arbitrary[EmailAddress] = Arbitrary(resultOf(EmailAddress))
   implicit lazy val arbPhoneNumber: Arbitrary[PhoneNumber] = Arbitrary(resultOf(PhoneNumber))
   implicit lazy val arbInvitation: Arbitrary[Invitation] = Arbitrary(resultOf(Invitation))
   implicit lazy val ArbLocale: Arbitrary[Locale] = Arbitrary(oneOf(availableLocales))
-  implicit lazy val ArbGenericToken: Arbitrary[Invitations.GenericToken] = Arbitrary(resultOf(InvitationTokenFactory.genericTokenFromCode _))
-  implicit lazy val ArbPersonalToken: Arbitrary[Invitations.PersonalToken] = Arbitrary(resultOf(InvitationTokenFactory.personalTokenFromCode _))
 
   implicit lazy val arbHandle: Arbitrary[Option[Handle]] = Arbitrary(sideEffect(Some(Handle.random)))
 

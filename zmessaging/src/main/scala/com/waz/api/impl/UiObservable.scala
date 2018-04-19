@@ -41,11 +41,6 @@ trait UiObservable extends com.waz.api.UiObservable {
   }
 }
 
-class EmptyList[A] extends CoreList[A] {
-  override def get(position: Int): A = null.asInstanceOf[A]
-  override def size(): Int = 0
-}
-
 abstract class UiSignal[A]()(implicit ui: UiModule) extends com.waz.api.UiSignal[A] with UiObservable with SignalLoading {
 
   private var value = Option.empty[A]

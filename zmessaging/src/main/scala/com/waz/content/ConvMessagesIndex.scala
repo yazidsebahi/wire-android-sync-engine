@@ -111,11 +111,11 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorageImpl, selfUserId:
   }.recoverWithLog(reportHockey = true)
   def updateLastRead(c: ConversationData) = lastReadTime.mutateOrDefault(_ max c.lastRead, c.lastRead)
 
-  private[waz] def loadCursor = CancellableFuture.lift(init) flatMap { _ =>
+  private[waz] def loadCursor = CancellableFuture.lift(init.flatMap { _ =>
     verbose(s"loadCursor for $conv")
-    storage { implicit db =>
+    storage.read { implicit db =>
       val (cursor, order) = filter match {
-          //TODO: this ignores other filter types if the content query is on. they should all be considered...
+        //TODO: this ignores other filter types if the content query is on. they should all be considered...
         case Some(MessageFilter(_, Some(query), _)) => (MessageContentIndexDao.findContent(query, Some(conv)), MessagesCursor.Descending)
         case Some(MessageFilter(Some(types), _, limit)) => (MessageDataDao.msgIndexCursorFiltered(conv, types, limit), MessagesCursor.Descending)
         case _ => (MessageDataDao.msgIndexCursor(conv), MessagesCursor.Ascending)
@@ -124,10 +124,10 @@ class ConvMessagesIndex(conv: ConvId, messages: MessagesStorageImpl, selfUserId:
       val readMessagesCount = MessageDataDao.countAtLeastAsOld(conv, time).toInt
       verbose(s"index of $time = $readMessagesCount")
       (cursor, order, time, math.max(0, readMessagesCount - 1))
-    } ("ConvMessageIndex_loadCursor") map { case (cursor, order, time, lastReadIndex) =>
+    }.map { case (cursor, order, time, lastReadIndex) =>
       new MessagesCursor(cursor, lastReadIndex, time, msgAndLikes, tracking)(order)
     }
-  }
+  })
 
   def getLastMessage = init.map { _ => signals.lastMessage.currentValue.flatten }
 

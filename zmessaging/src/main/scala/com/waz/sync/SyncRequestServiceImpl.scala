@@ -21,12 +21,11 @@ import android.util.Log
 import com.waz.ZLog._
 import com.waz.api
 import com.waz.api.{SyncState, ZmsVersion}
-import com.waz.api.impl.SyncIndicator
 import com.waz.model.sync._
-import com.waz.model.{AccountId, ConvId, SyncId}
+import com.waz.model.{ConvId, SyncId, UserId}
 import com.waz.service.tracking.TrackingService
 import com.waz.service.{AccountContext, AccountsService, NetworkModeService, ReportingService}
-import com.waz.sync.SyncRequestServiceImpl.SyncMatcher
+import com.waz.sync.SyncRequestServiceImpl.{Data, SyncMatcher}
 import com.waz.sync.queue.{SyncContentUpdater, SyncScheduler, SyncSchedulerImpl}
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.events.Signal
@@ -37,28 +36,30 @@ import scala.concurrent.Future
 trait SyncRequestService {
   def scheduler: SyncScheduler
   def addRequest(job: SyncJob, forceRetry: Boolean = false): Future[SyncId]
+  def syncState(matchers: Seq[SyncMatcher]): Signal[Data]
 }
 
 
 class SyncRequestServiceImpl(context:   Context,
-                             accountId: AccountId,
+                             userId:    UserId,
                              content:   SyncContentUpdater,
                              network:   NetworkModeService,
                              sync: =>   SyncHandler,
                              reporting: ReportingService,
                              accounts:  AccountsService,
                              tracking:  TrackingService
-                            )
-                            (implicit accountContext: AccountContext) extends SyncRequestService {
+                            )(implicit accountContext: AccountContext) extends SyncRequestService {
+
+  import SyncRequestServiceImpl._
 
   private implicit val tag = logTagFor[SyncRequestServiceImpl]
   private implicit val dispatcher = new SerialDispatchQueue(name = "SyncDispatcher")
 
-  override val scheduler: SyncScheduler = new SyncSchedulerImpl(context, accountId, content, network, this, sync, accounts, tracking)
+  override val scheduler: SyncScheduler = new SyncSchedulerImpl(context, userId, content, network, this, sync, accounts, tracking)
 
   reporting.addStateReporter { pw =>
     content.listSyncJobs flatMap { jobs =>
-      pw.println(s"SyncJobs for account $accountId:")
+      pw.println(s"SyncJobs for account $userId:")
       jobs.toSeq.sortBy(_.timestamp) foreach { job =>
         pw.println(job.toString)
       }
@@ -85,14 +86,19 @@ class SyncRequestServiceImpl(context:   Context,
     }
   }
 
-  def syncState(matchers: Seq[SyncMatcher]): Signal[SyncIndicator.Data] =
+  override def syncState(matchers: Seq[SyncMatcher]) =
     content.syncJobs map { _.values.filter(job => matchers.exists(_.apply(job))) } map { jobs =>
       val state = if (jobs.isEmpty) SyncState.COMPLETED else jobs.minBy(_.state.ordinal()).state
-      SyncIndicator.Data(state, api.SyncIndicator.PROGRESS_UNKNOWN, jobs.flatMap(_.error).toSeq)
+      Data(state, ProgressUnknown, jobs.flatMap(_.error).toSeq)
     }
 }
 
 object SyncRequestServiceImpl {
+
+  val ProgressUnknown = -1
+
+  case class Data(state: SyncState = SyncState.COMPLETED, progress: Int = 0, errors: Seq[api.ErrorResponse] = Nil)
+
   val MaxSyncAttempts = 20
 
   case class SyncMatcher(cmd: SyncCommand, convId: Option[ConvId]) {

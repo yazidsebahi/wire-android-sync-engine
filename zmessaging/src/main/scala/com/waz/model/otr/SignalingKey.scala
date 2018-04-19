@@ -34,6 +34,8 @@ object MsgAuthCode {
 
 /*
  * The MAC uses HMAC-SHA256.
+ *
+ * TODO remove - not used anymore...
  */
 case class SignalingKey(encKey: AESKey, macKey: String) {
 

@@ -21,7 +21,7 @@ import android.content.Context
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.ErrorType
-import com.waz.content.MessagesStorageImpl
+import com.waz.content.MessagesStorage
 import com.waz.model.ErrorData.ErrorDataDao
 import com.waz.model._
 import com.waz.content.ZmsDatabase
@@ -46,11 +46,11 @@ trait ErrorsService {
   def addConvUnverifiedError(conv: ConvId, message: MessageId): Future[ErrorData]
 }
 
-class ErrorsServiceImpl(accountId: AccountId,
-                    context:   Context,
-                    storage:   ZmsDatabase,
-                    accounts:  AccountsService,
-                    messages:  MessagesStorageImpl) extends ErrorsService {
+class ErrorsServiceImpl(userId:    UserId,
+                        context:   Context,
+                        storage:   ZmsDatabase,
+                        accounts:  AccountsService,
+                        messages:  MessagesStorage) extends ErrorsService {
   import com.waz.utils.events.EventContext.Implicits.global
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "ErrorsService")
@@ -104,7 +104,7 @@ class ErrorsServiceImpl(accountId: AccountId,
   }
 
   def addErrorWhenActive(error: ErrorData): Future[Any] =
-    accounts.accountState(accountId).head.flatMap {
+    accounts.accountState(userId).head.flatMap {
       case InForeground => errorsStorage.insert(error)
       case _            => dismissed(error)
     }

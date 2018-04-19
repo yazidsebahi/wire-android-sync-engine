@@ -54,7 +54,7 @@ object DispatchQueueStats {
   def printStats(minTasks: Int = 10) = report(minTasks) foreach println
 
   def report(minTasks: Int = 10) =
-    stats.values.toSeq.sortBy(_.totalExecution).reverse.filter(s => s.count > 10 || s.total > 1000000).map(_.report)
+    stats.values.toSeq.sortBy(_.totalExecution).reverse.filter(s => s.count > minTasks || s.total > 1000000).map(_.report)
 
   case class QueueStats(queue: String) {
 

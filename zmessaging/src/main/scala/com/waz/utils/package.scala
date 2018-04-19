@@ -42,6 +42,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.{higherKinds, implicitConversions}
 import scala.math.{Ordering, abs}
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import scala.{PartialFunction => =/>}
@@ -96,6 +97,10 @@ package object utils {
     else compareAndSet(ref)(updater)
   }
 
+  implicit class RichBoolean(val boolean: Boolean) extends AnyVal {
+    def ?[T](ifTrue: => T, ifFalse: => T): T = if (boolean) ifTrue else ifFalse
+  }
+
   implicit class RichTraversableOnce[A](val b: TraversableOnce[A]) extends AnyVal {
     def by[B, C[_, _]](f: A => B)(implicit cbf: CanBuild[(B, A), C[B, A]]): C[B, A] = byMap[B, A, C](f, identity)
 
@@ -140,9 +145,15 @@ package object utils {
   }
 
   implicit class RichTry[A](val t: Try[A]) extends AnyVal {
+    import scala.reflect._
     def toRight[L](f: Throwable => L): Either[L, A] = t match {
       case Success(s) => Right(s)
       case Failure(t) => Left(f(t))
+    }
+    def mapFailure(f: Throwable => Throwable): Try[A] = t.recoverWith { case err => Failure(err) }
+    def mapFailureIfNot[T: ClassTag](f: Throwable => Throwable): Try[A] = t.recoverWith {
+      case err: T => Failure(err)
+      case err    => Failure(f(err))
     }
   }
 

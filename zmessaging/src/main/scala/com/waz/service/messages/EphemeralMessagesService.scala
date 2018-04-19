@@ -20,7 +20,7 @@ package com.waz.service.messages
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.{EphemeralExpiration, Message}
-import com.waz.content.{MessagesStorageImpl, ZmsDatabase}
+import com.waz.content.{MessagesStorage, ZmsDatabase}
 import com.waz.model.AssetStatus.{UploadDone, UploadFailed}
 import com.waz.model.GenericContent._
 import com.waz.model.MessageData.MessageDataDao
@@ -40,7 +40,7 @@ import scala.concurrent.duration._
 // TODO: obfuscate sent messages when they expire
 class EphemeralMessagesService(selfUserId: UserId,
                                messages:   MessagesContentUpdater,
-                               storage:    MessagesStorageImpl,
+                               storage:    MessagesStorage,
                                db:         ZmsDatabase,
                                sync:       SyncServiceHandle,
                                assets:     AssetService) {

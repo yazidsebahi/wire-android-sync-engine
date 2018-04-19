@@ -23,14 +23,17 @@ import com.waz.ZLog._
 import com.waz.content.Preferences.Preference.PrefCodec
 import com.waz.content.Preferences.{PrefKey, Preference}
 import com.waz.media.manager.context.IntensityLevel
+import com.waz.model.AccountDataOld.PermissionsMasks
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model._
+import com.waz.model.otr.ClientId
+import com.waz.service.AccountManager.ClientRegistrationState
 import com.waz.sync.client.OAuth2Client.RefreshToken
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.{Signal, SourceSignal}
-import com.waz.utils.{CachedStorageImpl, Serialized, TrimmingLruCache, returning}
-import com.waz.znet.AuthenticationManager.{Cookie, Token}
+import com.waz.utils.{CachedStorageImpl, JsonDecoder, JsonEncoder, Serialized, TrimmingLruCache, returning}
+import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
@@ -44,6 +47,8 @@ trait Preferences {
 
   //protected for test prefs
   protected var cache = Map.empty[PrefKey[_], Preference[_]]
+
+  final def apply[A: PrefCodec](key: PrefKey[A]): Preference[A] = preference(key)
 
   final def preference[A: PrefCodec](key: PrefKey[A]): Preference[A] =
     cache.getOrElse(key, returning(buildPreference(key))(cache += key -> _)).asInstanceOf[Preference[A]]
@@ -69,6 +74,8 @@ object Preferences {
 
     def :=(value: A):      Future[Unit] = update(value)
     def mutate(f: A => A): Future[Unit] = apply().flatMap(cur => update(f(cur)))
+
+    def flatMutate(f: A => Future[A]) = apply().flatMap(cur => f(cur).flatMap(n => update(n)))
 
     lazy val signal: SourceSignal[A] = {
       returning(Signal[A]()) { s =>
@@ -104,9 +111,9 @@ object Preferences {
       implicit lazy val InstantCodec = apply[Instant](d => String.valueOf(d.toEpochMilli), s => Instant.ofEpochMilli(java.lang.Long.parseLong(s)), Instant.EPOCH)
       implicit lazy val DurationCodec = apply[Duration](d => String.valueOf(d.toMillis), s => Duration.ofMillis(java.lang.Long.parseLong(s)), Duration.ZERO)
 
-      implicit lazy val AuthTokenCodec = apply[Option[Token]] (
-        { t => optCodec[String].encode(t map Token.Encoder.apply map (_.toString)) },
-        { s => optCodec[String].decode(s) map (new JSONObject(_)) map (Token.Decoder.apply(_)) },
+      implicit lazy val AuthTokenCodec = apply[Option[AccessToken]] (
+        { t => optCodec[String].encode(t map AccessToken.Encoder.apply map (_.toString)) },
+        { s => optCodec[String].decode(s) map (new JSONObject(_)) map (AccessToken.Decoder.apply(_)) },
         None)
       implicit lazy val AuthCookieCodec = apply[Cookie] (_.str, Cookie, Cookie(""))
 
@@ -114,6 +121,24 @@ object Preferences {
 
       //TODO use an enumcodec somehow
       implicit lazy val IntensityLevelCodec = apply[IntensityLevel](_.toString, IntensityLevel.valueOf, IntensityLevel.FULL)
+
+      import com.waz.service.AccountManager.ClientRegistrationState._
+      implicit lazy val SelfClientIdCodec = apply[ClientRegistrationState] ({
+        case Unregistered    => "Unregistered"
+        case PasswordMissing => "PasswordMissing"
+        case LimitReached    => "LimitReached"
+        case Registered(id)  => id.str
+      }, {
+        case "Unregistered"    => Unregistered
+        case "PasswordMissing" => PasswordMissing
+        case "LimitReached"    => LimitReached
+        case id                => Registered(ClientId(id))
+      }, Unregistered)
+
+      implicit lazy val EmailAddressCodec = apply[EmailAddress](_.str, EmailAddress(_), EmailAddress(""))
+      implicit lazy val PhoneNumberCodec = apply[PhoneNumber](_.str, PhoneNumber(_), PhoneNumber(""))
+
+      implicit lazy val UserInfoCodec = apply[UserInfo](JsonEncoder.encode(_).toString, JsonDecoder.decode[UserInfo], null.asInstanceOf[UserInfo])
     }
   }
 
@@ -307,35 +332,40 @@ object GlobalPreferences {
     returning(new GlobalPreferences(context, context.getSharedPreferences("com.wire.preferences", Context.MODE_PRIVATE)))(_.migrate())
   }
 
-  lazy val CurrentAccountPref = PrefKey[Option[AccountId]]("CurrentUserPref")
-  lazy val FirstTimeWithTeams = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
+  lazy val LoggingInUser           = PrefKey[Option[UserInfo]]("logging_in_user") //only to be used during DB import
 
-  lazy val BackendDrift       = PrefKey[Duration]("backend_drift")
+  lazy val ActiveAccountPref       = PrefKey[Option[UserId]]("active_account")
+  lazy val CurrentAccountPrefOld   = PrefKey[Option[AccountId]]("CurrentUserPref")
+
+  lazy val FirstTimeWithTeams      = PrefKey[Boolean]("first_time_with_teams", customDefault = true)
+  lazy val DatabasesRenamed        = PrefKey[Boolean]("databases_renamed", customDefault = false)
+
+  lazy val BackendDrift            = PrefKey[Duration]("backend_drift")
 
   //TODO think of a nicer way of ensuring that these key values are used in UI - right now, we need to manually check they're correct
-  lazy val AutoAnswerCallPrefKey      = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")
-  lazy val V31AssetsEnabledKey        = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
-  lazy val WsForegroundKey            = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
+  lazy val AutoAnswerCallPrefKey   = PrefKey[Boolean]("PREF_KEY_AUTO_ANSWER_ENABLED")
+  lazy val V31AssetsEnabledKey     = PrefKey[Boolean]("PREF_V31_ASSETS_ENABLED")
+  lazy val WsForegroundKey         = PrefKey[Boolean]("PREF_KEY_WS_FOREGROUND_SERVICE_ENABLED")
 
-  lazy val PushEnabledKey             = PrefKey[Boolean]("PUSH_ENABLED", customDefault = true)
-  lazy val PushToken                  = PrefKey[Option[PushToken]]("PUSH_TOKEN")
+  lazy val PushEnabledKey          = PrefKey[Boolean]("PUSH_ENABLED", customDefault = true)
+  lazy val PushToken               = PrefKey[Option[PushToken]]("PUSH_TOKEN")
 
-  lazy val LastUpToDateSyncTime       = PrefKey[Long]   ("LastUpToDateSync")
-  lazy val LastCheckedVersion         = PrefKey[Int]    ("UpToDateVersion")
-  lazy val VersionUpToDate            = PrefKey[Boolean]("UpToDate", customDefault = true)
+  lazy val LastUpToDateSyncTime    = PrefKey[Long]   ("LastUpToDateSync")
+  lazy val LastCheckedVersion      = PrefKey[Int]    ("UpToDateVersion")
+  lazy val VersionUpToDate         = PrefKey[Boolean]("UpToDate", customDefault = true)
 
-  lazy val LastCacheCleanup           = PrefKey[Long]("LastCacheCleanup")
+  lazy val LastCacheCleanup        = PrefKey[Long]("LastCacheCleanup")
 
-  lazy val GPSErrorDialogShowCount    = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
+  lazy val GPSErrorDialogShowCount = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 
-  lazy val ResetPushToken             = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
-  lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
+  lazy val ResetPushToken          = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
+  lazy val AnalyticsEnabled        = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
 
   //DEPRECATED!!! Use the UserPreferences instead!!
-  lazy val _ShareContacts              = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
-  lazy val _DarkTheme                  = PrefKey[Boolean]("DarkTheme")
-  lazy val _SoundsPrefKey              = PrefKey[String] ("PREF_KEY_SOUND")
-  lazy val _DownloadImages             = PrefKey[String]("zms_pref_image_download")
+  lazy val _ShareContacts          = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
+  lazy val _DarkTheme              = PrefKey[Boolean]("DarkTheme")
+  lazy val _SoundsPrefKey          = PrefKey[String] ("PREF_KEY_SOUND")
+  lazy val _DownloadImages         = PrefKey[String]("zms_pref_image_download")
 
 }
 
@@ -344,39 +374,52 @@ object UserPreferences {
   def apply(context: Context, storage: ZmsDatabase, globalPreferences: GlobalPreferences) =
     returning(new UserPreferences(context, storage))(_.migrate(globalPreferences))
 
-  lazy val ShareContacts            = PrefKey[Boolean]       ("share_contacts")
-  lazy val ShowShareContacts        = PrefKey[Boolean]       ("show_share_contacts", customDefault = true) //whether to ask for permission or not
-  lazy val DarkTheme                = PrefKey[Boolean]       ("dark_theme")
-  lazy val Sounds                   = PrefKey[IntensityLevel]("sounds")
-  lazy val DownloadImagesAlways     = PrefKey[Boolean]       ("download_images_always", customDefault = true)
+  lazy val IsLogin                          = PrefKey[Boolean]("is_login")
+  lazy val IsNewClient                      = PrefKey[Boolean]("is_new_client")
 
-  lazy val LastSlowSyncTimeKey     = PrefKey[Option[Long]]        ("last_slow_sync_time")
-  lazy val SelectedConvId          = PrefKey[Option[ConvId]]      ("selected_conv_id")
-  lazy val SpotifyRefreshToken     = PrefKey[Option[RefreshToken]]("spotify_refresh_token")
-  lazy val ShouldSyncConversations = PrefKey[Boolean]             ("should_sync_conversations", customDefault = true)
-  lazy val ShouldSyncInitial       = PrefKey[Boolean]             ("should_sync_teams", customDefault = true) // TODO: try to change the name to should_sync_initial
+  lazy val SelfClient                       = PrefKey[ClientRegistrationState]("self_client")
+  lazy val PrivateMode                      = PrefKey[Boolean]("private_mode")
+  lazy val SelfPermissions                  = PrefKey[Long]("self_permissions")
+  lazy val CopyPermissions                  = PrefKey[Long]("copy_permissions")
 
-  lazy val OtrLastPrekey             = PrefKey[Int]        ("otr_last_prekey_id")
-  lazy val ClientRegVersion          = PrefKey[Int]        ("otr_client_reg_version")
-  lazy val LastStableNotification    = PrefKey[Option[Uid]]("last_notification_id")
+  lazy val PendingEmail                     = PrefKey[Option[EmailAddress]]("pending_email")
+  lazy val PendingPassword                  = PrefKey[Boolean]("pending_password") //true if the user needs to set a password
+  lazy val PendingPhone                     = PrefKey[Option[PhoneNumber]]("pending_phone")
+
+  lazy val ShareContacts                    = PrefKey[Boolean]       ("share_contacts")
+  lazy val ShowShareContacts                = PrefKey[Boolean]       ("show_share_contacts", customDefault = true) //whether to ask for permission or not
+  lazy val DarkTheme                        = PrefKey[Boolean]       ("dark_theme")
+  lazy val Sounds                           = PrefKey[IntensityLevel]("sounds")
+  lazy val DownloadImagesAlways             = PrefKey[Boolean]       ("download_images_always", customDefault = true)
+
+  lazy val LastSlowSyncTimeKey              = PrefKey[Option[Long]]        ("last_slow_sync_time")
+  lazy val SelectedConvId                   = PrefKey[Option[ConvId]]      ("selected_conv_id")
+  lazy val SpotifyRefreshToken              = PrefKey[Option[RefreshToken]]("spotify_refresh_token")
+  lazy val ShouldSyncConversations          = PrefKey[Boolean]             ("should_sync_conversations", customDefault = true)
+  lazy val ShouldSyncInitial                = PrefKey[Boolean]             ("should_sync_initial_1", customDefault = true) //increment number to perform slow sync
+  lazy val ShouldSyncUsers                  = PrefKey[Boolean]           ("should_sync_users", customDefault = true)
+
+  lazy val OtrLastPrekey                    = PrefKey[Int]        ("otr_last_prekey_id")
+  lazy val ClientRegVersion                 = PrefKey[Int]        ("otr_client_reg_version")
+  lazy val LastStableNotification           = PrefKey[Option[Uid]]("last_notification_id")
 
   lazy val LastSelfClientsSyncRequestedTime = PrefKey[Long]("last_self_clients_sync_requested")
 
-  lazy val LastReceivedConvEvent     = PrefKey[Instant]("last_received_conv_event_time")
-  lazy val LastFetchedConvEvent      = PrefKey[Instant]("last_fetched_conv_event_time", customDefault = Instant.ofEpochMilli(1))
-  lazy val LastFetchedConvEventLocal = PrefKey[Instant]("last_fetched_local_time")
-  lazy val GcmRegistrationTime       = PrefKey[Instant]("gcm_registration_time")
-  lazy val GcmRegistrationRetry      = PrefKey[Int]    ("gcm_registration_retry_count")
+  lazy val LastReceivedConvEvent            = PrefKey[Instant]("last_received_conv_event_time")
+  lazy val LastFetchedConvEvent             = PrefKey[Instant]("last_fetched_conv_event_time", customDefault = Instant.ofEpochMilli(1))
+  lazy val LastFetchedConvEventLocal        = PrefKey[Instant]("last_fetched_local_time")
+  lazy val GcmRegistrationTime              = PrefKey[Instant]("gcm_registration_time")
+  lazy val GcmRegistrationRetry             = PrefKey[Int]    ("gcm_registration_retry_count")
 
-  lazy val AddressBookVersion         = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")
-  lazy val AddressBookLastUpload      = PrefKey[Option[Instant]]("address_book_last_upload_time")
+  lazy val AddressBookVersion               = PrefKey[Option[Int]]    ("address_book_version_of_last_upload")
+  lazy val AddressBookLastUpload            = PrefKey[Option[Instant]]("address_book_last_upload_time")
 
-  lazy val RingTone = PrefKey[String]("ringtone_key")
-  lazy val TextTone = PrefKey[String]("text_key")
-  lazy val PingTone = PrefKey[String]("ping_key")
+  lazy val RingTone                         = PrefKey[String]("ringtone_key")
+  lazy val TextTone                         = PrefKey[String]("text_key")
+  lazy val PingTone                         = PrefKey[String]("ping_key")
 
-  lazy val VBREnabled        = PrefKey[Boolean]("variable_bit_rate_enabled", customDefault = true)
-  lazy val VibrateEnabled    = PrefKey[Boolean]("vibrate_enabled")
-  lazy val SendButtonEnabled = PrefKey[Boolean]("send_button_enabled", customDefault = true)
+  lazy val VBREnabled                       = PrefKey[Boolean]("variable_bit_rate_enabled", customDefault = true)
+  lazy val VibrateEnabled                   = PrefKey[Boolean]("vibrate_enabled")
+  lazy val SendButtonEnabled                = PrefKey[Boolean]("send_button_enabled", customDefault = true)
 
 }

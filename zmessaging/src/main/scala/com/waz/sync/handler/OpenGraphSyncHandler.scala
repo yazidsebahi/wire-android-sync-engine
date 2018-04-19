@@ -23,14 +23,17 @@ import com.waz.api.Message
 import com.waz.api.Message.Part
 import com.waz.api.impl.ErrorResponse
 import com.waz.api.impl.ErrorResponse._
-import com.waz.content.{AssetsStorage, ConversationStorageImpl, MessagesStorageImpl}
+import com.waz.content._
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.GenericContent.{Asset, LinkPreview, Text}
 import com.waz.model.GenericMessage.TextMessage
 import com.waz.model._
+import com.waz.service.assets.AssetService
 import com.waz.service.images.{ImageAssetGenerator, ImageLoader}
+import com.waz.service.messages.MessagesService
 import com.waz.service.otr.OtrServiceImpl
 import com.waz.sync.SyncResult
+import com.waz.sync.client.AssetClient.Retention
 import com.waz.sync.client.OpenGraphClient.OpenGraphData
 import com.waz.sync.client.{AssetClient, OpenGraphClient}
 import com.waz.sync.otr.OtrSyncHandler
@@ -40,16 +43,18 @@ import org.threeten.bp.Instant
 
 import scala.concurrent.Future
 
-class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
-                           messages:       MessagesStorageImpl,
-                           otrService:     OtrServiceImpl,
-                           assetSync:      AssetSyncHandler,
-                           assetsStorage:  AssetsStorage,
-                           otrSync:        OtrSyncHandler,
-                           client:         OpenGraphClient,
-                           imageGenerator: ImageAssetGenerator,
-                           imageLoader:    ImageLoader,
-                           assetClient:    AssetClient) {
+class OpenGraphSyncHandler(convs:           ConversationStorage,
+                           messages:        MessagesStorage,
+                           otrService:      OtrServiceImpl,
+                           assetSync:       AssetSyncHandler,
+                           assetsStorage:   AssetsStorage,
+                           assets:          AssetService,
+                           otrSync:         OtrSyncHandler,
+                           client:          OpenGraphClient,
+                           imageGenerator:  ImageAssetGenerator,
+                           imageLoader:     ImageLoader,
+                           messagesService: MessagesService,
+                           assetClient:     AssetClient) {
   import com.waz.threading.Threading.Implicits.Background
 
   def postMessageMeta(convId: ConvId, msgId: MessageId, editTime: Instant): Future[SyncResult] = messages.getMessage(msgId) flatMap {
@@ -67,21 +72,23 @@ class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
       convs.get(convId) flatMap {
         case None => Future successful SyncResult(internalError(s"No conversation found with id: $convId"))
         case Some(conv) =>
-          updateOpenGraphData(msg) flatMap {
-            case Left(errors) => Future successful SyncResult(errors.head)
-            case Right(links) =>
-              updateLinkPreviews(msg, links) flatMap {
-                case Left(errors) => Future successful SyncResult(errors.head)
-                case Right(TextMessage(_, _, Seq())) =>
-                  verbose(s"didn't find any previews in message links: $msg")
-                  Future successful SyncResult.Success
-                case Right(proto) =>
-                  verbose(s"updated link previews: $proto")
-                  otrSync.postOtrMessage(conv, proto) map {
-                    case Left(err) => SyncResult(err)
-                    case Right(_) => SyncResult.Success
-                  }
-              }
+          messagesService.retentionPolicy(conv).future.flatMap { retention =>
+            updateOpenGraphData(msg, retention) flatMap {
+              case Left(errors) => Future successful SyncResult(errors.head)
+              case Right(links) =>
+                updateLinkPreviews(msg, links, retention) flatMap {
+                  case Left(errors) => Future successful SyncResult(errors.head)
+                  case Right(TextMessage(_, _, Seq())) =>
+                    verbose(s"didn't find any previews in message links: $msg")
+                    Future successful SyncResult.Success
+                  case Right(proto) =>
+                    verbose(s"updated link previews: $proto")
+                    otrSync.postOtrMessage(conv, proto) map {
+                      case Left(err) => SyncResult(err)
+                      case Right(_) => SyncResult.Success
+                    }
+                }
+            }
           }
       }
   }
@@ -92,7 +99,7 @@ class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
       case m => m
     })
 
-  def updateOpenGraphData(msg: MessageData): Future[Either[Iterable[ErrorResponse], Seq[MessageContent]]] = {
+  def updateOpenGraphData(msg: MessageData, retention: Retention): Future[Either[Iterable[ErrorResponse], Seq[MessageContent]]] = {
 
     def updateOpenGraphData(part: MessageContent) =
       if (part.openGraph.isDefined || part.tpe != Part.Type.WEB_LINK) Future successful Right(part)
@@ -119,7 +126,7 @@ class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
     }
   }
 
-  def updateLinkPreviews(msg: MessageData, links: Seq[MessageContent]) = {
+  def updateLinkPreviews(msg: MessageData, links: Seq[MessageContent], retention: Retention) = {
 
     def createEmptyPreviews(content: String) = {
       var offset = -1
@@ -134,7 +141,7 @@ class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
       case Some(TextMessage(content, mentions, ps)) =>
         val previews = if (ps.isEmpty) createEmptyPreviews(content) else ps
 
-        RichFuture.traverseSequential(links zip previews) { case (link, preview) => generatePreview(msg.assetId, link.openGraph.get, preview) } flatMap { res =>
+        RichFuture.traverseSequential(links zip previews) { case (link, preview) => generatePreview(msg.assetId, link.openGraph.get, preview, retention) } flatMap { res =>
           val errors = res collect { case Left(err) => err }
           val updated = (res zip previews) collect {
             case (Right(p), _) => p
@@ -151,7 +158,7 @@ class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
     }
   }
 
-  def generatePreview(assetId: AssetId, meta: OpenGraphData, prev: LinkPreview) = {
+  def generatePreview(assetId: AssetId, meta: OpenGraphData, prev: LinkPreview, retention: Retention) = {
 
     /**
       * Generates and uploads link preview image for given open graph metadata.
@@ -166,7 +173,7 @@ class OpenGraphSyncHandler(convs:          ConversationStorageImpl,
         for {
           Some(asset) <- imageGenerator.generateWireAsset(AssetData.newImageAsset(assetId, Medium).copy(source = Some(uri)), profilePicture = false).map(Some(_)).recover { case _: Throwable => None }.future
           _           <- assetsStorage.mergeOrCreateAsset(asset) //must be in storage for assetsync
-          resp        <- assetSync.uploadAssetData(asset.id).future
+          resp        <- assetSync.uploadAssetData(asset.id, retention = retention).future
         } yield resp
     }
     if (prev.hasArticle) Future successful Right(prev)

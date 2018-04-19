@@ -23,7 +23,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model._
 import com.waz.service.UiLifeCycle
 import com.waz.service.conversation.ConversationsListStateService
-import com.waz.service.push.{GlobalNotificationsService, NotificationService, PushService}
+import com.waz.service.push.{GlobalNotificationsService, GlobalNotificationsServiceImpl, NotificationService, PushService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
 import com.waz.utils.events.{EventStream, Signal}
@@ -38,7 +38,6 @@ import scala.concurrent.{Future, duration}
 class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
 
-  val account   = AccountId()
   val self      = UserId()
   val messages  = mock[MessagesStorage]
   val lifeCycle = mock[UiLifeCycle]
@@ -50,7 +49,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
   val push      = mock[PushService]
   val convsStats = mock[ConversationsListStateService]
   val members   = mock[MembersStorage]
-  val globalNots = new GlobalNotificationsService
+  val globalNots: GlobalNotificationsService = new GlobalNotificationsServiceImpl
 
 
   val inForeground = Signal(false)
@@ -118,7 +117,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
       clock + 10.seconds
       inForeground ! true
-      globalNots.notificationsSourceVisible ! scala.collection.immutable.Map((account, scala.Predef.Set(conv.id)))
+      globalNots.notificationsSourceVisible ! scala.collection.immutable.Map((self, scala.Predef.Set(conv.id)))
 
       result(service.notifications.filter(_.isEmpty).head)
     }
@@ -163,7 +162,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
 
     inForeground ! true
     currentConv ! Some(conv2.id)
-    globalNots.notificationsSourceVisible ! scala.collection.immutable.Map((account, scala.Predef.Set(conv2.id)))
+    globalNots.notificationsSourceVisible ! scala.collection.immutable.Map((self, scala.Predef.Set(conv2.id)))
     clock + 10.seconds //messages arrive some time after the account was last visible
 
     val msg1 = MessageData(MessageId("msg1"), conv.id, Message.Type.TEXT, user.id)
@@ -209,7 +208,7 @@ class NotificationsServiceSpec2 extends AndroidFreeSpec {
     (reactions.onChanged _).expects().returning(reactionsChanged)
     (reactions.onDeleted _).expects().returning(reactionsDeleted)
 
-    new NotificationService(null, account, self, messages, lifeCycle, storage, users, convs, members, reactions, userPrefs, push, convsStats, globalNots)
+    new NotificationService(null, self, messages, lifeCycle, storage, users, convs, members, reactions, userPrefs, push, convsStats, globalNots)
   }
 
 }

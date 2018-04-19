@@ -26,9 +26,9 @@ import com.waz.api.ZmsVersion
 import com.waz.cache.{CacheService, Expiration}
 import com.waz.content.GlobalPreferences.PushToken
 import com.waz.content.WireContentProvider.CacheUri
-import com.waz.content.{AccountsStorage, GlobalPreferences}
+import com.waz.content.{AccountStorage, GlobalPreferences}
 import com.waz.log.{BufferedLogOutput, InternalLog}
-import com.waz.model.{AccountId, Mime}
+import com.waz.model.{Mime, UserId}
 import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.wrappers.URI
 import com.waz.utils.{IoUtils, RichFuture}
@@ -64,14 +64,14 @@ object ReportingService {
   }
 }
 
-class ZmsReportingService(user: AccountId, global: ReportingService) extends ReportingService {
+class ZmsReportingService(user: UserId, global: ReportingService) extends ReportingService {
   implicit val tag: LogTag = logTagFor[ZmsReportingService]
   private implicit val dispatcher = new SerialDispatchQueue(name = "ZmsReportingService")
 
   global.addStateReporter(generateStateReport)(s"ZMessaging[$user]")
 }
 
-class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountsStorage, prefs: GlobalPreferences) extends ReportingService {
+class GlobalReportingService(context: Context, cache: CacheService, metadata: MetaDataService, storage: AccountStorage, prefs: GlobalPreferences) extends ReportingService {
   import ReportingService._
   import Threading.Implicits.Background
   implicit val tag: LogTag = logTagFor[GlobalReportingService]

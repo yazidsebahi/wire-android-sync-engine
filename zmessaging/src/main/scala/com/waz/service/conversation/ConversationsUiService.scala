@@ -92,8 +92,7 @@ trait ConversationsUiService {
   def assetUploadFailed    : EventStream[ErrorResponse]
 }
 
-class ConversationsUiServiceImpl(accountId:       AccountId,
-                                 selfId:          UserId,
+class ConversationsUiServiceImpl(userId:          UserId,
                                  teamId:          Option[TeamId],
                                  assets:          AssetService,
                                  users:           UserService,
@@ -121,8 +120,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   override def sendMessage(convId: ConvId, content: api.MessageContent): Future[Option[MessageData]] = content match {
     case m: api.MessageContent.Text =>
       debug(s"send text message ${m.getContent.take(4)}...")
-      if (m.getMentions.isEmpty) sendTextMessage(convId, m.getContent)
-      else mentionsMap(m.getMentions) flatMap { ms => sendTextMessage(convId, m.getContent, ms) }
+      sendTextMessage(convId, m.getContent)
 
     case m: api.MessageContent.Location =>
       sendLocationMessage(convId, Location(m.getLongitude, m.getLatitude, m.getName, m.getZoom))
@@ -198,7 +196,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   override def updateMessage(convId: ConvId, id: MessageId, text: String): Future[Option[MessageData]] = {
     verbose(s"updateMessage($convId, $id, $text")
     messagesContent.updateMessage(id) {
-      case m if m.convId == convId && m.userId == selfId =>
+      case m if m.convId == convId && m.userId == userId =>
         val (tpe, ct) = MessageData.messageContent(text, weblinkEnabled = true)
         verbose(s"updated content: ${(tpe, ct)}")
         m.copy(msgType = tpe, content = ct, protos = Seq(GenericMessage(Uid(), MsgEdit(id, GenericContent.Text(text)))), state = Message.Status.PENDING, editTime = (m.time max m.editTime).plus(1.millis) max Instant.now)
@@ -217,7 +215,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   } yield ()
 
   override def recallMessage(convId: ConvId, id: MessageId): Future[Option[MessageData]] =
-    messages.recallMessage(convId, id, selfId) flatMap {
+    messages.recallMessage(convId, id, userId) flatMap {
       case Some(msg) =>
         sync.postRecalled(convId, msg.id, id) map { _ => Some(msg) }
       case None =>
@@ -240,7 +238,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     convsContent.updateConversationName(id, name) flatMap {
       case Some((_, conv)) if conv.name.contains(name) =>
         sync.postConversationName(id, conv.name.getOrElse(""))
-        messages.addRenameConversationMessage(id, selfId, name) map (_ => Some(conv))
+        messages.addRenameConversationMessage(id, userId, name) map (_ => Some(conv))
       case conv =>
         warn(s"Conversation name could not be changed for: $id, conv: $conv")
         CancellableFuture.successful(None)
@@ -251,7 +249,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     (for {
       true   <- canModifyMembers(conv)
       added  <- members.add(conv, users) if added.nonEmpty
-      _      <- messages.addMemberJoinMessage(conv, selfId, added.map(_.userId))
+      _      <- messages.addMemberJoinMessage(conv, userId, added.map(_.userId))
       syncId <- sync.postConversationMemberJoin(conv, added.map(_.userId).toSeq)
     } yield Option(syncId))
       .recover {
@@ -265,7 +263,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     (for {
       true    <- canModifyMembers(conv)
       Some(_) <- members.remove(conv, user)
-      _       <- messages.addMemberLeaveMessage(conv, selfId, user)
+      _       <- messages.addMemberLeaveMessage(conv, userId, user)
       syncId  <- sync.postConversationMemberLeave(conv, user)
     } yield Some(syncId))
       .recover {
@@ -277,7 +275,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
 
   private def canModifyMembers(conv: ConvId) =
     for {
-      selfActive <- members.isActiveMember(conv, selfId)
+      selfActive <- members.isActiveMember(conv, userId)
       isGroup    <- convs.isGroupConversation(conv)
     } yield selfActive && isGroup
 
@@ -285,7 +283,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     verbose(s"leaveConversation($conv)")
     for {
       updated  <- convsContent.setConvActive(conv, active = false)
-      _        <- removeConversationMember(conv, selfId)
+      _        <- removeConversationMember(conv, userId)
       archived <- convsContent.updateConversationArchived(conv, archived = true)
     } yield archived.map(_._2).orElse(updated.map(_._2))
   }
@@ -330,15 +328,15 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
         case _ => usersStorage.get(other).flatMap {
           case Some(u) if u.connection == ConnectionStatus.Ignored =>
             for {
-              conv <- convsContent.createConversationWithMembers(ConvId(other.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, other, Set(selfId), hidden = true)
-              _ <- messages.addMemberJoinMessage(conv.id, other, Set(selfId), firstMessage = true)
-              _ <- u.connectionMessage.fold(Future.successful(conv))(messages.addConnectRequestMessage(conv.id, other, selfId, _, u.name).map(_ => conv))
+              conv <- convsContent.createConversationWithMembers(ConvId(other.str), u.conversation.getOrElse(RConvId()), ConversationType.Incoming, other, Set(userId), hidden = true)
+              _ <- messages.addMemberJoinMessage(conv.id, other, Set(userId), firstMessage = true)
+              _ <- u.connectionMessage.fold(Future.successful(conv))(messages.addConnectRequestMessage(conv.id, other, userId, _, u.name).map(_ => conv))
             } yield conv
           case _ =>
             for {
               _ <- sync.postConversation(ConvId(other.str), Set(other), None, None, Set(Access.PRIVATE), AccessRole.PRIVATE)
-              conv <- convsContent.createConversationWithMembers(ConvId(other.str), RConvId(), ConversationType.OneToOne, selfId, Set(other))
-              _ <- messages.addMemberJoinMessage(conv.id, selfId, Set(other), firstMessage = true)
+              conv <- convsContent.createConversationWithMembers(ConvId(other.str), RConvId(), ConversationType.OneToOne, userId, Set(other))
+              _ <- messages.addMemberJoinMessage(conv.id, userId, Set(other), firstMessage = true)
             } yield conv
         }
       }
@@ -348,7 +346,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       (for {
         allConvs <- this.members.getByUsers(Set(other)).map(_.map(_.convId))
         allMembers <- this.members.getByConvs(allConvs.toSet).map(_.map(m => m.convId -> m.userId))
-        onlyUs = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, selfId) => c }
+        onlyUs = allMembers.groupBy { case (c, _) => c }.map { case (cid, us) => cid -> us.map(_._2).toSet }.collect { case (c, us) if us == Set(other, userId) => c }
         data <- convStorage.getAll(onlyUs).map(_.flatten)
         _ = verbose(s"Found ${data.size} convs with other user: $other")
       } yield data.filter(c => c.team.contains(tId) && c.name.isEmpty)).flatMap { convs =>
@@ -378,18 +376,18 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   private def createAndPostConversation(id: ConvId, name: Option[String], members: Set[UserId], teamOnly: Boolean = false) = {
     val (ac, ar) = getAccessAndRoleForGroupConv(teamOnly, teamId)
     for {
-      conv <- convsContent.createConversationWithMembers(id, generateTempConversationId(selfId +: members.toSeq), ConversationType.Group, selfId, members, name, access = ac, accessRole = ar)
+      conv <- convsContent.createConversationWithMembers(id, generateTempConversationId(userId +: members.toSeq), ConversationType.Group, userId, members, name, access = ac, accessRole = ar)
       _    = verbose(s"created: $conv")
-      _    <- messages.addConversationStartMessage(conv.id, selfId, members, name)
+      _    <- messages.addConversationStartMessage(conv.id, userId, members, name)
       syncId <- sync.postConversation(id, members, conv.name, teamId, ac, ar)
     } yield (conv, syncId)
   }
 
   override def findGroupConversations(prefix: SearchKey, limit: Int, handleOnly: Boolean): Future[Seq[ConversationData]] =
-    convStorage.search(prefix, selfId, handleOnly).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))
+    convStorage.search(prefix, userId, handleOnly).map(_.sortBy(_.displayName)(currentLocaleOrdering).take(limit))
 
   override def knock(id: ConvId): Future[Option[MessageData]] = for {
-    msg <- messages.addKnockMessage(id, selfId)
+    msg <- messages.addKnockMessage(id, userId)
     _   <- sync.postMessage(msg.id, id, msg.editTime)
   } yield Some(msg)
 
@@ -403,11 +401,6 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
 
   override def setEphemeral(id: ConvId, expiration: EphemeralExpiration): Future[Option[(ConversationData, ConversationData)]] =
     convStorage.update(id, _.copy(ephemeral = expiration))
-
-  private def mentionsMap(us: Array[api.User]): Future[Map[UserId, String]] =
-    users.getUsers(us.map { u => UserId(u.getId) }) map { uss =>
-      uss.map(u => u.id -> u.getDisplayName)(breakOut)
-    }
 
   private def mentionsMap(us: Set[UserId]): Future[Map[UserId, String]] =
     users.getUsers(us.toSeq) map { uss =>
@@ -431,10 +424,10 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
   private def sendImageMessage(img: api.ImageAsset, conv: ConversationData) = {
     verbose(s"sendImageMessage($img, $conv)")
     for {
-      data <- assets.addImageAsset(img, conv.remoteId, isSelf = false)
+      data <- assets.addImageAsset(img)
       msg <- messages.addAssetMessage(conv.id, data)
       _ <- updateLastRead(msg)
-      _ <- Future.successful(tracking.assetContribution(data.id, accountId))
+      _ <- Future.successful(tracking.assetContribution(data.id, userId))
       _ <- sync.postMessage(msg.id, conv.id, msg.editTime)
     } yield Some(msg)
   }
@@ -446,7 +439,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
       message <- messages.addAssetMessage(conv.id, asset)
       _ <- updateLastRead(message)
       size <- in.sizeInBytes
-      _ <- Future.successful(tracking.assetContribution(asset.id, accountId))
+      _ <- Future.successful(tracking.assetContribution(asset.id, userId))
       shouldSend <- checkSize(conv.id, size, mime, message, handler)
       _ <- if (shouldSend) sync.postMessage(message.id, conv.id, message.editTime) else Future.successful(())
     } yield Some(message)
@@ -460,7 +453,7 @@ class ConversationsUiServiceImpl(accountId:       AccountId,
     if (size < LargeAssetWarningThresholdInBytes) Future successful None
     else for {
       mode         <- network.networkMode.head
-      inForeground <- accounts.accountState(accountId).map(_ == InForeground).head
+      inForeground <- accounts.accountState(userId).map(_ == InForeground).head
     } yield {
       (mode, inForeground) match {
         case (OFFLINE | WIFI, _) => None

@@ -20,12 +20,13 @@ package com.waz.sync.handler
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
-import com.waz.content.UsersStorageImpl
+import com.waz.content.UsersStorage
 import com.waz.model._
-import com.waz.service.UserServiceImpl
+import com.waz.service.UserService
 import com.waz.service.assets.AssetService
 import com.waz.service.images.ImageAssetGenerator
 import com.waz.sync.SyncResult
+import com.waz.sync.client.AssetClient.Retention
 import com.waz.sync.client.UsersClient
 import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.Threading
@@ -34,8 +35,8 @@ import com.waz.utils.events.EventContext
 import scala.concurrent.Future
 
 class UsersSyncHandler(assetSync: AssetSyncHandler,
-                       userService: UserServiceImpl,
-                       usersStorage: UsersStorageImpl,
+                       userService: UserService,
+                       usersStorage: UsersStorage,
                        assets: AssetService,
                        usersClient: UsersClient,
                        imageGenerator: ImageAssetGenerator,
@@ -82,11 +83,11 @@ class UsersSyncHandler(assetSync: AssetSyncHandler,
     Some(asset) <- assets.getAssetData(assetId)
     preview     <- imageGenerator.generateSmallProfile(asset).future
     _           <- assets.mergeOrCreateAsset(preview) //needs to be in storage for other steps to find it
-    res         <- assetSync.uploadAssetData(preview.id, public = true).future flatMap {
+    res         <- assetSync.uploadAssetData(preview.id, public = true, retention = Retention.Eternal).future flatMap {
       case Right(uploadedPreview) =>
-        assetSync.uploadAssetData(assetId, public = true).future flatMap {
+        assetSync.uploadAssetData(assetId, public = true, retention = Retention.Eternal).future flatMap {
           case Right(uploaded) => for {
-            asset <- assets.getAssetData(assetId)
+            _     <- assets.getAssetData(assetId)
             res   <- updatedSelfToSyncResult(usersClient.updateSelf(UserInfo(id, picture = Some(Seq(uploadedPreview, uploaded).flatten))))
           } yield res
 
@@ -102,7 +103,7 @@ class UsersSyncHandler(assetSync: AssetSyncHandler,
 
 
   def syncConnectedUsers(): Future[SyncResult] = {
-    usersStorage.contactNameParts.future flatMap { cs =>
+    usersStorage.getContactNameParts.future flatMap { cs =>
       usersClient.loadUsers(cs.keys.toSeq)
     } flatMap {
       case Right(users) => userService.updateSyncedUsers(users).map {_ => SyncResult.Success }

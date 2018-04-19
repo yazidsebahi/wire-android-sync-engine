@@ -47,11 +47,13 @@ object ErrorResponse {
   val UnverifiedCode = 497
   val TimeoutCode = 599
   val ConnectionErrorCode = 598
+  val UnauthorizedCode = 401
 
   val InternalError = ErrorResponse(InternalErrorCode, "InternalError", "")
   val Cancelled = ErrorResponse(CancelledCode, "Cancelled", "")
   val Unverified = ErrorResponse(UnverifiedCode, "Unverified", "")
   val PasswordExists = ErrorResponse(Forbidden, "Forbidden", "password-exists")
+  val Unauthorized = ErrorResponse(UnauthorizedCode, "Unauthorized", "account-logged-out")
 
   implicit lazy val Decoder: JsonDecoder[ErrorResponse] = new JsonDecoder[ErrorResponse] {
     import JsonDecoder._

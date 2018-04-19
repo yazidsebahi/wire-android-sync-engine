@@ -76,7 +76,8 @@ object SyncRequest {
   case object SyncConnections extends BaseRequest(Cmd.SyncConnections)
   case object SyncConnectedUsers extends BaseRequest(Cmd.SyncConnectedUsers)
   case object SyncSelfClients extends BaseRequest(Cmd.SyncSelfClients)
-  case object SyncClientsLocation extends BaseRequest(Cmd.ValidateHandles)
+  case object SyncSelfPermissions extends BaseRequest(Cmd.SyncSelfPermissions)
+  case object SyncClientsLocation extends BaseRequest(Cmd.SyncClientLocation)
   case object SyncTeam extends BaseRequest(Cmd.SyncTeam)
 
   case class SyncTeamMember(userId: UserId) extends BaseRequest(Cmd.SyncTeam) {
@@ -256,6 +257,8 @@ object SyncRequest {
 
   case class SyncUser(users: Set[UserId]) extends BaseRequest(Cmd.SyncUser) {
 
+    override def toString = s"SyncUser(${users.size} users: ${users.take(5)}...)"
+
     override def merge(req: SyncRequest) = mergeHelper[SyncUser](req) { other =>
       if (other.users.forall(users)) Merged(this)
       else {
@@ -302,16 +305,6 @@ object SyncRequest {
   // leave endpoint on backend accepts only one user as parameter (no way to remove multiple users at once)
   case class PostConvLeave(convId: ConvId, user: UserId) extends RequestForConversation(Cmd.PostConvLeave) with SerialExecutionWithinConversation {
     override val mergeKey = (cmd, convId, user)
-  }
-
-  case class ValidateHandles(handles: Seq[Handle]) extends BaseRequest(Cmd.ValidateHandles) {
-    override def merge(req: SyncRequest) = mergeHelper[ValidateHandles](req) {
-      other => Merged(ValidateHandles(other.handles ++ handles.filter(!other.handles.contains(_))))
-    }
-    override def isDuplicateOf(req: SyncRequest): Boolean = req match {
-      case ValidateHandles(otherHandles) => handles.sameElements(otherHandles)
-      case _ => false
-    }
   }
 
   private def mergeHelper[A <: SyncRequest : ClassTag](other: SyncRequest)(f: A => MergeResult[A]): MergeResult[A] = other match {
@@ -376,6 +369,7 @@ object SyncRequest {
           case Cmd.PostAddressBook       => PostAddressBook(JsonDecoder.opt[AddressBook]('addressBook).getOrElse(AddressBook.Empty))
           case Cmd.PostInvitation        => PostInvitation(JsonDecoder[Invitation]('invitation))
           case Cmd.SyncSelfClients       => SyncSelfClients
+          case Cmd.SyncSelfPermissions   => SyncSelfPermissions
           case Cmd.SyncClients           => SyncClients(userId)
           case Cmd.SyncClientLocation    => SyncClientsLocation
           case Cmd.SyncPreKeys           => SyncPreKeys(userId, decodeClientIdSeq('clients).toSet)
@@ -386,7 +380,6 @@ object SyncRequest {
           case Cmd.PostSessionReset      => PostSessionReset(convId, userId, decodeId[ClientId]('client))
           case Cmd.PostOpenGraphMeta     => PostOpenGraphMeta(convId, messageId, 'time)
           case Cmd.PostReceipt           => PostReceipt(convId, messageId, userId, ReceiptType.fromName('type))
-          case Cmd.ValidateHandles       => ValidateHandles('handles)
           case Cmd.Unknown               => Unknown
         }
       } catch {
@@ -496,8 +489,7 @@ object SyncRequest {
         case SyncPreKeys(user, clients) =>
           o.put("user", user.str)
           o.put("clients", arrString(clients.toSeq map (_.str)))
-        case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncClientsLocation | Unknown => () // nothing to do
-        case ValidateHandles(handles) => o.put("handles", arrString(handles.map(_.toString)))
+        case SyncSelf | SyncTeam | DeleteAccount | SyncConversations | SyncConnections | SyncConnectedUsers | SyncSelfClients | SyncSelfPermissions | SyncClientsLocation | Unknown => () // nothing to do
       }
     }
   }

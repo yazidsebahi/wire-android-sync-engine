@@ -62,7 +62,8 @@ trait AssetService {
   def uploadProgress(id: AssetId): Signal[ProgressIndicator.ProgressData]
   def cancelUpload(id: AssetId, msg: MessageId): Future[Unit]
   def markUploadFailed(id: AssetId, status: AssetStatus.Syncable): Future[Any] // should be: Future[SyncId]
-  def addImageAsset(image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData]
+  def addImageAsset(image: com.waz.api.ImageAsset, isProfilePic: Boolean = false): Future[AssetData]
+  def addImage(image: AssetData, isProfilePic: Boolean = false): Future[AssetData]
   def updateAssets(data: Seq[AssetData]): Future[Set[AssetData]]
   def getLocalData(id: AssetId): CancellableFuture[Option[LocalData]]
   def getAssetData(id: AssetId): Future[Option[AssetData]]
@@ -80,7 +81,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
                        generator:       ImageAssetGenerator,
                        cache:           CacheService,
                        context:         Context,
-                       messages:        MessagesStorageImpl,
+                       messages:        MessagesStorage,
                        loaderService:   AssetLoaderService,
                        loader:          AssetLoader,
                        errors:          ErrorsService,
@@ -158,17 +159,21 @@ class AssetServiceImpl(storage:         AssetsStorage,
         Future.successful(())
     }
 
-  def addImageAsset(image: com.waz.api.ImageAsset, convId: RConvId, isSelf: Boolean): Future[AssetData] = {
+  def addImageAsset(image: com.waz.api.ImageAsset, isProfilePic: Boolean = false): Future[AssetData] = {
     image match {
         case img: ImageAsset =>
           val asset = img.data.copy(convId = None)
-          verbose(s"addImageAsset: $asset")
           val ref = new AtomicReference(image) // keep a strong reference until asset generation completes
-          generator.generateWireAsset(asset, isSelf).future.flatMap { data =>
-            storage.mergeOrCreateAsset(data) map (_ => data)
-          } andThen { case _ => ref set null }
+          addImage(asset, isProfilePic).andThen({ case _ => ref set null })
         case _ => Future.failed(new IllegalArgumentException(s"Unsupported ImageAsset: $image"))
       }
+  }
+
+  def addImage(asset: AssetData, isProfilePic: Boolean = false): Future[AssetData] = {
+    verbose(s"addImageAsset: $asset")
+    generator.generateWireAsset(asset, isProfilePic).future.flatMap { data =>
+      storage.mergeOrCreateAsset(data) map (_ => data)
+    }
   }
 
   def updateAssets(data: Seq[AssetData]) =
@@ -331,7 +336,6 @@ class AssetServiceImpl(storage:         AssetsStorage,
       }
     } else successful(None)
   }
-
 }
 
 object AssetService {

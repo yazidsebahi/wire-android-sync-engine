@@ -30,7 +30,7 @@ import com.waz.service.assets.{AudioTranscoder, GlobalRecordAndPlayService}
 import com.waz.service.call._
 import com.waz.service.downloads._
 import com.waz.service.images.{ImageLoader, ImageLoaderImpl}
-import com.waz.service.push.{GlobalNotificationsService, GlobalTokenService}
+import com.waz.service.push.{GlobalNotificationsService, GlobalNotificationsServiceImpl, GlobalTokenService}
 import com.waz.service.tracking.{TrackingService, TrackingServiceImpl}
 import com.waz.sync.client.{AssetClient, VersionBlacklistClient}
 import com.waz.ui.MemoryImageCache
@@ -70,8 +70,9 @@ trait GlobalModule {
   def audioTranscoder:      AudioTranscoder
   def loaderService:        AssetLoaderService
   def cacheCleanup:         CacheCleaningService
-  def accountsStorage:      AccountsStorage
-  def teamsStorage:         TeamsStorageImpl
+  def accountsStorage:      AccountStorage
+  def accountsStorageOld:   AccountsStorageOld
+  def teamsStorage:         TeamsStorage
   def recordingAndPlayback: GlobalRecordAndPlayService
   def tempFiles:            TempFileService
   def clientWrapper:        Future[ClientWrapper]
@@ -97,7 +98,7 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
   val network:                  DefaultNetworkModeService        = wire[DefaultNetworkModeService]
   val tokenService:             GlobalTokenService               = wire[GlobalTokenService]
 
-  lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsService]
+  lazy val notifications:       GlobalNotificationsService       = wire[GlobalNotificationsServiceImpl]
   lazy val calling:             GlobalCallingService             = new GlobalCallingService
 
   lazy val contextWrapper:      Context                          = Context.wrap(context)
@@ -132,8 +133,9 @@ class GlobalModuleImpl(val context: AContext, val backend: BackendConfig) extend
 
   lazy val cacheCleanup                                          = wire[CacheCleaningService]
 
-  lazy val accountsStorage                                       = wire[AccountsStorageImpl]
-  lazy val teamsStorage                                          = wire[TeamsStorageImpl]
+  lazy val accountsStorage:     AccountStorage                   = wire[AccountStorageImpl]
+  lazy val accountsStorageOld:  AccountsStorageOld               = wire[AccountsStorageOldImpl]
+  lazy val teamsStorage:        TeamsStorage                     = wire[TeamsStorageImpl]
   lazy val recordingAndPlayback                                  = wire[GlobalRecordAndPlayService]
 
   lazy val clientWrapper:       Future[ClientWrapper]            = ClientWrapper()

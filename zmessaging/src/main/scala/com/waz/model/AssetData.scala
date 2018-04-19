@@ -18,6 +18,8 @@
 package com.waz.model
 
 import android.util.Base64
+import com.waz.model.AssetMetaData.Image.Tag
+import com.waz.service.UserService
 import com.waz.utils.wrappers.DBCursor
 //import com.waz.ZLog.ImplicitTag._
 //import com.waz.ZLog.verbose
@@ -146,9 +148,7 @@ object AssetData {
   /**
     * Do not use these URIs as cache keys, as they do not provide a unique identifier to the asset downloaded from them
     */
-  val NonKeyURIs = Set(
-    "https://source.unsplash.com/800x800/?landscape"
-  ).map(URI.parse)
+  val NonKeyURIs: Set[URI] = Set(UserService.UnsplashUrl)
 
   def decodeData(data64: String): Array[Byte] = Base64.decode(data64, Base64.NO_PADDING | Base64.NO_WRAP)
 
@@ -167,7 +167,7 @@ object AssetData {
   //needs to be def to create new id each time. "medium" tag ensures it will not be ignored by MessagesService
   def newImageAsset(id: AssetId = AssetId(), tag: Image.Tag) = AssetData(id = id, metaData = Some(AssetMetaData.Image(Dim2(0, 0), tag)))
 
-  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag, uri: URI) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
+  def newImageAssetFromUri(id: AssetId = AssetId(), tag: Image.Tag = Tag.Medium, uri: URI) = AssetData(id = id, metaData = AssetMetaData.Image(ZMessaging.context, uri, tag), source = Some(uri))
 
   val Empty = AssetData()
 

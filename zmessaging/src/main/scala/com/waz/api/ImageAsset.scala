@@ -19,16 +19,9 @@ package com.waz.api
 
 import android.os.Parcelable.Creator
 import android.os.{Parcel, Parcelable}
-import com.waz.api.ImageAsset.SaveCallback
 import com.waz.service.ZMessaging
-import com.waz.utils.wrappers.URI
 
 object ImageAsset {
-
-  trait SaveCallback {
-    def imageSaved(uri: URI): Unit
-    def imageSavingFailed(ex: Exception): Unit
-  }
 
   val CREATOR: Parcelable.Creator[ImageAsset] = new Creator[ImageAsset] {
     override def newArray(size: Int) = new Array[ImageAsset](size)
@@ -39,12 +32,6 @@ object ImageAsset {
 trait ImageAsset extends UiObservable with Parcelable {
   def getId: String
 
-  def getWidth: Int
-
-  def getHeight: Int
-
-  def getMimeType: String
-
   def isEmpty: Boolean
 
   def getBitmap(width: Int, callback: BitmapCallback): LoadHandle
@@ -53,16 +40,6 @@ trait ImageAsset extends UiObservable with Parcelable {
    * This Returns bitmap in one go,
    */
   def getSingleBitmap(width: Int, callback: BitmapCallback): LoadHandle
-
-  def getRoundBitmap(width: Int, callback: BitmapCallback): LoadHandle
-
-  def getRoundBitmap(width: Int, borderWidth: Int, borderColor: Int, callback: BitmapCallback): LoadHandle
-
-  def saveImageToGallery(): Unit
-
-  def saveImageToGallery(callback: SaveCallback): Unit
-
-  def mirrored: Boolean
 
   def setMirrored(mirrored: Boolean): Unit
 

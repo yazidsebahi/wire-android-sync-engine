@@ -39,6 +39,8 @@ trait MembersStorage extends CachedStorage[(UserId, ConvId), ConversationMemberD
   def getActiveUsers(conv: ConvId): Future[Seq[UserId]]
   def getActiveConvs(user: UserId): Future[Seq[ConvId]]
   def activeMembers(conv: ConvId): Signal[Set[UserId]]
+  def set(conv: ConvId, users: Seq[UserId]): Future[Unit]
+  def delete(conv: ConvId): Future[Unit]
 }
 
 class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[(UserId, ConvId), ConversationMemberData](new TrimmingLruCache(context, Fixed(1024)), storage)(ConversationMemberDataDao, "MembersStorage_Cached") with MembersStorage {
@@ -90,7 +92,7 @@ class MembersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedS
 
   override def isActiveMember(conv: ConvId, user: UserId) = get(user -> conv).map(_.nonEmpty)
 
-  def delete(conv: ConvId) = getByConv(conv) map { users => removeAll(users.map(_.userId -> conv)) }
+  def delete(conv: ConvId) = getByConv(conv) flatMap { users => removeAll(users.map(_.userId -> conv)) }
 
   override def getByUsers(users: Set[UserId]) = find(mem => users.contains(mem.userId), ConversationMemberDataDao.findForUsers(users)(_), identity)
 

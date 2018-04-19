@@ -24,7 +24,7 @@ import com.waz.model._
 import com.waz.service.BackendConfig
 import com.waz.sync.client.InvitationClient.ConfirmedInvitation
 import com.waz.threading.CancellableFuture
-import com.waz.znet.ContentEncoder.{ByteArrayRequestContent}
+import com.waz.znet.ContentEncoder.ByteArrayRequestContent
 import com.waz.znet.Response.{HttpStatus, Status}
 import com.waz.znet.ZNetClient.{EmptyAsyncClientImpl, EmptyClient}
 import com.waz.znet._
@@ -87,20 +87,6 @@ import org.threeten.bp.Instant
     scenario("Request ends in redirect with deprecated URI") {
       nextResponse = Response(HttpStatus(Status.SeeOther), EmptyResponse, Response.createHeaders("Location" -> "/self/connections/1508c3bd-4566-4688-906e-93035971c193"))
       whenReady(inviteBy(Left(EmailAddress("meep@meow.me"))))(inside(_) { case Right(Left(u)) => u shouldEqual UserId("1508c3bd-4566-4688-906e-93035971c193") })
-    }
-  }
-
-  feature("Requesting invitation info") {
-    scenario("Successful retrieval") {
-      nextResponse = Response(HttpStatus(Status.Success), JsonObjectResponse(json))
-      whenReady(registrationClient.getInvitationDetails(PersonalInvitationToken("#totallysecuretoken")).future)(inside(_) {
-        case Right(invitation) => invitation shouldEqual decoded
-      })
-    }
-
-    scenario("Retrieval fails") {
-      nextResponse = Response(HttpStatus(Status.BadRequest, "invalid-invitation-code"), EmptyResponse)
-      whenReady(registrationClient.getInvitationDetails(PersonalInvitationToken("#totallysecuretoken")).future)(inside(_) { case Left(e) => e.getCode shouldEqual Status.NotFound })
     }
   }
 

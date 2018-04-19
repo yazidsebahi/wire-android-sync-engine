@@ -22,8 +22,8 @@ import android.database.DatabaseUtils
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteDatabase._
 import com.waz.Generators
-import com.waz.utils.wrappers.{DB, DBHelper, URI}
-import com.waz.api.{ContentSearchQuery, KindOfCallingEvent, Message}
+import com.waz.utils.wrappers.{DB, URI}
+import com.waz.api.{ContentSearchQuery, Message}
 import com.waz.model.AssetData.AssetDataDao
 import com.waz.model.AssetMetaData.Image.Tag.Medium
 import com.waz.model.ConversationData.ConversationDataDao
@@ -41,7 +41,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.threeten.bp.Instant
 
 @Ignore class ZMessagingDBSpec extends FeatureSpec with Matchers with Inspectors with GeneratorDrivenPropertyChecks with BeforeAndAfter with RobolectricTests with DbLoader {
-  lazy val dbHelper: DBHelper = new ZMessagingDB(Robolectric.application, "test_db")
+  lazy val dbHelper = new ZMessagingDB(Robolectric.application, "test_db")
 
   after {
     dbHelper.close()

@@ -30,3 +30,10 @@ trait AudioAssetForUpload extends AssetForUpload {
   def delete(): Unit
   def applyEffect(effect: AudioEffect, callback: LoadCallback[AudioAssetForUpload]): Unit
 }
+
+object Asset {
+  trait LoadCallback[A] {
+    def onLoaded(a: A): Unit
+    def onLoadFailed(): Unit
+  }
+}

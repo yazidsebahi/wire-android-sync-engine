@@ -38,7 +38,7 @@ import com.waz.threading.CancellableFuture.lift
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
 import com.waz.utils.{RichInstant, _}
-import com.waz.znet.Response.Status.NotFound
+import com.waz.znet.Response.Status.{NotFound, Unauthorized}
 import org.json.JSONObject
 import org.threeten.bp.{Duration, Instant}
 
@@ -75,14 +75,14 @@ trait PushService {
   def beDrift: Signal[Duration]
 }
 
-class PushServiceImpl(context:              Context,
+class PushServiceImpl(userId:               UserId,
+                      context:              Context,
                       userPrefs:            UserPreferences,
                       prefs:                GlobalPreferences,
                       receivedPushes:       ReceivedPushStorage,
                       notificationStorage:  PushNotificationEventsStorage,
                       client:               PushNotificationsClient,
                       clientId:             ClientId,
-                      accountId:            AccountId,
                       pipeline:             EventPipeline,
                       otrService:           OtrService,
                       webSocket:            WebSocketClientService,
@@ -92,7 +92,7 @@ class PushServiceImpl(context:              Context,
                       sync:                 SyncServiceHandle)(implicit ev: AccountContext) extends PushService { self =>
   import PushService._
 
-  implicit val logTag: LogTag = accountTag[PushServiceImpl](accountId)
+  implicit val logTag: LogTag = accountTag[PushServiceImpl](userId)
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushService")
 
   private val pipelineKey = "pipeline_processing"
@@ -183,23 +183,36 @@ class PushServiceImpl(context:              Context,
   private def isOtrEventJson(ev: JSONObject) =
     ev.getString("type").equals("conversation.otr-message-add")
 
-  private def processStoredNotifications(): Future[Unit] =
-    notificationStorage.decryptedEvents.flatMap { rows =>
-      val events = rows.flatMap { event =>
-        if(event.plain.isDefined) {
-          val msg = GenericMessage(event.plain.get)
-          val msgEvent = ConversationEvent.ConversationEventDecoder(event.event)
-          //If there is plain text, then the message is an OtrMessageEvent, so this cast is safe
-          otrService.parseGenericMessage(msgEvent.asInstanceOf[OtrMessageEvent], msg)
-        } else {
-          Some(EventDecoder(event.event))
-        }
+  private def processStoredNotifications(): Future[Unit] = {
+    def decodeRow(event: PushNotificationEvent) =
+      if(event.plain.isDefined) {
+        val msg = GenericMessage(event.plain.get)
+        val msgEvent = ConversationEvent.ConversationEventDecoder(event.event)
+        //If there is plain text, then the message is an OtrMessageEvent, so this cast is safe
+        otrService.parseGenericMessage(msgEvent.asInstanceOf[OtrMessageEvent], msg)
+      } else {
+        Some(EventDecoder(event.event))
       }
-      verbose(s"Processing ${events.size} decrypted events")
-      pipeline(events)
-        .flatMap { _ => notificationStorage.removeEventsWithIds(rows.map(_.pushId).distinct) }
-        .andThen { case _ => processing ! false }
+
+    def processBlock(blocks: Iterator[Seq[((Uid, Int), Option[Event])]]): Future[Unit] = {
+      if (blocks.hasNext) {
+        val block = blocks.next()
+        val events = block.flatMap(_._2)
+        pipeline(events)
+          .flatMap(_ => notificationStorage.removeRows(block.map(_._1)))
+          .flatMap(_ => processBlock(blocks))
+          .map(_ => ())
+      } else {
+        Future.successful(())
+      }
     }
+
+    notificationStorage.decryptedEvents.map(_.map(event => ((event.pushId, event.index), decodeRow(event))))
+      .flatMap { events =>
+        processBlock(events.grouped(100))
+      }
+      .andThen { case _ => processing ! false }
+  }
 
   case class Results(notifications: Vector[PushNotificationEncoded], time: Option[Instant], firstSync: Boolean, historyLost: Boolean)
 
@@ -227,6 +240,9 @@ class PushServiceImpl(context:              Context,
         case Left(ErrorResponse(NotFound, _, _)) if lastId.isDefined =>
           warn(s"/notifications failed with 404, history lost")
           load(None).flatMap { case Results(nots, time, _, _) => futureHistoryResults(nots, time, historyLost = true) }
+        case Left(e@ErrorResponse(Unauthorized, _, _)) =>
+          warn(s"Logged out, failing sync request")
+          CancellableFuture.failed(FetchFailedException(e))
         case Left(err) =>
           warn(s"Request failed due to $err: attempting to load last page (since id: $lastId) again? $withRetries")
           if (!withRetries) CancellableFuture.failed(FetchFailedException(err))

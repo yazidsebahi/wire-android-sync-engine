@@ -21,7 +21,7 @@ import java.util.Date
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.content.{ConversationStorageImpl, GlobalPreferences}
+import com.waz.content.{ConversationStorage, GlobalPreferences}
 import com.waz.content.GlobalPreferences.BackendDrift
 import com.waz.model._
 import com.waz.service.AccountsService.InForeground
@@ -33,8 +33,8 @@ import com.waz.utils.events.{AggregatingSignal, EventContext, EventStream}
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class TypingService(accountId:     AccountId,
-                    conversations: ConversationStorageImpl,
+class TypingService(userId:        UserId,
+                    conversations: ConversationStorage,
                     timeouts:      Timeouts,
                     accounts:      AccountsService,
                     sync:          SyncServiceHandle,
@@ -56,7 +56,7 @@ class TypingService(accountId:     AccountId,
 
   val typingEventStage = EventScheduler.Stage[TypingEvent]((c, es) => processSequential(es)(handleTypingEvent))
 
-  accounts.accountState(accountId).on(dispatcher) {
+  accounts.accountState(userId).on(dispatcher) {
     case InForeground => // fine
     case _            => stopTyping()
   }

@@ -34,10 +34,11 @@ class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int
     */
   getWritableDatabase
 
-  override def onCreate(db: SQLiteDatabase): Unit =
+  override def onCreate(db: SQLiteDatabase): Unit = {
     daos.foreach { dao =>
       dao.onCreate(db)
     }
+  }
 
   override def onUpgrade(db: SQLiteDatabase, from: Int, to: Int): Unit =
     new Migrations(migrations: _*).migrate(this, from, to)(db)

@@ -278,6 +278,21 @@ class CallingEvent(partName:              String,
   })
 }
 
+case object HistoryBackupSucceeded extends TrackingEvent {
+  override val name = "history.backup_succeeded"
+}
+
+case object HistoryBackupFailed extends TrackingEvent {
+  override val name = "history.backup_failed"
+}
+
+case object HistoryRestoreSucceeded extends TrackingEvent {
+  override val name = "history.restore_succeeded"
+}
+
+case object HistoryRestoreFailed extends TrackingEvent {
+  override val name = "history.restore_failed"
+}
 
 
 

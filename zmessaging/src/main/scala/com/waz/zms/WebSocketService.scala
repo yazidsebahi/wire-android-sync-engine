@@ -52,7 +52,7 @@ class WebSocketService extends FutureService with ServiceEventContext {
   private implicit def context = getApplicationContext
   private lazy val alarmService = context.getSystemService(Context.ALARM_SERVICE).asInstanceOf[AlarmManager]
   private lazy val restartIntent = PendingIntent.getService(context, 89426, new Intent(context, classOf[WebSocketService]), PendingIntent.FLAG_CANCEL_CURRENT)
-  private lazy val launchIntent = PendingIntent.getActivity(getApplicationContext, 1, getPackageManager.getLaunchIntentForPackage(context.getPackageName), 0)
+  private lazy val launchIntent = PendingIntent.getActivity(context, 1, getPackageManager.getLaunchIntentForPackage(context.getPackageName), 0)
 
   val zmessaging = Signal.future(ZMessaging.accountsService).flatMap(_.activeZms)
 

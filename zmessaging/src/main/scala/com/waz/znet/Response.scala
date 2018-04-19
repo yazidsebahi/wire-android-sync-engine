@@ -65,6 +65,12 @@ object Response {
       case _ => false
     }
   }
+  object NotFoundStatus {
+    def unapply(status: Status) = status match {
+      case HttpStatus(s, _) => s.equals(Status.NotFound)
+      case _ => false
+    }
+  }
   object SuccessStatus {
     def unapply(status: Status) = status.isSuccess
   }

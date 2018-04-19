@@ -48,6 +48,7 @@ trait PushNotificationEventsStorage extends CachedStorage[(Uid, EventIndex), Pus
   def decryptedEvents: Future[Seq[PushNotificationEvent]]
   def encryptedEvents: Future[Seq[PushNotificationEvent]]
   def removeEventsWithIds(ids: Seq[Uid]): Future[Unit]
+  def removeRows(rows: Iterable[(Uid, Int)]): Future[Unit]
   def registerEventHandler(handler: () => Future[Unit])(implicit ec: EventContext): Future[Unit]
 }
 
@@ -113,6 +114,8 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
     storage.withTransaction { implicit db =>
       removeAll(dao.list.filter(r => ids.contains(r.pushId)).map(r => (r.pushId, r.index)))
     }.future.map(_ => ())
+
+  def removeRows(rows: Iterable[(Uid, Int)]): Future[Unit] = removeAll(rows)
 
   //This method is called once on app start, so invoke the handler in case there are any events to be processed
   //This is safe as the handler only allows one invocation at a time.

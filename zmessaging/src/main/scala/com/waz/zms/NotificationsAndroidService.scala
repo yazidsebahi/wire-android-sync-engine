@@ -23,7 +23,7 @@ import android.support.v4.app.RemoteInput
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog.{verbose, warn}
 import com.waz.api.EphemeralExpiration
-import com.waz.model.{AccountId, ConvId}
+import com.waz.model.{ConvId, UserId}
 import com.waz.service.ZMessaging
 import com.waz.threading.Threading.Implicits.Background
 import com.waz.utils._
@@ -40,14 +40,14 @@ class NotificationsAndroidService extends FutureService {
 
   override protected def onIntent(intent: Intent, id: Int): Future[Any] = wakeLock.async {
 
-    val account = Option(intent.getStringExtra(ExtraAccountId)).map(AccountId)
+    val account = Option(intent.getStringExtra(ExtraAccountId)).map(UserId)
     val conversation = Option(intent.getStringExtra(ExtraConvId)).map(ConvId)
     val instantReplyContent = Option(RemoteInput.getResultsFromIntent(intent)).map(_.getCharSequence(InstantReplyKey))
 
     Option(ZMessaging.currentAccounts) match {
       case Some(accs) =>
         account match {
-          case Some(acc) => accs.getZMessaging(acc).flatMap {
+          case Some(acc) => accs.getZms(acc).flatMap {
             case Some(zms) if ActionClear == intent.getAction =>
               verbose(s"Clearing notifications for account: $acc and conversation:$conversation")
               zms.notifications.removeNotifications(nd => conversation.forall(_ == nd.conv))
@@ -85,15 +85,15 @@ object NotificationsAndroidService {
 
   val checkNotificationsTimeout: FiniteDuration = 1.minute
 
-  def clearNotificationsIntent(accountId: AccountId, context: Context): PendingIntent =
-    PendingIntent.getService(context, accountId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_UPDATE_CURRENT)
+  def clearNotificationsIntent(userId: UserId, context: Context): PendingIntent =
+    PendingIntent.getService(context, userId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, userId.str), PendingIntent.FLAG_UPDATE_CURRENT)
 
-  def clearNotificationsIntent(accountId: AccountId, convId: ConvId, context: Context): PendingIntent =
-    PendingIntent.getService(context, accountId.str.hashCode + convId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, accountId.str).putExtra(ExtraConvId, convId.str), PendingIntent.FLAG_UPDATE_CURRENT)
+  def clearNotificationsIntent(userId: UserId, convId: ConvId, context: Context): PendingIntent =
+    PendingIntent.getService(context, userId.str.hashCode + convId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionClear).putExtra(ExtraAccountId, userId.str).putExtra(ExtraConvId, convId.str), PendingIntent.FLAG_UPDATE_CURRENT)
 
-  def checkNotificationsIntent(accountId: AccountId, context: Context): PendingIntent =
-    PendingIntent.getService(context, accountId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).putExtra(ExtraAccountId, accountId.str), PendingIntent.FLAG_ONE_SHOT)
+  def checkNotificationsIntent(userId: UserId, context: Context): PendingIntent =
+    PendingIntent.getService(context, userId.str.hashCode, new Intent(context, classOf[NotificationsAndroidService]).putExtra(ExtraAccountId, userId.str), PendingIntent.FLAG_ONE_SHOT)
 
-  def quickReplyIntent(accountId: AccountId, convId: ConvId, context: Context): PendingIntent =
-    PendingIntent.getService(context, (accountId.str + convId.str).hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionQuickReply).putExtra(ExtraAccountId, accountId.str).putExtra(ExtraConvId, convId.str), PendingIntent.FLAG_ONE_SHOT)
+  def quickReplyIntent(userId: UserId, convId: ConvId, context: Context): PendingIntent =
+    PendingIntent.getService(context, (userId.str + convId.str).hashCode, new Intent(context, classOf[NotificationsAndroidService]).setAction(ActionQuickReply).putExtra(ExtraAccountId, userId.str).putExtra(ExtraConvId, convId.str), PendingIntent.FLAG_ONE_SHOT)
 }

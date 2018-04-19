@@ -30,7 +30,7 @@ import com.waz.threading.{CancellableFuture, Threading}
 
 import scala.concurrent.Future
 
-class PushTokenSyncHandler(user: AccountId, pushTokenService: PushTokenService, backend: BackendConfig, clientId: ClientId, client: PushTokenClient) {
+class PushTokenSyncHandler(pushTokenService: PushTokenService, backend: BackendConfig, clientId: ClientId, client: PushTokenClient) {
 
   import Threading.Implicits.Background
 

@@ -21,7 +21,7 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.api.Message.{Status, Type}
 import com.waz.api.{ErrorResponse, Message}
-import com.waz.content.{EditHistoryStorage, MessagesStorage}
+import com.waz.content.{EditHistoryStorage, MembersStorage, MessagesStorage}
 import com.waz.model.ConversationData.ConversationType
 import com.waz.model.GenericContent._
 import com.waz.model.{MessageId, _}
@@ -30,10 +30,11 @@ import com.waz.service._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.otr.VerificationStateUpdater.{ClientUnverified, MemberAdded, VerificationChange}
 import com.waz.sync.SyncServiceHandle
+import com.waz.sync.client.AssetClient.Retention
 import com.waz.threading.{CancellableFuture, Threading}
 import com.waz.utils.RichFuture.traverseSequential
 import com.waz.utils._
-import com.waz.utils.events.EventContext
+import com.waz.utils.events.{EventContext, Signal}
 import org.threeten.bp.Instant.now
 import org.threeten.bp.{Duration, Instant}
 
@@ -53,10 +54,11 @@ trait MessagesService {
   def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration): Future[Option[MessageData]]
 
   def addConnectRequestMessage(convId: ConvId, fromUser: UserId, toUser: UserId, message: String, name: String, fromSync: Boolean = false): Future[MessageData]
-  def addConversationStartMessage(convId: ConvId, creator: UserId, users: Set[UserId], name: Option[String]): Future[MessageData]
+  def addConversationStartMessage(convId: ConvId, creator: UserId, users: Set[UserId], name: Option[String], time: Option[Instant] = None): Future[MessageData]
   def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false): Future[Option[MessageData]]
   def addMemberLeaveMessage(convId: ConvId, selfUserId: UserId, user: UserId): Future[Any]
   def addRenameConversationMessage(convId: ConvId, selfUserId: UserId, name: String, needsSyncing: Boolean = true): Future[Option[MessageData]]
+  def addHistoryLostMessages(cs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
 
   def addDeviceStartMessages(convs: Seq[ConversationData], selfUserId: UserId): Future[Set[MessageData]]
   def addOtrVerifiedMessage(convId: ConvId): Future[Option[MessageData]]
@@ -67,14 +69,23 @@ trait MessagesService {
 
   def recallMessage(convId: ConvId, msgId: MessageId, userId: UserId, systemMsgId: MessageId = MessageId(), time: Instant = now(clock), state: Message.Status = Message.Status.PENDING): Future[Option[MessageData]]
   def applyMessageEdit(convId: ConvId, userId: UserId, time: Instant, gm: GenericMessage): Future[Option[MessageData]]
+
+  def removeLocalMemberJoinMessage(convId: ConvId, users: Set[UserId]): Future[Any]
+
+  def messageSent(convId: ConvId, msg: MessageData): Future[Option[MessageData]]
+  def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse): Future[Option[MessageData]]
+  def retentionPolicy(convData: ConversationData): CancellableFuture[Retention]
 }
 
 class MessagesServiceImpl(selfUserId: UserId,
+                          teamId:     Option[TeamId],
                           storage:    MessagesStorage,
                           updater:    MessagesContentUpdater,
                           edits:      EditHistoryStorage,
                           convs:      ConversationsContentUpdater,
                           network:    NetworkModeService,
+                          members:    MembersStorage,
+                          users:      UserService,
                           sync:       SyncServiceHandle) extends MessagesService {
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global
@@ -234,8 +245,8 @@ class MessagesServiceImpl(selfUserId: UserId,
     }
   }
 
-  def addConversationStartMessage(convId: ConvId, creator: UserId, users: Set[UserId], name: Option[String]) = {
-    updater.addLocalSentMessage(MessageData(MessageId(), convId, Message.Type.MEMBER_JOIN, creator, name = name, members = users, firstMessage = true))
+  def addConversationStartMessage(convId: ConvId, creator: UserId, users: Set[UserId], name: Option[String], time: Option[Instant]) = {
+    updater.addLocalSentMessage(MessageData(MessageId(), convId, Message.Type.MEMBER_JOIN, creator, name = name, members = users, firstMessage = true), time)
   }
 
   override def addMemberJoinMessage(convId: ConvId, creator: UserId, users: Set[UserId], firstMessage: Boolean = false) = {
@@ -261,7 +272,7 @@ class MessagesServiceImpl(selfUserId: UserId,
     }
   }
 
-  def removeLocalMemberJoinMessage(convId: ConvId, users: Set[UserId]) = {
+  def removeLocalMemberJoinMessage(convId: ConvId, users: Set[UserId]): Future[Any] = {
     storage.lastLocalMessage(convId, Message.Type.MEMBER_JOIN) flatMap {
       case Some(msg) =>
         val members = msg.members -- users
@@ -317,7 +328,7 @@ class MessagesServiceImpl(selfUserId: UserId,
       case _ => successful(None)
     }
 
-  def messageSent(convId: ConvId, msg: MessageData) = {
+  def messageSent(convId: ConvId, msg: MessageData): Future[Option[MessageData]] = {
     updater.updateMessage(msg.id) { m => m.copy(state = Message.Status.SENT, expiryTime = m.ephemeral.expiryFromNow()) } andThen {
       case Success(Some(m)) => storage.onMessageSent ! m
     }
@@ -337,7 +348,7 @@ class MessagesServiceImpl(selfUserId: UserId,
   override def addSuccessfulCallMessage(convId: ConvId, from: UserId, time: Instant, duration: Duration) =
     updater.addMessage(MessageData(MessageId(), convId, Message.Type.SUCCESSFUL_CALL, from, time = time, duration = duration))
 
-  def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse) =
+  def messageDeliveryFailed(convId: ConvId, msg: MessageData, error: ErrorResponse): Future[Option[MessageData]] =
     updateMessageState(convId, msg.id, Message.Status.FAILED) andThen {
       case Success(Some(m)) => storage.onMessageFailed ! (m, error)
     }
@@ -352,4 +363,22 @@ class MessagesServiceImpl(selfUserId: UserId,
         if (msg.state == Status.FAILED) msg.copy(state = Status.FAILED_READ)
         else msg
       }
+
+  override def retentionPolicy(convData: ConversationData): CancellableFuture[Retention] = {
+    def checkConv(convId: ConvId) =
+      members
+        .activeMembers(convId)
+        .flatMap(p => Signal.sequence(p.map(users.userSignal).toSeq: _*)
+          .map(_.exists(_.teamId.isDefined)))
+
+    val result = if (teamId.isDefined || convData.team.isDefined) {
+      checkConv(convData.id).map {
+        case true => Retention.EternalInfrequentAccess
+        case false => Retention.Expiring
+      }
+    } else {
+      Signal.const(Retention.Expiring)
+    }
+    CancellableFuture.lift(result.head)
+  }
 }

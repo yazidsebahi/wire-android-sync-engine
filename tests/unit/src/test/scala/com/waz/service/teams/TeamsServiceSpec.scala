@@ -32,10 +32,9 @@ import scala.concurrent.Future
 class TeamsServiceSpec extends AndroidFreeSpec {
 
   val selfUser =     UserId()
-  val selfAccount =  AccountId()
   val teamId =       Some(TeamId())
   val teamStorage =  mock[TeamsStorage]
-  val accStorage =   mock[AccountsStorage]
+  val accStorage =   mock[AccountsStorageOld]
   val userStorage =  mock[UsersStorage]
   val convsStorage = mock[ConversationStorage]
   val convMembers =  mock[MembersStorage]
@@ -167,7 +166,7 @@ class TeamsServiceSpec extends AndroidFreeSpec {
   }
 
   def createService = {
-    new TeamsServiceImpl(selfUser, selfAccount, teamId, teamStorage, accStorage, userStorage, convsStorage, convMembers, convsContent, sync, syncRequests, userPrefs)
+    new TeamsServiceImpl(selfUser, teamId, teamStorage, userStorage, convsStorage, convMembers, convsContent, sync, syncRequests, userPrefs)
   }
 
 }

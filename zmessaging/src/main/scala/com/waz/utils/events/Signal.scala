@@ -167,6 +167,8 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
   def orElse(fallback: Signal[A]): Signal[A] = new ProxySignal[A](self, fallback) {
     override protected def computeValue(current: Option[A]): Option[A] = self.value.orElse(fallback.value)
   }
+  def either[B](right: Signal[B]): Signal[Either[A, B]] = map(Left(_): Either[A, B]).orElse(right.map(Right.apply))
+  def pipeTo(sourceSignal: SourceSignal[A])(implicit ec: EventContext): Unit = foreach(sourceSignal ! _)
 
   /** If this signal is computed from sources that change their value via a side effect (such as signals) and is not
     * informed of those changes while unwired (e.g. because this signal removes itself from the sources' children

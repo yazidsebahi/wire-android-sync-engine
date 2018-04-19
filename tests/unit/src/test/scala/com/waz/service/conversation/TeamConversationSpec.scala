@@ -32,7 +32,6 @@ import scala.concurrent.Future
 
 class TeamConversationSpec extends AndroidFreeSpec {
 
-  val account      = AccountId()
   val self         = UserId()
   val team         = Some(TeamId("team"))
   val userStorage  = mock[UsersStorage]
@@ -89,7 +88,7 @@ class TeamConversationSpec extends AndroidFreeSpec {
         (conv: ConvId, r: RConvId, tpe: ConversationType, cr: UserId, us: Set[UserId], n: Option[String], hid: Boolean, ac: Set[Access], ar: AccessRole) =>
           Future.successful(ConversationData(conv, r, n, cr, tpe, team, hidden = hid, access = ac, accessRole = Some(ar)))
       }
-      (messages.addConversationStartMessage _).expects(*, self, Set(otherUserId), None).once().returning(Future.successful(null))
+      (messages.addConversationStartMessage _).expects(*, self, Set(otherUserId), None, None).once().returning(Future.successful(null))
       (sync.postConversation _).expects(*, Set(otherUserId), None, team, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().returning(Future.successful(null))
 
       val conv = result(initService.getOrCreateOneToOneConversation(otherUserId))
@@ -122,5 +121,5 @@ class TeamConversationSpec extends AndroidFreeSpec {
   }
 
   def initService: ConversationsUiService =
-    new ConversationsUiServiceImpl(account, self, team, null, null, userStorage, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
+    new ConversationsUiServiceImpl(self, team, null, null, userStorage, messages, null, null, members, null, convsContent, convsStorage, null, null, sync, null, null, null)
 }

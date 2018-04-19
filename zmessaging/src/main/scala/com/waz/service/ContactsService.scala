@@ -60,19 +60,18 @@ trait ContactsService {
   def unifiedContacts: Signal[UnifiedContacts]
 }
 
-class ContactsServiceImpl(context:        Context,
-                          accountId:      AccountId,
+class ContactsServiceImpl(userId:         UserId,
+                          context:        Context,
                           teamId:         Option[TeamId],
-                          accountStorage: AccountsStorage,
                           accounts:       AccountsService,
                           userPrefs:      UserPreferences,
-                          users:          UserServiceImpl,
-                          usersStorage:   UsersStorageImpl,
+                          users:          UserService,
+                          usersStorage:   UsersStorage,
                           timeouts:       Timeouts,
                           phoneNumbers:   PhoneNumberService,
                           storage:        ZmsDatabase,
                           sync:           SyncServiceHandle,
-                          convs:          ConversationStorageImpl,
+                          convs:          ConversationStorage,
                           permissions:    PermissionsService)
   extends ContactsService {
 
@@ -81,7 +80,7 @@ class ContactsServiceImpl(context:        Context,
   import Threading.Implicits.Background
   import timeouts.contacts._
 
-  accounts.accountState(accountId).on(Background) {
+  accounts.accountState(userId).on(Background) {
     case InForeground => requestUploadIfNeeded()
     case _ =>
   }
@@ -272,7 +271,7 @@ class ContactsServiceImpl(context:        Context,
 
   private[waz] def requestUploadIfNeeded() = shareContactsPermissionGranted.flatMap {
     case true =>
-      atMostOncePer(accountId, uploadCheckInterval) {
+      atMostOncePer(userId, uploadCheckInterval) {
         verbose(s"requestUploadIfNeeded()")
 
         def atLeastOncePerUploadMaxDelayOrOnVersionUpgrade = for {
@@ -300,10 +299,9 @@ class ContactsServiceImpl(context:        Context,
 
   private def selfUserHashes: Future[Vector[String]] =
     for {
-      phone <- phoneNumbers.myPhoneNumber
-      account <- accountStorage.get(accountId)
-      email = account.flatMap(_.email).flatMap(_.normalized)
-      myPhone = account.flatMap(_.phone)
+      phone   <- phoneNumbers.myPhoneNumber
+      email   <- users.selfUser.map(_.email).head
+      myPhone <- users.selfUser.map(_.phone).head
     } yield
       withSHA2 { digest =>
         Vector(email.map(e => digest(e.str)), myPhone.map(p => digest(p.str)), phone.filterNot(myPhone.contains).map(p => digest(p.str))).flatten
@@ -475,9 +473,9 @@ object ContactsServiceImpl {
   lazy val Visible = if (SDK_INT >= LOLLIPOP) Some(s"${Col.Visible} = 1 OR ${Col.InDefaultDirectory} = 1") else None
   lazy val OrderBySortKey = s"${Col.SortKey} COLLATE LOCALIZED ASC"
 
-  private[service] val zUserAndTimeOfLastCheck = new AtomicReference((AccountId(), Instant.EPOCH))
+  private[service] val zUserAndTimeOfLastCheck = new AtomicReference((UserId(), Instant.EPOCH))
 
-  def atMostOncePer(id: AccountId, checkInterval: FiniteDuration)(asyncEffect: => Future[Unit]): Future[Unit] = {
+  def atMostOncePer(id: UserId, checkInterval: FiniteDuration)(asyncEffect: => Future[Unit]): Future[Unit] = {
     val previous = zUserAndTimeOfLastCheck.get
     if ((id != previous._1 || (checkInterval elapsedSince previous._2)) && zUserAndTimeOfLastCheck.compareAndSet(previous, (id, now))) asyncEffect
     else Future.failed(MayNotYetCheckAgainException)

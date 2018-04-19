@@ -37,7 +37,11 @@ trait UsersStorage extends CachedStorage[UserId, UserData] {
   def listAll(ids: Traversable[UserId]): Future[Vector[UserData]]
   def listSignal(ids: Traversable[UserId]): Signal[Vector[UserData]]
   def listUsersByConnectionStatus(p: Set[ConnectionStatus]): Future[Map[UserId, UserData]]
+  def listAcceptedOrPendingUsers: Future[Map[UserId, UserData]]
   def getOrElseUpdate(id: UserId, default: => UserData): Future[UserData]
+  def addOrOverwrite(user: UserData): Future[UserData]
+
+  def getContactNameParts: CancellableFuture[Map[UserId, NameParts]]
 }
 
 class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedStorageImpl[UserId, UserData](new TrimmingLruCache(context, Fixed(2000)), storage)(UserDataDao, "UsersStorage_Cached") with UsersStorage {
@@ -50,7 +54,7 @@ class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedSto
 
   def contactNames: Signal[Map[UserId, (NameParts, SearchKey)]] = contactNamesSource
 
-  lazy val contactNameParts = storage { UserDataDao.listContacts(_) } map { us =>
+  private lazy val contactNameParts: CancellableFuture[mutable.HashMap[UserId, NameParts]] = storage { UserDataDao.listContacts(_) } map { us =>
     val cs = new mutable.HashMap[UserId, NameParts]
     us foreach { user =>
       if (getRawCached(user.id) == null) put(user.id, user)
@@ -58,6 +62,8 @@ class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedSto
     }
     cs
   }
+
+  override def getContactNameParts = contactNameParts.map(_.toMap)
 
   onAdded { users =>
     users foreach { user =>
@@ -98,7 +104,7 @@ class UsersStorageImpl(context: Context, storage: ZmsDatabase) extends CachedSto
       db   => UserDataDao.findByConnectionStatus(Set(ConnectionStatus.Accepted, ConnectionStatus.PendingFromOther, ConnectionStatus.PendingFromUser))(db),
       user => (user.id, user))
 
-  def addOrOverwrite(user: UserData) = updateOrCreate(user.id, _ => user, user)
+  def addOrOverwrite(user: UserData): Future[UserData] = updateOrCreate(user.id, _ => user, user)
 
   def onContactUpdated(user: UserData, updated: UserData) = if (user.name != updated.name) updateContactName(updated)
 

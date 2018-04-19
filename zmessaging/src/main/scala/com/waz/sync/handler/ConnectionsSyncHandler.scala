@@ -19,7 +19,7 @@ package com.waz.sync.handler
 
 import com.waz.ZLog._
 import com.waz.ZLog.ImplicitTag._
-import com.waz.content.UsersStorageImpl
+import com.waz.content.UsersStorage
 import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.UserId
 import com.waz.service.{ConnectionServiceImpl, EventPipeline}
@@ -30,7 +30,7 @@ import com.waz.utils.events.EventContext
 
 import scala.concurrent.Future
 
-class ConnectionsSyncHandler(usersStorage: UsersStorageImpl, connectionService: ConnectionServiceImpl, connectionsClient: ConnectionsClient, pipeline: EventPipeline) {
+class ConnectionsSyncHandler(usersStorage: UsersStorage, connectionService: ConnectionServiceImpl, connectionsClient: ConnectionsClient, pipeline: EventPipeline) {
 
   import Threading.Implicits.Background
   private implicit val ec = EventContext.Global

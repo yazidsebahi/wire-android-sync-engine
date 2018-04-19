@@ -20,7 +20,7 @@ package com.waz.service
 import com.waz.api.Message
 import com.waz.api.Message.Status
 import com.waz.api.Message.Type._
-import com.waz.content.{ConversationStorage, EditHistoryStorage, MessagesStorage, MsgDeletionStorage}
+import com.waz.content._
 import com.waz.model._
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.messages.{MessagesContentUpdater, MessagesServiceImpl}
@@ -40,6 +40,8 @@ class MessagesServiceSpec extends AndroidFreeSpec {
   val network =       mock[NetworkModeService]
   val sync =          mock[SyncServiceHandle]
   val deletions =     mock[MsgDeletionStorage]
+  val members =       mock[MembersStorage]
+  val users =         mock[UserService]
 
   scenario("Add local memberJoinEvent with no previous member change events") {
 
@@ -72,7 +74,7 @@ class MessagesServiceSpec extends AndroidFreeSpec {
 
   def getService = {
     val updater = new MessagesContentUpdater(storage, convsStorage, deletions)
-    new MessagesServiceImpl(selfUserId, storage, updater, edits, convs, network, sync)
+    new MessagesServiceImpl(selfUserId, None, storage, updater, edits, convs, network, members, users, sync)
   }
 
 

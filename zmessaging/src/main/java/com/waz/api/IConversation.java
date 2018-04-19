@@ -17,11 +17,7 @@
  */
 package com.waz.api;
 
-import android.os.Parcel;
-import android.os.Parcelable;
-import com.waz.service.ZMessaging$;
-
-public interface IConversation extends UiObservable, Parcelable {
+public interface IConversation extends UiObservable {
 
     enum Type {
         UNKNOWN(-1), GROUP(0), SELF(1), ONE_TO_ONE(2), WAIT_FOR_CONNECTION(3), INCOMING_CONNECTION(4);
@@ -69,27 +65,6 @@ public interface IConversation extends UiObservable, Parcelable {
         PRIVATE        //for 1:1 conversations
     }
 
-    Parcelable.Creator<IConversation> CREATOR = new Parcelable.Creator<IConversation>() {
-        @Override
-        public IConversation createFromParcel(Parcel source) {
-            return ZMessaging$.MODULE$.currentUi().convs().getConversation(source);
-        }
-
-        @Override
-        public IConversation[] newArray(int size) {
-            return new IConversation[size];
-        }
-    };
-
-    Type getType();
-
-    MembersList getUsers();
-
-    /*
-     id of the conversation
-    */
-    String getId();
-
     /*
         For now me is retrieved by another core lib function and
         if this is empty there is another function constructing
@@ -97,35 +72,5 @@ public interface IConversation extends UiObservable, Parcelable {
     */
     String getName();
 
-    /*
-        Is this user also a member in this conversation, so far I know
-        that the user doesn't have an option to mute the conversation
-    */
-    boolean isMemberOfConversation();
-
-    /**
-     *
-     * @return for {@link com.waz.api.IConversation.Type#ONE_TO_ONE} returns the other user. Throws a RuntimeException
-     * for other conversation types.
-     */
-    User getOtherParticipant();
-
-    // used by DeviceActor
-    void setArchived(boolean archived);
-    void setMuted(boolean muted);
-    void clear();
-    /*
-        Returns a background image for this conversation
-     */
-    ImageAsset getBackground();
-
-    /**
-     * Conversation verification state.
-     * VERIFIED if all members of conversation are verified (have otr clients and oll their clients are verified)
-     * UNVERIFIED if conversation was verified previously and new unverified client was added.
-     */
-    Verification getVerified();
-
-    InputStateIndicator getInputStateIndicator();
-
+    String getId();
 }

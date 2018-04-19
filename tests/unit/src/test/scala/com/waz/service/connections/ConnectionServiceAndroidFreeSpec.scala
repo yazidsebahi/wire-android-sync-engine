@@ -96,7 +96,7 @@ class ConnectionServiceAndroidFreeSpec extends AndroidFreeSpec {
     var updatedConversation = ConversationData.Empty
 
     (convsStorage.update _).expects(*,*).once().onCall { (convId, updater) =>
-      val old = ConversationData(convId, RConvId(convId.str), None, selfUserId, ConversationType.Unknown)
+      val old = ConversationData(convId, RConvId(convId.str), None, selfUserId, ConversationType.Unknown, lastEventTime = Instant.EPOCH)
       updatedConversation = updater(old)
       Future.successful(Some(old, updatedConversation))
     }

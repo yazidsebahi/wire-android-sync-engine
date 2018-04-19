@@ -30,7 +30,7 @@ import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
 import com.waz.sync.SyncServiceHandle
 import com.waz.threading.Threading
-import com.waz.utils.RichFuture
+import com.waz.utils.{RichFuture, RichInstant}
 import com.waz.utils.events.EventContext
 import org.threeten.bp.Instant
 
@@ -80,7 +80,7 @@ class ConnectionServiceImpl(selfUserId:      UserId,
     verbose(s"handleUserConnectionEvents: $events")
     def updateOrCreate(event: UserConnectionEvent)(user: Option[UserData]): UserData =
       user.fold {
-        UserData(event.to, None, UserService.defaultUserName, None, None, connection = event.status, conversation = Some(event.convId), connectionMessage = event.message, searchKey = SearchKey(UserService.defaultUserName), connectionLastUpdated = event.lastUpdated,
+        UserData(event.to, None, UserService.DefaultUserName, None, None, connection = event.status, conversation = Some(event.convId), connectionMessage = event.message, searchKey = SearchKey(UserService.DefaultUserName), connectionLastUpdated = event.lastUpdated,
           handle = None)
       } {
         _.copy(conversation = Some(event.convId)).updateConnectionStatus(event.status, Some(event.lastUpdated), event.message)
@@ -115,7 +115,7 @@ class ConnectionServiceImpl(selfUserId:      UserId,
     val hidden = user.connection == ConnectionStatus.Ignored || user.connection == ConnectionStatus.Blocked || user.connection == ConnectionStatus.Cancelled
     convs.getOneToOneConversation(user.id, selfUserId, user.conversation, convType) flatMap { conv =>
       members.add(conv.id, Set(selfUserId, user.id)).flatMap { _ =>
-        convStorage.update(conv.id, _.copy(convType = convType, hidden = hidden, lastEventTime = Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
+        convStorage.update(conv.id, c => c.copy(convType = convType, hidden = hidden, lastEventTime = c.lastEventTime max Instant.ofEpochMilli(lastEventTime.getTime))) flatMap { updated =>
           messagesStorage.getLastMessage(conv.id) flatMap {
             case None if convType == ConversationType.Incoming =>
               addConnectRequestMessage(conv.id, user.id, selfUserId, user.connectionMessage.getOrElse(""), user.getDisplayName, fromSync = fromSync)

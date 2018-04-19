@@ -21,9 +21,10 @@ import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.content.ContentChange.{Added, Removed, Updated}
 import com.waz.content._
-import com.waz.model.AccountData.PermissionsMasks
+import com.waz.model.AccountDataOld.PermissionsMasks
 import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model._
+import com.waz.service.EventScheduler.Stage
 import com.waz.service.conversation.ConversationsContentUpdater
 import com.waz.service.{EventScheduler, SearchKey}
 import com.waz.sync.{SyncRequestService, SyncServiceHandle}
@@ -33,9 +34,12 @@ import com.waz.utils.events.{AggregatingSignal, EventStream, RefreshingSignal, S
 
 import scala.collection.Seq
 import scala.concurrent.Future
+import scala.util.Right
 
 //TODO - return Signals of the search results for UI??
 trait TeamsService {
+
+  def eventsProcessingStage: Stage.Atomic
 
   def searchTeamMembers(query: Option[SearchKey] = None, handleOnly: Boolean = false): Signal[Set[UserData]]
 
@@ -49,10 +53,8 @@ trait TeamsService {
 }
 
 class TeamsServiceImpl(selfUser:           UserId,
-                       selfAccount:        AccountId,
                        teamId:             Option[TeamId],
                        teamStorage:        TeamsStorage,
-                       accStorage:         AccountsStorage,
                        userStorage:        UsersStorage,
                        convsStorage:       ConversationStorage,
                        convMemberStorage:  MembersStorage,
@@ -63,7 +65,7 @@ class TeamsServiceImpl(selfUser:           UserId,
 
   private implicit val dispatcher = SerialDispatchQueue()
 
-  val eventsProcessingStage = EventScheduler.Stage[TeamEvent] { (_, events) =>
+  override val eventsProcessingStage: Stage.Atomic = EventScheduler.Stage[TeamEvent] { (_, events) =>
     verbose(s"Handling events: $events")
     import TeamEvent._
 
@@ -165,8 +167,12 @@ class TeamsServiceImpl(selfUser:           UserId,
   }
 
   override def onMemberSynced(userId: UserId, permissions: PermissionsMasks) = {
+    import UserPreferences._
     if (userId == selfUser)
-      accStorage.update(selfAccount, _.copy(_selfPermissions = permissions._1, _copyPermissions = permissions._2)).map(_ => {})
+      for {
+        _ <- userPrefs(SelfPermissions) := permissions._1
+        _ <- userPrefs(CopyPermissions) := permissions._2
+      } yield {}
     else Future.successful({})
   }
 

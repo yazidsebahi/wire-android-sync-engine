@@ -17,13 +17,13 @@
  */
 package com.waz.sync.client
 
-import com.waz.api.{UsernameValidation, UsernameValidationError}
+import com.waz.api.UsernameValidationError
 import com.waz.model.Handle
 import com.waz.threading.Threading
 import com.waz.utils.{JsonDecoder, JsonEncoder}
 import com.waz.znet.Response.SuccessHttpStatus
-import com.waz.znet._
 import com.waz.znet.ZNetClient._
+import com.waz.znet._
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -33,9 +33,15 @@ object HandlesClient {
   val checkSingleAvailabilityPath = "/users/handles/"
   val handlesQuery = "handles"
   val MAX_HANDLES_TO_POST = 50
+
+  case class UsernameValidation(username: String, reason: UsernameValidationError) {
+    def isValid: Boolean = reason == UsernameValidationError.NONE
+  }
 }
 
 class HandlesClient(netClient: ZNetClient)  {
+  import HandlesClient._
+
   def getHandlesValidation(handles: Seq[Handle]): ErrorOrResponse[Option[Seq[UsernameValidation]]] = {
     val data = JsonEncoder { o =>
       o.put("handles", JsonEncoder.arrString(handles.take(HandlesClient.MAX_HANDLES_TO_POST).map(_.toString)))

@@ -17,45 +17,89 @@
  */
 package com.waz.service
 
+import java.io.File
+
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.Invitations._
-import com.waz.api.impl.ErrorResponse.internalError
 import com.waz.api.impl._
-import com.waz.api.{ClientRegistrationState, KindOfAccess, KindOfVerification}
-import com.waz.client.RegistrationClientImpl.ActivateResult
-import com.waz.client.RegistrationClientImpl.ActivateResult.{Failure, PasswordExists}
-import com.waz.content.GlobalPreferences.{CurrentAccountPref, FirstTimeWithTeams}
+import com.waz.api.{ErrorResponse => _, _}
+import com.waz.content.GlobalPreferences._
+import com.waz.content.UserPreferences
+import com.waz.model.AccountData.Password
 import com.waz.model._
-import com.waz.sync.client.InvitationClient.ConfirmedInvitation
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
-import com.waz.utils.events.{EventContext, EventStream, RefreshingSignal, Signal}
-import com.waz.utils.{RichOption, returning}
-import com.waz.znet.Response
-import com.waz.znet.Response.Status
+import com.waz.service.tracking.LoggedOutEvent
+import com.waz.threading.Threading
+import com.waz.utils.events.{EventContext, Signal}
+import com.waz.utils.{Serialized, returning}
+import com.waz.znet.AuthenticationManager.{AccessToken, Cookie}
+import com.waz.znet.LoginClient
 import com.waz.znet.ZNetClient._
 
-import scala.collection.mutable
+import scala.async.Async.{async, await}
 import scala.concurrent.Future
+import scala.util.Right
+import scala.util.control.NonFatal
 
+/**
+  * There are a few possible states that an account can progress through for the purposes of log in and registration.
+  *
+  * No state - an account is not known to sync engine
+  *
+  * Logged in (global db row)  - the account has a cookie and token and can authenticate requests - it will be persisted,
+  *   but logged in accounts alone are not visible externally to this service.
+  *
+  * With AccountManager - the account has a database as well as being logged in. Here, we can start registering clients
+  *
+  * With ZMessaging - A ready, working account with database, client and logged in.
+  *
+  * Active - the current selected account, this state is independent to the other states, except that the account in question
+  *   must have an account manager
+  *
+  */
 trait AccountsService {
   import AccountsService._
 
-  def accountState(accId: AccountId): Signal[AccountState]
+  def requestVerificationEmail(email: EmailAddress): ErrorOr[Unit]
 
-  def loggedInAccounts: Signal[Set[AccountData]]
+  def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false): ErrorOr[Unit]
+  def requestEmailCode(email: EmailAddress): ErrorOr[Unit]
 
-  def loggedInAccountIds: Signal[Set[AccountId]] = loggedInAccounts.map(_.map(_.id))
+  def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean): ErrorOr[Unit]
+  def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true): ErrorOr[Unit]
 
-  def activeAccount: Signal[Option[AccountData]]
+  def loginEmail(validEmail: String, validPassword: String): ErrorOr[UserId] = login(EmailCredentials(EmailAddress(validEmail), Password(validPassword)))
+  def loginPhone(phone: String, code: String) = login(PhoneCredentials(PhoneNumber(phone), ConfirmationCode(code)))
+  def login(loginCredentials: Credentials): ErrorOr[UserId]
 
-  def activeZms: Signal[Option[ZMessaging]]
+  def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
 
-  def zms(accountId: AccountId): Signal[Option[ZMessaging]]
+  def createAccountManager(userId: UserId, dbFile: Option[File], isLogin: Option[Boolean], initialUser: Option[UserInfo] = None): Future[Option[AccountManager]] //TODO return error codes on failure?
 
+  //Set to None in order to go to the login screen without logging out the current users
+  def setAccount(userId: Option[UserId]): Future[Unit]
+
+  def logout(userId: UserId): Future[Unit]
+
+
+  def accountManagers: Signal[Set[AccountManager]]
+  def accountsWithManagers: Signal[Set[UserId]] = accountManagers.map(_.map(_.userId))
+  def zmsInstances: Signal[Set[ZMessaging]]
+  def getZms(userId: UserId): Future[Option[ZMessaging]]
+
+  def accountState(userId: UserId): Signal[AccountState]
+
+  def activeAccountId:      Signal[Option[UserId]]
+  def activeAccount:        Signal[Option[AccountData]]
+  def activeAccountManager: Signal[Option[AccountManager]]
+  def activeZms:            Signal[Option[ZMessaging]]
+
+  def loginClient: LoginClient
 }
 
 object AccountsService {
+
+  val AccountManagersKey = "accounts-map"
+
   trait AccountState
 
   case object LoggedOut extends AccountState
@@ -63,435 +107,338 @@ object AccountsService {
   trait Active extends AccountState
   case object InBackground extends Active
   case object InForeground extends Active
-
-  val NoEmailSetWarning = "Account does not have email set - can't request activation code"
 }
 
 class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
-
   import AccountsService._
+  import Threading.Implicits.Background
 
-  implicit val dispatcher = new SerialDispatchQueue(name = "InstanceService")
+  implicit val ec: EventContext = EventContext.Global
 
-  private[waz] implicit val ec: EventContext = EventContext.Global
-
-  private[waz] val accountMap = new mutable.HashMap[AccountId, AccountManager]()
-
-  lazy val context  = global.context
+  val context       = global.context
   val prefs         = global.prefs
-  val storage       = global.accountsStorage
+  val storageOld    = global.accountsStorageOld
   val phoneNumbers  = global.phoneNumbers
   val regClient     = global.regClient
   val loginClient   = global.loginClient
 
-  protected val firstTimePref = prefs.preference(FirstTimeWithTeams)
+  private val activeAccountPref      = prefs(ActiveAccountPref)
+  private val firstTimeWithTeamsPref = prefs(FirstTimeWithTeams)
+  private val databasesRenamedPref   = prefs(DatabasesRenamed)
 
-  val activeAccountPref = prefs.preference(CurrentAccountPref)
+  private val migrationDone = for {
+    first   <- firstTimeWithTeamsPref.signal
+    renamed <- databasesRenamedPref.signal
+  } yield !first && renamed
 
-  val loggedInAccounts = firstTimePref.signal.flatMap {
-    case false =>
-      val changes = EventStream.union(
-        storage.onChanged.map(_.map(_.id)),
-        storage.onDeleted
-      ).map(_.toSet)
-      new RefreshingSignal[Set[AccountData], Set[AccountId]](CancellableFuture.lift(storage.findLoggedIn().map(_.toSet)), changes)
-    case true => Signal.const(Set.empty[AccountData])
-  }
+  private val storage = migrationDone.filter(identity).head.map(_ => global.accountsStorage)
 
-  val zmsInstances = (for {
-    ids <- loggedInAccounts.map(_.map(_.id))
-    ams <- Signal.future(Future.sequence(ids.map(getOrCreateAccountManager)))
-    zs  <- Signal.sequence(ams.map(_.zmessaging).toSeq: _*)
-  } yield
-    returning(zs.flatten.toSet) { v =>
-      verbose(s"Loaded: ${v.size} zms instances for ${ids.size} accounts")
-    }).disableAutowiring()
-
-  def zms(accountId: AccountId): Signal[Option[ZMessaging]] = zmsInstances.map(_.find(_.accountId == accountId))
-
-  @volatile private var accountStateSignals = Map.empty[AccountId, Signal[AccountState]]
-  override def accountState(accountId: AccountId) = {
-
-    lazy val newSignal: Signal[AccountState] = for {
-      selected <- activeAccountPref.signal.map(_.contains(accountId))
-      loggedIn <- loggedInAccountIds.map(_.contains(accountId))
-      uiActive <- global.lifecycle.uiActive
-    } yield
-      returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
-        verbose(s"account state changed: $accountId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
+  private def filterLatestDb(accounts: Future[Seq[AccountDataOld]]): Future[Iterable[AccountDataOld]] =
+    accounts.map { _.groupBy(_.userId).map { case (userId, accounts) =>
+      if (accounts.size > 1) {
+        accounts
+          .map(acc => (acc, context.getDatabasePath(acc.id.str)))
+          .sortBy(_._2.lastModified())
+          .reverse
+          .head
+          ._1
+      } else {
+        accounts.head
       }
+    }}
 
-    accountStateSignals.getOrElse(accountId, returning(newSignal) { sig =>
-      accountStateSignals += accountId -> sig
-    })
+  //TODO can be removed after a (very long) while
+  databasesRenamedPref().flatMap {
+    case true => Future.successful({}) //databases have been renamed - nothing to do.
+    case false =>
+      for {
+        active <- prefs.preference(CurrentAccountPrefOld).apply()
+        accs <- filterLatestDb(storageOld.list())
+        _ <- Future.sequence(accs.filter(_.userId.isDefined).map { acc =>
+          val userId = acc.userId.get
+          //migrate the databases
+          verbose(s"Renaming database and cryptobox dir: ${acc.id.str} to ${userId.str}")
+
+          val dbFileOld = context.getDatabasePath(acc.id.str)
+
+          val exts = Seq("", "-wal", "-shm", "-journal")
+
+          val toMove = exts.map(ext => s"${dbFileOld.getAbsolutePath}$ext").map(new File(_))
+
+          val dbRenamed = exts.zip(toMove).map { case (ext, f) =>
+            val fileToMove = new File(dbFileOld.getParent, s"${userId.str}$ext")
+            val res = f.renameTo(fileToMove)
+            if(!res && !ext.equals(exts.last)) {
+              error(s"Failed to rename file ${f.getAbsolutePath}")
+              res
+            } else if (!res && ext.equals(exts.last)) {
+              //journal is not always present, so if copying it fails, and it the original file doesn't exist, then just skip it
+              true
+            } else {
+              res
+            }
+          }.forall(identity)
+
+          //migrate cryptobox dirs
+          val cryptoBoxDirOld = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), acc.id.str)
+          val cryptoBoxDirNew = new File(new File(context.getFilesDir, global.metadata.cryptoBoxDirName), userId.str)
+          val cryptoBoxRenamed = cryptoBoxDirOld.renameTo(cryptoBoxDirNew)
+
+          verbose(s"DB migration successful?: $dbRenamed, cryptobox migration successful?: $cryptoBoxRenamed")
+
+          //Ensure that the current active account remains active
+          if (active.contains(acc.id)) activeAccountPref := Some(userId) else Future.successful({})
+        })
+        //copy the client ids
+        _ <- Future.sequence(accs.collect { case acc if acc.userId.isDefined =>
+          import com.waz.service.AccountManager.ClientRegistrationState._
+          val state = (acc.clientId, acc.clientRegState) match {
+            case (Some(id), _) => Registered(id)
+            case (_, "UNKNOWN") => Unregistered
+            case (_, "PASSWORD_MISSING") => PasswordMissing
+            case (_, "LIMIT_REACHED") => LimitReached
+            case _ =>
+              error(s"Unknown client registration state: ${acc.clientId}, ${acc.clientRegState}. Defaulting to unregistered")
+              Unregistered
+          }
+
+          val teamId = acc.teamId match {
+            case Left(_) => None
+            case Right(opt) => opt
+          }
+
+          val stor = global.factory.baseStorage(acc.userId.get)
+          val prefs = stor.userPrefs
+          for {
+            _ <- acc.cookie.fold(Future.successful(()))(cookie => global.accountsStorage.insert(AccountData(acc.userId.get, teamId, cookie, acc.accessToken, acc.registeredPush, Some(Password("")))).map(_ => ()))
+            _ <- prefs.preference(UserPreferences.SelfClient) := state
+            _ <- prefs.preference(UserPreferences.PrivateMode) := acc.privateMode
+            _ <- prefs.preference(UserPreferences.SelfPermissions) := AccountDataOld.encodeBitmask(acc.selfPermissions)
+            _ <- prefs.preference(UserPreferences.CopyPermissions) := AccountDataOld.encodeBitmask(acc.copyPermissions)
+          } yield {
+            stor.db.close()
+          }
+        })
+        //delete non-logged in accounts, or every account that's not the current if it's the first installation with teams
+        _ <- firstTimeWithTeamsPref().map {
+          case false => accs.collect { case acc if acc.cookie.isEmpty => acc.id }
+          case true => accs.map(_.id).filterNot(active.contains)
+        }.flatMap(storageOld.removeAll)
+        _ <- markMigrationDone()
+      } yield {}
+  }.recoverWith {
+    case NonFatal(e) =>
+      warn("Failed to migrate databases, aborting operation", e)
+      markMigrationDone()
   }
 
-  lazy val activeAccount = activeAccountPref.signal.flatMap[Option[AccountData]] {
-    case None     => Signal.const(None)
-    case Some(id) => storage.optSignal(id)
-  }
+  private def markMigrationDone() =
+    for {
+      _ <- firstTimeWithTeamsPref := false
+      _ <- databasesRenamedPref   := true
+    } yield {}
 
-  lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
-    case None     => Signal.const(None)
-    case Some(id) => Signal.future(getOrCreateAccountManager(id).map(Some(_)))
-  }
 
-  lazy val activeZms = activeAccountManager.flatMap[Option[ZMessaging]] {
-    case Some(service) => service.zmessaging
-    case None          => Signal.const(None)
-  }
+  storage.map(_.onDeleted(_.foreach { user =>
+    verbose(s"user logged out: $user")
+    global.trackingService.loggedOut(LoggedOutEvent.InvalidCredentials, user)
+    Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutate(_.filterNot(_.userId == user))))
+  }))
 
-  def getActiveAccount = activeAccountPref() flatMap {
-    case None     => Future successful None
-    case Some(id) => storage.get(id)
-  }
+  override val accountManagers = Signal[Set[AccountManager]]()
 
-  def getActiveAccountManager = activeAccountPref() flatMap {
-    case Some(id) => getOrCreateAccountManager(id) map (Some(_))
-    case _        => Future successful None
-  }
+  //create account managers for all logged in accounts on app start, or initialise the signal to an empty set
+  for {
+    ids <- storage.flatMap(_.list().map(_.map(_.id).toSet))
+    _   <- Future.sequence(ids.map(createAccountManager(_, None, None)))
+  } yield Serialized.future(AccountManagersKey)(Future[Unit](accountManagers.mutateOrDefault(identity, Set.empty[AccountManager])))
 
-  def getActiveZms = getActiveAccountManager.flatMap {
-    case Some(acc) => acc.getZMessaging
-    case None      => Future successful None
-  }
+  override def createAccountManager(userId: UserId, importDbFile: Option[File], isLogin: Option[Boolean], initialUser: Option[UserInfo] = None) = Serialized.future(AccountManagersKey) {
+    async {
+      if (importDbFile.nonEmpty)
+        returning(BackupManager.importDatabase(userId, importDbFile.get, context.getDatabasePath(userId.toString).getParentFile)) { restore =>
+          if (restore.isFailure) global.trackingService.historyRestored(false) // HistoryRestoreSucceeded is sent from the new AccountManager
+        }.get // if the import failed this will rethrow the exception
 
-  private[service] def getOrCreateAccountManager(accountId: AccountId) = flushOtherCredentials.map { _ =>
-    verbose(s"getOrCreateAccountManager: $accountId")
-    accountMap.getOrElseUpdate(accountId, new AccountManager(accountId, global, this))
-  }
-
-  //TODO - why would we ever NOT want to create the account manager if there is a AccountId available for it?
-  def getAccountManager(id: AccountId, orElse: Option[AccountManager] = None): Future[Option[AccountManager]] = storage.get(id) flatMap {
-    case Some(acc) =>
-      verbose(s"getAccountManager($acc)")
-      getOrCreateAccountManager(id) map (Some(_))
-    case _ =>
-      Future successful None
-  }
-
-  def getZMessaging(id: AccountId): Future[Option[ZMessaging]] = getOrCreateAccountManager(id).flatMap(_.getZMessaging)
-
-  def logout(flushCredentials: Boolean) = activeAccountManager.head flatMap {
-    case Some(account) => account.logout(flushCredentials)
-    case None          => Future.successful(())
-  }
-
-  def logout(account: AccountId, flushCredentials: Boolean) = {
-    activeAccountPref() flatMap { id =>
-        for {
-          otherAccounts <- loggedInAccounts.map(_.filter(acc => !id.contains(acc.id) && acc.clientRegState == ClientRegistrationState.REGISTERED).map(_.id)).head
-          _ <- if (id.contains(account)) setAccount(if (flushCredentials) otherAccounts.headOption else None) else Future.successful(())
-          _ <- if (flushCredentials) storage.update(account, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None)) else Future.successful({})
-        } yield {}
+      verbose(s"getOrCreateAccountManager: $userId")
+      val managers = await { accountManagers.orElse(Signal.const(Set.empty[AccountManager])).head }
+      val manager = managers.find(_.userId == userId)
+      if (manager.nonEmpty) {
+        warn(s"AccountManager for: $userId already created")
+        manager
+      } else {
+        verbose(s"No AccountManager for: $userId, creating new one")
+        val account = await(storage.flatMap(_.get(userId)))
+        val user = await {
+          for {
+            user <- prefs(LoggingInUser).apply().map(_.orElse(initialUser))
+            _    <- prefs(LoggingInUser) := None
+          } yield user
+        }
+        if (account.isEmpty) warn(s"No logged in account for user: $userId, not creating account manager")
+        account.map { acc =>
+          val newManager = new AccountManager(userId, acc.teamId, global, this, startedJustAfterBackup = importDbFile.nonEmpty, user, isLogin)
+          accountManagers.mutateOrDefault(_ + newManager, Set(newManager))
+          newManager
+        }
+      }
     }
   }
 
-  def removeCurrentAccount(): Future[Unit] = activeAccountManager.head flatMap {
-    case Some(account) =>
+  @volatile private var accountStateSignals = Map.empty[UserId, Signal[AccountState]]
+  override def accountState(userId: UserId) = {
+
+    lazy val newSignal: Signal[AccountState] =
       for {
-        _ <- storage.update(account.id, _.copy(accessToken = None, cookie = None, password = None, registeredPush = None, pendingEmail = None, pendingPhone = None, clientRegState = ClientRegistrationState.UNKNOWN, code = None))
-        _ <- setAccount(None)
-      } yield {}
-    case None =>
-      Future.successful(())
+        selected <- activeAccountPref.signal.map(_.contains(userId))
+        loggedIn <- accountsWithManagers.map(_.contains(userId))
+        uiActive <- global.lifecycle.uiActive
+      } yield {
+        returning(if (!loggedIn) LoggedOut else if (uiActive && selected) InForeground else InBackground) { state =>
+          verbose(s"account state changed: $userId -> $state: selected: $selected, loggedIn: $loggedIn, uiActive: $uiActive")
+        }
+      }
+
+    accountStateSignals.getOrElse(userId, returning(newSignal) { sig =>
+      accountStateSignals += userId -> sig
+    })
   }
 
-  private def setAccount(acc: Option[AccountId]) = {
-    verbose(s"setAccount($acc)")
-    activeAccountPref := acc
+  override lazy val activeAccountManager = activeAccountPref.signal.flatMap[Option[AccountManager]] {
+    case Some(id) => accountManagers.map(_.find(_.userId == id))
+    case None     => Signal.const(None)
+  }
+
+  override lazy val activeAccount = activeAccountManager.flatMap[Option[AccountData]] {
+    case Some(am) => Signal.future(storage).flatMap(_.optSignal(am.userId))
+    case None     => Signal.const(None)
+  }
+
+  override lazy val activeAccountId = activeAccount.map(_.map(_.id))
+
+  override lazy val activeZms = activeAccountManager.flatMap[Option[ZMessaging]] {
+    case Some(am) => Signal.future(am.zmessaging.map(Some(_)))
+    case None     => Signal.const(None)
+  }
+
+  override lazy val zmsInstances = (for {
+    ams <- accountManagers
+    zs  <- Signal.sequence(ams.map(am => Signal.future(am.zmessaging)).toSeq: _*)
+  } yield
+    returning(zs.toSet) { v =>
+      verbose(s"Loaded: ${v.size} zms instances for ${ams.size} accounts")
+    }).disableAutowiring()
+
+  override def getZms(userId: UserId): Future[Option[ZMessaging]] = {
+    verbose(s"getZms: $userId")
+    zmsInstances.head.map(_.find(_.selfUserId == userId))
+  }
+
+  //TODO optional delete history
+  def logout(userId: UserId) = {
+    verbose(s"logout: $userId")
+    for {
+      current       <- activeAccountId.head
+      otherAccounts <- accountsWithManagers.head.map(_.filter(userId != _))
+      _ <- if (current.contains(userId)) setAccount(otherAccounts.headOption) else Future.successful(())
+      _ <- storage.flatMap(_.remove(userId)) //TODO pass Id to some sort of clean up service before removing
+    } yield {}
   }
 
   /**
     * Logs out of the current account and switches to another specified by the AccountId. If the other cannot be authorized
     * (no cookie) or if anything else goes wrong, we leave the user logged out
     */
-  def switchAccount(accountId: AccountId) = {
-    verbose(s"switchAccount: $accountId")
-    for {
-      cur      <- getActiveAccountManager.map(_.map(_.id))
-      if !cur.contains(accountId)
-      _        <- logout(flushCredentials = false)
-      account  <- storage.get(accountId)
-      if account.isDefined
-      _        <- setAccount(Some(accountId))
-      _        <- getOrCreateAccountManager(accountId)
-    } yield {}
-  }
-
-  def requestVerificationEmail(email: EmailAddress): Unit = loginClient.requestVerificationEmail(email)
-
-  def requestPhoneConfirmationCode(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
-    CancellableFuture.lift(phoneNumbers.normalize(phone)) flatMap { normalizedPhone =>
-      regClient.requestPhoneConfirmationCode(normalizedPhone.getOrElse(phone), kindOfAccess)
-    }
-
-  def requestPhoneConfirmationCall(phone: PhoneNumber, kindOfAccess: KindOfAccess): CancellableFuture[ActivateResult] =
-    CancellableFuture.lift(phoneNumbers.normalize(phone)) flatMap { normalizedPhone =>
-      regClient.requestPhoneConfirmationCall(normalizedPhone.getOrElse(phone), kindOfAccess)
-    }
-
-  def verifyPhoneNumber(phone: PhoneCredentials, kindOfVerification: KindOfVerification): ErrorOrResponse[Unit] =
-    CancellableFuture.lift(phoneNumbers.normalize(phone.phone)) flatMap { normalizedPhone =>
-      regClient.verifyPhoneNumber(PhoneCredentials(normalizedPhone.getOrElse(phone.phone), phone.code), kindOfVerification)
-    }
-
-  //TODO can be removed after a while
-  protected val flushOtherCredentials = {
-    firstTimePref().flatMap {
-      case false => Future.successful({})
-      case true  =>
-        for {
-          cur <- activeAccountPref()
-          accs <- storage.list()
-          _ <- {
-            val withoutCurrent = accs.map(_.id).filterNot(cur.contains)
-            verbose(s"Flushing accounts: curr: $cur, others: $withoutCurrent")
-            storage.updateAll2(withoutCurrent, _.copy(cookie = None, accessToken = None, password = None, registeredPush = None))
+  override def setAccount(userId: Option[UserId]) = {
+    verbose(s"setAccount: $userId")
+    userId match {
+      case Some(id) =>
+        activeAccountId.head.flatMap {
+          case Some(cur) if cur == id => Future.successful({})
+          case Some(_)   => accountManagers.head.map(_.find(_.userId == id)).flatMap {
+            case Some(_) => activeAccountPref := Some(id)
+            case _ =>
+              warn(s"Tried to set active user who is not logged in: $userId, not changing account")
+              Future.successful({})
           }
-          _ <- firstTimePref.update(false)
-        } yield {}
-    }
-  }
-
-  def loginPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
-
-    def requestCode(): Future[Either[ErrorResponse, Unit]] =
-      requestPhoneConfirmationCode(number, KindOfAccess.LOGIN).future.map {
-        case Failure(error) => Left(error)
-        case PasswordExists => Left(ErrorResponse.PasswordExists)
-        case _ => Right(())
-      }
-
-    for {
-      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
-      acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
-      req <- requestCode()
-      updatedAcc  = acc.copy(pendingPhone = Some(normalizedPhone), accessToken = None, cookie = None, password = None, code = None, regWaiting = false)
-      _ <- if (req.isRight) storage.updateOrCreate(acc.id, _ => updatedAcc, updatedAcc).map(_ => ()) else Future.successful(())
-      _ <- if (req.isRight) setAccount(Some(updatedAcc.id)) else Future.successful(())
-    } yield req
-  }
-
-  def registerPhone(number: PhoneNumber): Future[Either[ErrorResponse, Unit]] = {
-    for {
-      normalizedPhone <- phoneNumbers.normalize(number).map(_.getOrElse(number))
-      acc <- storage.findByPhone(normalizedPhone).map(_.getOrElse(AccountData()))
-      req <- requestPhoneConfirmationCode(number, KindOfAccess.REGISTRATION).future
-      updatedAcc = acc.copy(pendingPhone = Some(normalizedPhone), code = None, regWaiting = true)
-      _ <- if (req == ActivateResult.Success) storage.updateOrCreate(updatedAcc.id, _ => updatedAcc, updatedAcc) else Future.successful(())
-      _ <- if (req == ActivateResult.Success) CancellableFuture.lift(setAccount(Some(acc.id))) else CancellableFuture.successful(())
-    } yield req match {
-      case Failure(error) => Left(error)
-      case PasswordExists => Left(ErrorResponse.PasswordExists)
-      case _ => Right(())
-    }
-  }
-
-  def activatePhoneOnRegister(accountId: AccountId, code: ConfirmationCode): Future[Either[ErrorResponse, Unit]] = {
-
-    def verifyCodeRequest(credentials: PhoneCredentials, accountId: AccountId): Future[Either[ErrorResponse, Unit]] = {
-      verifyPhoneNumber(credentials, KindOfVerification.PREVERIFY_ON_REGISTRATION).future.flatMap {
-        case Left(errorResponse) =>
-          Future.successful(Left(errorResponse))
-        case Right(()) =>
-          storage.update(accountId, _.copy(phone = Some(credentials.phone), pendingPhone = None, code = Some(code), regWaiting = true)).map( _ => Right(()))
-      }
-    }
-
-    for {
-      Some(acc) <- storage.get(accountId)
-      Some(creds) <- acc.pendingPhone.fold2(Future.successful(None), phone => Future.successful(PhoneCredentials(phone, Some(code))).map(Option(_)))
-      req <- verifyCodeRequest(creds.asInstanceOf[PhoneCredentials], acc.id)
-    } yield req
-
-  }
-
-  def registerNameOnPhone(accountId: AccountId, name: String): Future[Either[ErrorResponse, Unit]] = {
-    for {
-      acc <- storage.get(accountId)
-      req <- acc.fold2(Future.successful(Left(ErrorResponse.InternalError)), accountData => registerOnBackend(accountData, name))
-    } yield req
-  }
-
-  def loginPhone(accountId: AccountId, code: ConfirmationCode): Future[Either[ErrorResponse, Unit]] = {
-    for {
-      Some(acc) <- storage.get(accountId)
-      req <- loginOnBackend(acc.copy(code = Some(code)))
-      _ <- req match {
-        case Right(_) =>
-          storage.update(accountId, _.copy(phone = acc.pendingPhone, pendingPhone = None))
-        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-          storage.update(accountId, _.copy(phone = None, pendingPhone = acc.pendingPhone)).map(_ => ())
-        case _ =>
-          Future.successful(())
-      }
-    } yield req
-  }
-
-  def loginEmail(emailAddress: EmailAddress, password: String): Future[Either[ErrorResponse, Unit]] = {
-    for {
-      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
-      loginAcc = acc.copy(email = Some(emailAddress), password = Some(password))
-      _ <- storage.updateOrCreate(loginAcc.id, _ => loginAcc, loginAcc)
-      req <- loginOnBackend(loginAcc)
-      _ <- req match {
-        case Right (_) =>
-          switchAccount(acc.id)
-        case Left(ErrorResponse(Status.Forbidden, _, "pending-activation")) =>
-          storage.update(loginAcc.id, _.copy(pendingEmail = Some(emailAddress))).map(_ => ())
-        case _ => Future.successful(())
-      }
-    } yield req
-  }
-
-  def registerEmail(emailAddress: EmailAddress, password: String, name: String): Future[Either[ErrorResponse, Unit]] = {
-    for {
-      acc <- storage.findByEmail(emailAddress).map(_.getOrElse(AccountData()))
-      registerAcc = acc.copy(pendingEmail = Some(emailAddress), password = Some(password), name = Some(name))
-      _ <- storage.updateOrCreate(registerAcc.id, _ => registerAcc, registerAcc)
-      req <- registerOnBackend(registerAcc, name)
-      _ <- if (req.isRight) storage.update(registerAcc.id, _.copy(email = None, pendingEmail = Some(emailAddress))) else Future.successful(())
-      _ <- if (req.isRight) switchAccount(registerAcc.id) else Future.successful(())
-    } yield req
-  }
-
-  /**
-    * Methods for the new "creating a team" flow.
-    * TODO - we should integrate these better with other registration methods
-    * We will leave them separate for now to reduce the risk of breaking other entry points
-    */
-  def createTeamAccount(teamName: String): Future[AccountId] = {
-    for {
-      acc <- storage.findByPendingTeamName(teamName).flatMap {
-        case Some(a) => Future.successful(a)
-        case None    => storage.insert(AccountData(pendingTeamName = Some(teamName)))
-      }
-      _   <- setAccount(Some(acc.id))
-    } yield acc.id
-  }
-
-  def updateCurrentAccount(f: AccountData => AccountData): Future[Unit] = {
-    activeAccountPref().flatMap {
-      case Some(id) => storage.update(id, f).map(_ => ())
-      case _ => throw new IllegalStateException("No current account set")
-    }
-  }
-
-  //For team flow only (for now) - applies to current active account
-  def requestActivationCode(email: EmailAddress): ErrorOr[Unit] =
-    regClient.requestEmailConfirmationCode(email).future.flatMap {
-      case ActivateResult.Success => updateCurrentAccount(_.copy(pendingEmail = Some(email))).map(_ => Right(()))
-      case ActivateResult.PasswordExists => Future.successful(Left(internalError("password exists for email activation - this shouldn't happen")))
-      case ActivateResult.Failure(err) => Future.successful(Left(err))
-    }
-
-  //For team flow only (for now) - applies to current active account
-  def verify(code: ConfirmationCode): ErrorOr[Unit] = withActiveAccount { acc =>
-    acc.pendingEmail match {
-      case Some(e) => for {
-        res <- regClient.verifyEmail(e, code).future
-        _   <- res match {
-          case Right(()) => updateCurrentAccount(_.copy(code = Some(code)))
-          case _ => Future.successful(())
+          case _ => activeAccountPref := Some(id)
         }
-      } yield res
-      case _ => Future.successful(Left(internalError(s"Current account: ${acc.id} does not have a pending email address. First request an activation code and provide an email address")))
+      case None => activeAccountPref := None
     }
   }
 
-  //For team flow only (for now) - applies to current active account
-  def register(): ErrorOr[Unit] = {
-    withActiveAccount { acc =>
-      regClient.registerTeamAccount(acc).future.flatMap {
-        case Right((userInfo, cookie)) =>
-          verbose(s"register($acc) done, id: ${acc.id}, user: $userInfo, cookie: $cookie")
-          storage.update(acc.id,
-            _.updated(userInfo).copy(
-              cookie          = cookie,
-              regWaiting      = false,
-              code            = None,
-              firstLogin      = false,
-              email           = acc.pendingEmail,
-              pendingEmail    = None
-            )).map(_ => Right(()))
-        case Left(err@ErrorResponse(Response.Status.NotFound, _, "invalid-code")) =>
-          info(s"register($acc.id) failed: invalid-code")
-          storage.update(acc.id, _.copy(code = None, password = None)).map(_ => Left(err))
-        case Left(error) =>
-          info(s"register($acc.id) failed: $error")
-          Future successful Left(error)
-    }}
-  }
+  def requestVerificationEmail(email: EmailAddress) =
+    regClient.requestVerificationEmail(email)
 
-  private def withActiveAccount[A](f: AccountData => Future[A]): Future[A] = {
-    for {
-      acc <- getActiveAccount.map(_.getOrElse(throw new IllegalStateException("No current account set")))
-      res <- f(acc)
-    } yield res
-  }
-
-  private def loginOnBackend(accountData: AccountData): Future[Either[ErrorResponse, Unit]] = {
-    loginClient.login(accountData).future.flatMap {
-      case Right((token, cookie)) =>
-        storage.update(accountData.id, _.copy(accessToken = Some(token), cookie = cookie, code = None)).map(_ => Right(()))
-      case Left((_, error @ ErrorResponse(Status.Forbidden, _, "pending-activation"))) =>
-        verbose(s"account pending activation: ($accountData), $error")
-        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
-      case Left((_, error)) =>
-        verbose(s"login failed: $error")
-        storage.update(accountData.id, _.copy(cookie = None, accessToken = None, code = None)).map(_ => Left(error))
+  override def requestPhoneCode(phone: PhoneNumber, login: Boolean, call: Boolean = false) = {
+    verbose(s"requestPhoneConfirmationCode: $phone, login=$login, call=$call")
+    phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
+      regClient.requestPhoneCode(normalizedPhone.getOrElse(phone), login, call)
     }
   }
 
-  private def registerOnBackend(accountData: AccountData, name: String): Future[Either[ErrorResponse, Unit]] = {
-    regClient.register(accountData, name, None).future.flatMap {
-      case Right((userInfo, Some(cookie))) =>
-        verbose(s"register($accountData) done, id: ${accountData.id}, user: $userInfo, cookie: $cookie")
-        storage.update(accountData.id, _.updated(userInfo).copy(cookie = Some(cookie), regWaiting = false, name = Some(name), code = None, firstLogin = false)).map(_ => Right(()))
-      case Right((userInfo, None)) =>
-        verbose(s"register($accountData) done, id: ${accountData.id}, user: $userInfo")
-        storage.update(accountData.id, _.updated(userInfo).copy(cookie = None, regWaiting = false,  name = Some(name), code = None, firstLogin = false)).map(_ => Right(()))
+  override def requestEmailCode(email: EmailAddress) = {
+    verbose(s"requestEmailConfirmationCode: $email")
+    regClient.requestEmailCode(email)
+  }
+
+  override def verifyPhoneNumber(phone: PhoneNumber, code: ConfirmationCode, dryRun: Boolean) = {
+    verbose(s"verifyPhoneNumber: $phone, $code, $dryRun")
+    phoneNumbers.normalize(phone).flatMap { normalizedPhone =>
+      regClient.verifyRegistrationMethod(Left(normalizedPhone.getOrElse(phone)), code, dryRun).map(_.fold(Left(_), _ => Right({}))) //TODO handle label and cookie!
+    }
+  }
+
+  override def verifyEmailAddress(email: EmailAddress, code: ConfirmationCode, dryRun: Boolean = true) = {
+    verbose(s"verifyEmailAddress: $email, $code, $dryRun")
+    regClient.verifyRegistrationMethod(Right(email), code, dryRun).map(_.fold(Left(_), _ => Right({}))) //TODO handle label and cookie!
+  }
+
+  override def login(loginCredentials: Credentials) = {
+    verbose(s"login: $loginCredentials")
+    loginClient.login(loginCredentials).future.flatMap {
+      case Right((token, Some(cookie), _)) => //TODO handle label
+        loginClient.getSelfUserInfo(token).flatMap {
+          case Right(user) => for {
+            _ <- addAccountEntry(user, cookie, Some(token), loginCredentials)
+            _ <- prefs(LoggingInUser) := Some(user)
+          } yield Right(user.id)
+          case Left(err)   => Future.successful(Left(err))
+        }
+      case Right(_) =>
+        warn("login didn't return with a cookie, aborting")
+        Future.successful(Left(ErrorResponse.internalError("No cookie for user after login - can't create account")))
       case Left(error) =>
-        info(s"register($accountData, $name) failed: $error")
-        Future successful Left(error)
+        verbose(s"login failed: $error")
+        Future.successful(Left(error))
     }
   }
 
-  def retrieveInvitationDetails(invitation: PersonalToken): Future[InvitationDetailsResponse] = invitation match {
-    case token: PersonalInvitationToken =>
-      regClient.getInvitationDetails(token).future.map {
-        case Right(ConfirmedInvitation(_, name, Left(email), _)) => EmailAddressResponse(name, email.str)
-        case Right(ConfirmedInvitation(_, name, Right(phone), _)) => PhoneNumberResponse(name, phone.str)
-        case Left(r) => RetrievalFailed(r)
-      }
-  }
-
-  def generateAccountFromInvitation(invitationDetails: InvitationDetailsResponse, invitation: PersonalInvitationToken): Future[Unit] = {
-    invitationDetails match {
-      case EmailAddressResponse(name, email) =>
+  override def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None) = {
+    verbose(s"register: $registerCredentials, name: $name, teamName: $teamName")
+    regClient.register(registerCredentials, name, teamName).flatMap {
+      case Right((user, Some((cookie, _)))) =>
         for {
-          acc <- storage.findByEmail(EmailAddress(email)).map(_.getOrElse(AccountData()))
-          updated = acc.copy(email = Some(EmailAddress(email)), pendingEmail = None, name = Some(name), invitationToken = Some(invitation))
-          _ <- storage.updateOrCreate(acc.id, _ => updated, updated)
-        } yield ()
-      case PhoneNumberResponse(name, phone) =>
-        for {
-          acc <- storage.findByPhone(PhoneNumber(phone)).map(_.getOrElse(AccountData()))
-          updated = acc.copy(phone = Some(PhoneNumber(phone)), pendingPhone = None, name = Some(name), invitationToken = Some(invitation))
-          _ <- storage.updateOrCreate(acc.id, _ => updated, updated)
-        } yield ()
-      case _ =>
-        Future.successful(())
+          _  <- addAccountEntry(user, cookie, None, registerCredentials)
+          am <- createAccountManager(user.id, None, Some(false), Some(user))
+          _  <- am.fold(Future.successful({}))(_.getOrRegisterClient().map(_ => ()))
+          _  <- setAccount(Some(user.id))
+        } yield Right({})
+      case Right(_) =>
+        warn("Register didn't return a cookie")
+        Future.successful(Left(ErrorResponse.internalError("No cookie for user after registration - can't create account")))
+      case Left(error) =>
+        verbose(s"register failed: $error")
+        Future.successful(Left(error))
     }
   }
 
-  def clearInvitation(accountId: AccountId): Future[Unit] = {
-    storage.update(accountId, _.copy(invitationToken = None)).map(_ => ())
-  }
-
-  def setLoggedIn(accountId: AccountId): Future[Unit] = {
-    storage.update(accountId, _.copy(firstLogin = false)).map(_ => ())
+  private def addAccountEntry(user: UserInfo, cookie: Cookie, token: Option[AccessToken], credentials: Credentials): Future[Unit] = {
+    verbose(s"addAccountEntry: $user, $cookie, $token, $credentials")
+    storage
+      .flatMap(_.updateOrCreate(user.id, _.copy(cookie = cookie, accessToken = token, password = credentials.maybePassword), AccountData(user.id, user.teamId, cookie, token, password = credentials.maybePassword)))
+      .map(_ => {})
   }
 
 }
+
