@@ -88,7 +88,7 @@ class TeamConversationSpec extends AndroidFreeSpec {
         (conv: ConvId, r: RConvId, tpe: ConversationType, cr: UserId, us: Set[UserId], n: Option[String], hid: Boolean, ac: Set[Access], ar: AccessRole) =>
           Future.successful(ConversationData(conv, r, n, cr, tpe, team, hidden = hid, access = ac, accessRole = Some(ar)))
       }
-      (messages.addConversationStartMessage _).expects(*, self, Set(otherUserId), None).once().returning(Future.successful(null))
+      (messages.addConversationStartMessage _).expects(*, self, Set(otherUserId), None, None).once().returning(Future.successful(null))
       (sync.postConversation _).expects(*, Set(otherUserId), None, team, Set(Access.INVITE, Access.CODE), AccessRole.NON_ACTIVATED).once().returning(Future.successful(null))
 
       val conv = result(initService.getOrCreateOneToOneConversation(otherUserId))
