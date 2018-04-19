@@ -160,7 +160,7 @@ class AuthenticationManagerSpec extends AndroidFreeSpec {
       (accStorage.get _).expects(account1Id).anyNumberOfTimes().returning(Future.successful(None))
 
       val manager = getManager
-      result(manager.currentToken()) shouldEqual Left(ErrorResponse.Cancelled)
+      result(manager.currentToken()) shouldEqual Left(ErrorResponse.Unauthorized)
     }
   }
 
