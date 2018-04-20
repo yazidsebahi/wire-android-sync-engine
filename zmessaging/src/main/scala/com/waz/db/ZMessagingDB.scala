@@ -53,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 103
+  val DbVersion = 104
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -200,6 +200,9 @@ object ZMessagingDB {
     },
     Migration(102, 103) { db =>
       db.execSQL("ALTER TABLE Users ADD COLUMN expires_at INTEGER DEFAULT null")
+    },
+    Migration(103, 104) { db =>
+      db.execSQL("delete from MessageContentIndex where message_id in (select message_id from MessageContentIndex left join Messages on MessageContentIndex.message_id == Messages._id WHERE Messages._id IS null)")
     }
   )
 }

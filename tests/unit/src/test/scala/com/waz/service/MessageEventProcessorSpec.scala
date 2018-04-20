@@ -153,7 +153,7 @@ class MessageEventProcessorSpec extends AndroidFreeSpec with Inside {
       (storage.getMessages _).expects(*).returning(Future.successful(Seq.empty))
       (storage.hasSystemMessage _).expects(conv.id, event.time.instant, RENAME, selfUserId).returning(Future.successful(false))
       (storage.lastLocalMessage _).expects(conv.id, RENAME).returning(Future.successful(Some(localMsg)))
-      (storage.delete (_: MessageId)).expects(localMsg.id).returning(Future.successful({}))
+      (storage.remove (_: MessageId)).expects(localMsg.id).returning(Future.successful({}))
       (storage.addMessage _).expects(*).onCall { msg : MessageData => Future.successful(msg)}
       (convs.updateConversationLastRead _).expects(conv.id, event.time.instant).onCall { (convId: ConvId, instant: Instant) =>
         Future.successful(Some((conv, conv.copy(lastRead = instant))))

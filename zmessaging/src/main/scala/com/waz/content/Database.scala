@@ -46,4 +46,7 @@ trait Database {
   def close() = dispatcher {
     dbHelper.close()
   }
+
+  def flushWALToDatabase(): Future[Unit] =
+    dispatcher(dbHelper.flushWALFile())
 }

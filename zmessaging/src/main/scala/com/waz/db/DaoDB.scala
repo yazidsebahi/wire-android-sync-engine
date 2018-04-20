@@ -20,19 +20,37 @@ package com.waz.db
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase.CursorFactory
 import android.database.sqlite.{SQLiteDatabase, SQLiteOpenHelper}
-import com.waz.utils.returning
+import com.waz.ZLog.ImplicitTag._
+import com.waz.ZLog.verbose
+
+import scala.util.Try
 
 class DaoDB(context: Context, name: String, factory: CursorFactory, version: Int, daos: Seq[BaseDao[_]], migrations: Seq[Migration])
   extends SQLiteOpenHelper(context, name, factory, version) {
 
-  override def getWritableDatabase: SQLiteDatabase = synchronized(returning(super.getWritableDatabase)(db => if (! db.isWriteAheadLoggingEnabled) db.enableWriteAheadLogging()))
+  override def onConfigure(db: SQLiteDatabase): Unit = {
+    super.onConfigure(db)
+    db.enableWriteAheadLogging()
+    val c = db.rawQuery("PRAGMA secure_delete = true", null)
+    Try {
+      c.moveToNext()
+      verbose(s"PRAGMA secure_delete set to: ${c.getString(0).toInt == 1}")
+    }
+  }
 
-  /**
-    * Force database upgrade or creation before WAL mode is enabled. Once completed, WAL mode will be enabled. This gives
-    * onUpgrade an exclusive lock on the database. This should prevent the scenario where we try and read a database
-    * from a different thread before the upgrade has completed - leading to some weird migration issues.
-    */
-  getWritableDatabase
+  override def onOpen(db: SQLiteDatabase) = {
+    super.onOpen(db)
+    flushWALFile(Some(db))
+  }
+
+
+  def flushWALFile(db: Option[SQLiteDatabase] = None): Unit = {
+    val c = db.getOrElse(getWritableDatabase).rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null)
+    Try {
+      c.moveToNext()
+      verbose(s"PRAGMA wal_checkpoint performed. Busy?: ${c.getInt(0) == 1}. WAL pages modified: ${c.getInt(1)}. WAL pages moved back: ${c.getInt(2)}")
+    }
+  }
 
   override def onCreate(db: SQLiteDatabase): Unit = {
     daos.foreach { dao =>
