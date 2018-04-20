@@ -304,7 +304,7 @@ class MessagesServiceImpl(selfUserId: UserId,
     storage.getLastMessage(convId) flatMap {
       case Some(msg) if msg.msgType == Message.Type.OTR_UNVERIFIED || msg.msgType == Message.Type.OTR_DEVICE_ADDED ||  msg.msgType == Message.Type.OTR_MEMBER_ADDED =>
         verbose(s"addOtrVerifiedMessage, removing previous message: $msg")
-        storage.delete(msg.id) map { _ => None }
+        storage.remove(msg.id) map { _ => None }
       case _ =>
         updater.addLocalMessage(MessageData(MessageId(), convId, Message.Type.OTR_VERIFIED, selfUserId), Status.SENT) map { Some(_) }
     }

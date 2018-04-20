@@ -108,7 +108,7 @@ class AssetServiceImpl(storage:         AssetsStorage,
   storage.onDeleted { assets => media.releaseAnyOngoing(assets.map(AssetMediaKey)(breakOut)) }
 
   errors.onErrorDismissed {
-    case AssetError(ms) => Future.traverse(ms) { messages.delete }
+    case AssetError(ms) => Future.traverse(ms) { messages.remove }
   }
 
   override def assetSignal(id: AssetId) = storage.signal(id).flatMap[(AssetData, api.AssetStatus)] {

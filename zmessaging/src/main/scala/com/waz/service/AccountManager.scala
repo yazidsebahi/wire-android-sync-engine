@@ -255,6 +255,7 @@ class AccountManager(val userId:   UserId,
   def exportDatabase: Future[File] = for {
     zms     <- zmessaging
     user    <- zms.users.selfUser.head
+    _       <- db.flushWALToDatabase()
     backup  = BackupManager.exportDatabase(
       userId,
       userHandle  = user.handle.map(_.string).getOrElse(""),

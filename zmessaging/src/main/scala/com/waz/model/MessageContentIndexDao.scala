@@ -54,6 +54,10 @@ object MessageContentIndexDao extends Dao[MessageContentIndexEntry, MessageId] {
     }
   }
 
+  def deleteForConv(id: ConvId)(implicit db: DB) = delete(Conv, id)
+
+  def deleteUpTo(id: ConvId, upTo: Instant)(implicit db: DB) = db.delete(table.name, s"${Conv.name} = '${id.str}' AND ${Time.name} <= ${Time(upTo)}", null)
+
   def findContentFts(queryText: String, convId: Option[ConvId])(implicit db: DB): DBCursor ={
     convId match {
       case Some(conv) =>
