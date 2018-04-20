@@ -49,7 +49,6 @@ trait MessagesStorage extends CachedStorage[MessageId, MessageData] {
   def onMessageFailed: SourceStream[(MessageData, ErrorResponse)]
 
   def delete(msg: MessageData): Future[Unit]
-  def delete(id: MessageId):    Future[Unit]
   def deleteAll(conv: ConvId):  Future[Unit]
 
   def addMessage(msg: MessageData): Future[MessageData]
@@ -211,9 +210,8 @@ class MessagesStorageImpl(context: Context,
       _ <- Future(msgsFilteredIndex(msg.convId).foreach(_.delete(msg)))
       index <- msgsIndex(msg.convId)
       _ <- index.delete(msg)
+      _ <- storage.flushWALToDatabase()
     } yield ()
-
-  override def delete(id: MessageId) = remove(id)
 
   override def remove(id: MessageId): Future[Unit] =
     getMessage(id) flatMap {
@@ -228,35 +226,34 @@ class MessagesStorageImpl(context: Context,
       fromDb <- getAll(keys)
       msgs = fromDb.collect { case Some(m) => m }
       _ <- super.removeAll(keys)
-      _ <- Future.traverse(msgs) { msg => {
+      _ <- Future.traverse(msgs) { msg =>
         Future(msgsFilteredIndex(msg.convId).foreach(_.delete(msg))).zip(
         msgsIndex(msg.convId).flatMap(_.delete(msg)))
       }
-          } map { _ => () }
+      _ <- storage.flushWALToDatabase()
     } yield ()
 
-  def delete(conv: ConvId, upTo: Instant): Future[Unit] = {
-    verbose(s"delete($conv, $upTo)")
+  def clear(conv: ConvId, upTo: Instant): Future[Unit] = {
+    verbose(s"clear($conv, $upTo)")
     for {
       _ <- storage { MessageDataDao.deleteUpTo(conv, upTo)(_) } .future
+      _ <- storage { MessageContentIndexDao.deleteUpTo(conv, upTo)(_) } .future
       _ <- deleteCached(m => m.convId == conv && ! m.time.isAfter(upTo))
       _ <- Future(msgsFilteredIndex(conv).foreach(_.delete(upTo)))
       _ <- msgsIndex(conv).flatMap(_.delete(upTo))
+      _ <- storage.flushWALToDatabase()
     } yield ()
-  }
-
-  def clear(convId: ConvId, clearTime: Instant): Future[Unit] = {
-    verbose(s"clear($convId, $clearTime)")
-    delete(convId, clearTime)
   }
 
   override def deleteAll(conv: ConvId) = {
     verbose(s"deleteAll($conv)")
     for {
       _ <- storage { MessageDataDao.deleteForConv(conv)(_) } .future
+      _ <- storage { MessageContentIndexDao.deleteForConv(conv)(_) } .future
       _ <- deleteCached(_.convId == conv)
       _ <- Future(msgsFilteredIndex(conv).foreach(_.delete()))
       _ <- msgsIndex(conv).flatMap(_.delete())
+      _ <- storage.flushWALToDatabase()
     } yield ()
   }
 

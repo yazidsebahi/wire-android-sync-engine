@@ -158,7 +158,7 @@ class MessagesContentUpdater(messagesStorage: MessagesStorage,
                     val remaining = m.members.diff(msg.members)
                     if (remaining.nonEmpty) addMessage(m.copy(id = MessageId(), members = remaining))
                   }
-                  messagesStorage.delete(m.id).flatMap(_ => messagesStorage.addMessage(msg.copy(localTime = m.localTime)))
+                  messagesStorage.remove(m.id).flatMap(_ => messagesStorage.addMessage(msg.copy(localTime = m.localTime)))
                 case res =>
                   verbose(s"lastLocalMessage(${msg.msgType}) returned: $res")
                   messagesStorage.addMessage(msg)
