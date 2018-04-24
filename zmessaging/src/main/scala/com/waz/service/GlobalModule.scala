@@ -47,6 +47,7 @@ trait GlobalModule {
   def backend:              BackendConfig
   def tokenService:         GlobalTokenService
   def notifications:        GlobalNotificationsService
+  def calling:              GlobalCallingService
   def prefs:                GlobalPreferences
   def googleApi:            GoogleApi
   def storage:              Database
