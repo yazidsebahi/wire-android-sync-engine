@@ -184,7 +184,6 @@ class PushServiceImpl(userId:               UserId,
     ev.getString("type").equals("conversation.otr-message-add")
 
   private def processStoredNotifications(): Future[Unit] = {
-    import scala.async.Async.{async, await}
     def decodeRow(event: PushNotificationEvent) =
       if(event.plain.isDefined) {
         val msg = GenericMessage(event.plain.get)
