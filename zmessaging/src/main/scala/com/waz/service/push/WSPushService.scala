@@ -25,7 +25,7 @@ import com.waz.api.ErrorResponse
 import com.waz.model.UserId
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.accountTag
-import com.waz.service.push.WSPushServiceImpl.{AuthTokenProvider, RequestCreator}
+import com.waz.service.push.WSPushServiceImpl.RequestCreator
 import com.waz.service.{AccountContext, BackendConfig, NetworkModeService}
 import com.waz.sync.client.PushNotificationEncoded
 import com.waz.sync.client.PushNotificationsClient.NotificationsResponseEncoded
@@ -34,7 +34,6 @@ import com.waz.utils.events._
 import com.waz.utils.{Backoff, ExponentialBackoff}
 import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.OkHttpWebSocket.SocketEvent
-import com.waz.znet.ZNetClient.ErrorOr
 import com.waz.znet._
 import okhttp3.OkHttpClient
 
@@ -52,13 +51,12 @@ trait WSPushService {
 
 object WSPushServiceImpl {
 
-  type AuthTokenProvider = () => ErrorOr[AccessToken]
   type RequestCreator = AccessToken => okhttp3.Request
 
   def apply(userId: UserId,
             clientId: ClientId,
             backend: BackendConfig,
-            authService: AuthenticationManager,
+            accessTokenProvider: AccessTokenProvider,
             networkModeService: NetworkModeService,
             ev: AccountContext): WSPushServiceImpl = {
 
@@ -77,7 +75,7 @@ object WSPushServiceImpl {
 
     new WSPushServiceImpl(
       userId,
-      authService.currentToken,
+      accessTokenProvider,
       requestCreator,
       ExponentialBackoff.standardBackoff,
       networkModeService
@@ -91,11 +89,11 @@ object WSPushServiceImpl {
   protected case class Message(content: ResponseContent) extends WebSocketProcessEvent
 }
 
-class WSPushServiceImpl(userId:             UserId,
-                        authTokenProvider:  AuthTokenProvider,
-                        requestCreator:     RequestCreator,
-                        backoff:            Backoff = ExponentialBackoff.standardBackoff,
-                        networkModeService: NetworkModeService)
+class WSPushServiceImpl(userId:              UserId,
+                        accessTokenProvider: AccessTokenProvider,
+                        requestCreator:      RequestCreator,
+                        backoff:             Backoff = ExponentialBackoff.standardBackoff,
+                        networkModeService:  NetworkModeService)
                        (implicit ev: AccountContext) extends WSPushService {
 
   import WSPushServiceImpl._
@@ -114,7 +112,7 @@ class WSPushServiceImpl(userId:             UserId,
   override def activate(): Unit = activated ! true
   override def deactivate(): Unit = activated ! false
 
-  private var currentWebSocketDisposable: Subscription = _
+  private var currentWebSocketSubscription: Subscription = _
 
   activated {
     case false  =>
@@ -127,21 +125,22 @@ class WSPushServiceImpl(userId:             UserId,
 
   private val retryCount = new AtomicInteger(0)
 
-  private def finishWebSocketProcess(): Unit = if (currentWebSocketDisposable != null) {
-    currentWebSocketDisposable.destroy()
-    currentWebSocketDisposable = null
+  private def finishWebSocketProcess(): Unit = if (currentWebSocketSubscription != null) {
+    currentWebSocketSubscription.destroy()
+    currentWebSocketSubscription = null
+    connected ! false
   }
 
   private def restartWebSocketProcess(initialDelay: FiniteDuration = 0.seconds): Unit = {
     finishWebSocketProcess()
-    currentWebSocketDisposable = webSocketProcessEngine(initialDelay)
+    currentWebSocketSubscription = webSocketProcessEngine(initialDelay)
   }
 
   private def webSocketProcessEngine(initialDelay: FiniteDuration): Subscription = {
     val events: Signal[WebSocketProcessEvent] = for {
       _ <- Signal.future(CancellableFuture.delay(initialDelay))
       _ = info(s"Opening WebSocket... ${if (retryCount.get() == 0) "" else s"Retry count: ${retryCount.get()}"}")
-      accessTokenResult <- Signal.future(authTokenProvider())
+      accessTokenResult <- Signal.future(accessTokenProvider.currentToken())
       event <- accessTokenResult match {
         case Right(token) =>
           Signal.wrap(OkHttpWebSocket.socketEvents(okHttpClient, requestCreator(token)).map {
@@ -161,11 +160,9 @@ class WSPushServiceImpl(userId:             UserId,
         retryCount.set(0)
       case SocketClosed(Some(error)) =>
         info(s"WebSocket closed with error: $error")
-        connected ! false
         restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
       case SocketClosed(_) =>
         info(s"WebSocket closed")
-        connected ! false
         restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
       case AccessTokenError(errorResponse) =>
         info(s"Error while access token receiving: $errorResponse")

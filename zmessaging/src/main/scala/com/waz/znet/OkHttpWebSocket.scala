@@ -17,7 +17,7 @@
  */
 package com.waz.znet
 
-import com.waz.ZLog.{error, info}
+import com.waz.ZLog.{error, info, warn}
 import com.waz.utils.events.{EventContext, EventStream}
 import okhttp3._
 import okio.ByteString
@@ -74,7 +74,7 @@ object OkHttpWebSocket {
           }
 
           override def onFailure(webSocket: WebSocket, ex: Throwable, response: okhttp3.Response): Unit = {
-            error("WebSocket connection has been failed", ex)
+            warn("WebSocket connection has been failed", ex)
             publish(Closed(webSocket, Some(ex)))
           }
         })
