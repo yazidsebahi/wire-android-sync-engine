@@ -17,9 +17,9 @@
  */
 package com.waz.service.push
 
+import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
 
-import android.net.Uri
 import com.waz.ZLog._
 import com.waz.api.ErrorResponse
 import com.waz.model.UserId
@@ -31,13 +31,13 @@ import com.waz.sync.client.PushNotificationEncoded
 import com.waz.sync.client.PushNotificationsClient.NotificationsResponseEncoded
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
+import com.waz.utils.wrappers.URI
 import com.waz.utils.{Backoff, ExponentialBackoff}
 import com.waz.znet.AuthenticationManager.AccessToken
-import com.waz.znet.OkHttpWebSocket.SocketEvent
+import com.waz.znet.HttpRequest2.Method
+import com.waz.znet.WebSocketFactory.SocketEvent
 import com.waz.znet._
-import okhttp3.OkHttpClient
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.util.Left
 
@@ -46,67 +46,60 @@ trait WSPushService {
   def deactivate(): Unit
   def notifications(): EventStream[Seq[PushNotificationEncoded]]
   def connected(): Signal[Boolean]
-  def awaitActive(): Future[Unit]
 }
 
 object WSPushServiceImpl {
 
-  type RequestCreator = AccessToken => okhttp3.Request
+  type RequestCreator = AccessToken => HttpRequest2
 
   def apply(userId: UserId,
             clientId: ClientId,
             backend: BackendConfig,
+            webSocketFactory: WebSocketFactory,
             accessTokenProvider: AccessTokenProvider,
             networkModeService: NetworkModeService,
             ev: AccountContext): WSPushServiceImpl = {
 
     val requestCreator = (token: AccessToken) => {
-      val requestBuilder = new okhttp3.Request.Builder()
-      val url = Uri.parse(backend.websocketUrl).buildUpon().appendQueryParameter("client", clientId.str).build().toString
-      token.headers.toList.foreach { header => requestBuilder.addHeader(header._1, header._2) }
+      val uri = URI.parse(backend.websocketUrl).buildUpon.appendQueryParameter("client", clientId.str).build
+      val headers = token.headers ++ Map(
+        "Accept-Encoding" -> "identity", // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
+        AsyncClient.UserAgentHeader -> AsyncClient.userAgent()
+      )
 
-      requestBuilder
-        .url(url)
-        .addHeader("Accept-Encoding", "identity") // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
-        .addHeader(AsyncClient.UserAgentHeader, AsyncClient.userAgent())
-        .get()
-        .build()
+      HttpRequest2Impl(
+        httpMethod = Method.Get,
+        url = new URL(uri.toString),
+        headers = headers
+      )
     }
 
     new WSPushServiceImpl(
       userId,
       accessTokenProvider,
       requestCreator,
+      webSocketFactory,
       ExponentialBackoff.standardBackoff,
       networkModeService
     )(ev)
   }
 
-  protected sealed trait WebSocketProcessEvent
-  protected case object SocketOpened extends WebSocketProcessEvent
-  protected case class SocketClosed(error: Option[Throwable] = None) extends WebSocketProcessEvent
-  protected case class AccessTokenError(errorResponse: ErrorResponse) extends WebSocketProcessEvent
-  protected case class Message(content: ResponseContent) extends WebSocketProcessEvent
+
 }
 
 class WSPushServiceImpl(userId:              UserId,
                         accessTokenProvider: AccessTokenProvider,
                         requestCreator:      RequestCreator,
+                        webSocketFactory:    WebSocketFactory,
                         backoff:             Backoff = ExponentialBackoff.standardBackoff,
                         networkModeService:  NetworkModeService)
                        (implicit ev: AccountContext) extends WSPushService {
-
-  import WSPushServiceImpl._
 
   private implicit val logTag: LogTag = accountTag[WSPushServiceImpl](userId)
   private implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue(name = "WSPushServiceImpl")
 
   override val notifications: SourceStream[Seq[PushNotificationEncoded]] = EventStream()
   override val connected: SourceSignal[Boolean] = Signal(false)
-
-  override def awaitActive(): Future[Unit] = connected.filter(identity).map(_ => ()).head
-
-  private val okHttpClient = new OkHttpClient()
 
   private val activated: SourceSignal[Boolean] = Signal(false)
   override def activate(): Unit = activated ! true
@@ -137,50 +130,41 @@ class WSPushServiceImpl(userId:              UserId,
   }
 
   private def webSocketProcessEngine(initialDelay: FiniteDuration): Subscription = {
-    val events: Signal[WebSocketProcessEvent] = for {
+    val events: Signal[Either[ErrorResponse, SocketEvent]] = for {
       _ <- Signal.future(CancellableFuture.delay(initialDelay))
       _ = info(s"Opening WebSocket... ${if (retryCount.get() == 0) "" else s"Retry count: ${retryCount.get()}"}")
       accessTokenResult <- Signal.future(accessTokenProvider.currentToken())
       event <- accessTokenResult match {
         case Right(token) =>
-          Signal.wrap(OkHttpWebSocket.socketEvents(okHttpClient, requestCreator(token)).map {
-            case SocketEvent.Message(_, content) => Message(content)
-            case SocketEvent.Closed(_, error) => SocketClosed(error)
-            case SocketEvent.Opened(_, _) => SocketOpened
-          })
+          Signal.wrap(webSocketFactory.openWebSocket(requestCreator(token)).map(Right.apply))
         case Left(errorResponse) =>
-          Signal.const(AccessTokenError(errorResponse))
+          Signal.const(Left(errorResponse))
       }
     } yield event
 
     events {
-      case SocketOpened =>
+      case Left(errorResponse) =>
+        info(s"Error while access token receiving: $errorResponse")
+        restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
+      case Right(SocketEvent.Opened(_)) =>
         info("WebSocket opened")
         connected ! true
         retryCount.set(0)
-      case SocketClosed(Some(error)) =>
+      case Right(SocketEvent.Closing(socket, _, _)) =>
+        //ignore close code and reason. just close socket with normal code
+        socket.close(WebSocket.CloseCodes.NormalClosure)
+      case Right(SocketEvent.Closed(_, Some(error))) =>
         info(s"WebSocket closed with error: $error")
         restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
-      case SocketClosed(_) =>
+      case Right(SocketEvent.Closed(_, _)) =>
         info(s"WebSocket closed")
         restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
-      case AccessTokenError(errorResponse) =>
-        info(s"Error while access token receiving: $errorResponse")
-        restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
-      case Message(NotificationsResponseEncoded(notifs @ _*)) =>
+      case Right(SocketEvent.Message(_, NotificationsResponseEncoded(notifs @ _*))) =>
         info("Push notifications received")
         notifications ! notifs
-      case Message(_) =>
+      case Right(SocketEvent.Message(_, _)) =>
         error("Unknown message received")
     }
   }
 
 }
-
-//trait WireWebSocket {
-//  def connected: Signal[Boolean]
-//  def lastReceivedTime: Signal[Instant] // time when something was last received on websocket
-//  def onError: EventStream[Throwable]
-//  def onMessage: EventStream[ResponseContent]
-//  def close(): Unit
-//}

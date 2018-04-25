@@ -29,7 +29,7 @@ import com.waz.testutils.Slow
 import com.waz.utils.{ExponentialBackoff, returning}
 import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.ZNetClient.ErrorOr
-import org.java_websocket.WebSocket
+import org.java_websocket.{WebSocket => JavaWebSocket}
 import org.java_websocket.framing.Framedata
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
@@ -49,7 +49,7 @@ import scala.util.Try
   ShadowLog.stream = System.out
 
   object lock
-  var socket: Option[WebSocket] = None
+  var socket: Option[JavaWebSocket] = None
   var server: TestServer = _
   var manager: WebSocketClient = _
   var connectionCount = 0
@@ -264,14 +264,14 @@ import scala.util.Try
     var pingCount = 0
     var returnPing = true
 
-    override def onOpen(conn: WebSocket, handshake: ClientHandshake): Unit = {
+    override def onOpen(conn: JavaWebSocket, handshake: ClientHandshake): Unit = {
       println("server: onOpen")
       socket = Some(conn)
       connectionCount += 1
       lock.synchronized(lock.notifyAll())
     }
 
-    override def onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean): Unit = {
+    override def onClose(conn: JavaWebSocket, code: Int, reason: String, remote: Boolean): Unit = {
       println("server: onClose")
       if (socket.contains(conn)) {
         socket = None
@@ -279,18 +279,18 @@ import scala.util.Try
       }
     }
 
-    override def onMessage(conn: WebSocket, message: String): Unit = {
+    override def onMessage(conn: JavaWebSocket, message: String): Unit = {
       println(s"Server received a message: $message")
     }
 
-    override def onWebsocketPing(conn: WebSocket, f: Framedata): Unit = {
+    override def onWebsocketPing(conn: JavaWebSocket, f: Framedata): Unit = {
       println(s"Server received ping: ${new String(f.getPayloadData.array(), "utf8")}")
       Thread.sleep(pongDelay.toMillis)
       pingCount += 1
       if (returnPing) super.onWebsocketPing(conn, f)
     }
 
-    override def onError(conn: WebSocket, ex: Exception): Unit = {
+    override def onError(conn: JavaWebSocket, ex: Exception): Unit = {
       println(s"Server got an error $ex")
       ex.printStackTrace(Console.err)
     }

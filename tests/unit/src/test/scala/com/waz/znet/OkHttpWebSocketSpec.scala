@@ -17,11 +17,12 @@
  */
 package com.waz.znet
 
+import java.net.URL
 import java.util.concurrent.TimeoutException
 
 import com.waz.utils.events.{EventContext, EventStream, Subscription}
+import com.waz.znet.WebSocketFactory.SocketEvent
 import io.fabric8.mockwebserver.DefaultMockServer
-import okhttp3.OkHttpClient
 import org.scalatest.{BeforeAndAfterEach, Inside, MustMatchers, WordSpec}
 
 import scala.collection.mutable.ArrayBuffer
@@ -96,15 +97,12 @@ object OkHttpWebSocketSpec {
 class OkHttpWebSocketSpec extends WordSpec with MustMatchers with Inside with BeforeAndAfterEach {
 
   import EventContext.Implicits.global
-  import OkHttpWebSocket._
   import OkHttpWebSocketSpec.BlockingSyntax.toBlocking
-
 
   private val testPath = "/test"
   private val defaultWaiting = 100
-  private def testWebSocketRequest(url: String): okhttp3.Request = new okhttp3.Request.Builder().url(url).build()
+  private def testWebSocketRequest(url: String): HttpRequest2 = HttpRequest2Impl(new URL(url))
 
-  private val client: OkHttpClient = new OkHttpClient()
   private var mockServer: DefaultMockServer = _
 
   override protected def beforeEach(): Unit = {
@@ -130,17 +128,13 @@ class OkHttpWebSocketSpec extends WordSpec with MustMatchers with Inside with Be
         .done().once()
 
 
-      toBlocking(socketEvents(client, testWebSocketRequest(mockServer.url(testPath)))) { stream =>
+      toBlocking(OkHttpWebSocketFactory.openWebSocket(testWebSocketRequest(mockServer.url(testPath)))) { stream =>
         val firstEvent :: secondEvent :: thirdEvent :: fourthEvent :: Nil = stream.takeEvents(4)
 
         firstEvent mustBe an[SocketEvent.Opened]
         secondEvent mustBe an[SocketEvent.Message]
         thirdEvent mustBe an[SocketEvent.Message]
-        fourthEvent mustBe an[SocketEvent.Closed]
-
-        inside(fourthEvent) { case SocketEvent.Closed(_, error) =>
-          error mustBe None
-        }
+        fourthEvent mustBe an[SocketEvent.Closing]
 
         withClue("No events should be emitted after socket has been closed") {
           stream.waitForEvents(2.seconds) mustBe List.empty[SocketEvent]
@@ -155,7 +149,7 @@ class OkHttpWebSocketSpec extends WordSpec with MustMatchers with Inside with Be
         .waitFor(10000).andEmit("")
         .done().once()
 
-      toBlocking(socketEvents(client, testWebSocketRequest(mockServer.url(testPath)))) { stream =>
+      toBlocking(OkHttpWebSocketFactory.openWebSocket(testWebSocketRequest(mockServer.url(testPath)))) { stream =>
         val firstEvent = stream.getEvent(0)
         Try { mockServer.shutdown() } //we do not care about this error
       val secondEvent = stream.getEvent(1)

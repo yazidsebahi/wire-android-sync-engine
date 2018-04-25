@@ -22,7 +22,7 @@ import android.net.Uri
 import com.koushikdutta.async.callback.{CompletedCallback, DataCallback}
 import com.koushikdutta.async.http.AsyncHttpClient.WebSocketConnectCallback
 import com.koushikdutta.async.http.WebSocket.{PongCallback, StringCallback}
-import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket}
+import com.koushikdutta.async.http.{AsyncHttpGet, WebSocket => AWebSocket}
 import com.koushikdutta.async.{ByteBufferList, DataEmitter}
 import com.waz.ZLog._
 import com.waz.model.UserId
@@ -68,13 +68,13 @@ class WebSocketClient(context: Context,
   val lastReceiveTime = Signal[Instant]() // time when something was last received on websocket
   val onConnectionLost = EventStream[Disconnect]()
 
-  private var init: CancellableFuture[WebSocket] = connect()
+  private var init: CancellableFuture[AWebSocket] = connect()
   init.onFailure {
     case e: CancelException => CancellableFuture.cancelled()
     case NonFatal(ex) => retryLostConnection(ex)
   }
 
-  private var socket: Option[WebSocket]            = None
+  private var socket: Option[AWebSocket]            = None
 
   private var closed     = false
   private var retryCount = 0
@@ -113,10 +113,10 @@ class WebSocketClient(context: Context,
     socket = None
   }
 
-  protected def connect(): CancellableFuture[WebSocket] = CancellableFuture.lift(auth.currentToken()) flatMap {
+  protected def connect(): CancellableFuture[AWebSocket] = CancellableFuture.lift(auth.currentToken()) flatMap {
     case Right(token) if closed => CancellableFuture.failed(new Exception("WebSocket client closed"))
     case Right(token) =>
-      val p = Promise[WebSocket]()
+      val p = Promise[AWebSocket]()
       debug(s"Sending webSocket request: $uri")
       val req = token.prepare(new AsyncHttpGet(uri))
       req.setHeader("Accept-Encoding", "identity") // XXX: this is a hack for Backend In The Box problem: 'Accept-Encoding: gzip' header causes 500
@@ -124,7 +124,7 @@ class WebSocketClient(context: Context,
 
       CancellableFuture.lift(client.wrapper) flatMap { client =>
         val f = client.websocket(req, null, new WebSocketConnectCallback {
-          override def onCompleted(ex: Exception, socket: WebSocket): Unit = {
+          override def onCompleted(ex: Exception, socket: AWebSocket): Unit = {
             debug(s"WebSocket request finished, ex: $ex, socket: $socket")
             p.tryComplete(if (ex == null) Try(onConnected(socket)) else Failure(ex))
           }
@@ -135,7 +135,7 @@ class WebSocketClient(context: Context,
       CancellableFuture.failed(new Exception(s"Authentication returned error status: $status"))
   }
 
-  private def onConnected(webSocket: WebSocket): WebSocket = {
+  private def onConnected(webSocket: AWebSocket): AWebSocket = {
     require(webSocket != null, "connected web socket should be not null")
     debug(s"onConnected $webSocket")
 
