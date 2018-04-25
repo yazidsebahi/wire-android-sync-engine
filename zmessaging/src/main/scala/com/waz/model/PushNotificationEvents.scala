@@ -41,12 +41,16 @@ object PushNotificationEvents {
     override def onCreate(db: DB): Unit = {
       super.onCreate(db)
     }
+
+    def maxIndex()(implicit db: DB) = queryForLong(maxWithDefault(Index.name)).toInt
+
+    def listDecrypted(limit: Int)(implicit db: DB) = list(db.query(table.name, null, s"${Decrypted.name} = 1", null, null, null, "event_index ASC", s"$limit"))
   }
 }
 
 case class PushNotificationEvent(pushId:    Uid,
                                  index:     Int,
-                                 decrypted: Boolean,
+                                 decrypted: Boolean = false,
                                  event:     JSONObject,
                                  plain:     Option[Array[Byte]] = None,
                                  transient: Boolean)

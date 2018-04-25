@@ -30,7 +30,7 @@ import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
 import com.waz.utils.events.EventContext
 import com.waz.utils.{CachedStorage, CachedStorageImpl, TrimmingLruCache}
-import org.json.JSONArray
+import org.json.JSONObject
 
 import scala.concurrent.Future
 
@@ -45,11 +45,11 @@ trait PushNotificationEventsStorage extends CachedStorage[(Uid, EventIndex), Pus
   def writeClosure(id: Uid, index: EventIndex): PlainWriter
   def writeError(id: Uid, index: EventIndex, error: OtrErrorEvent): Future[Unit]
   def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit]
-  def decryptedEvents: Future[Seq[PushNotificationEvent]]
   def encryptedEvents: Future[Seq[PushNotificationEvent]]
   def removeEventsWithIds(ids: Seq[Uid]): Future[Unit]
   def removeRows(rows: Iterable[(Uid, Int)]): Future[Unit]
   def registerEventHandler(handler: () => Future[Unit])(implicit ec: EventContext): Future[Unit]
+  def getDecryptedRows(limit: Int = 50): Future[IndexedSeq[PushNotificationEvent]]
 }
 
 class PushNotificationEventsStorageImpl(context: Context, storage: Database, clientId: ClientId)
@@ -75,40 +75,38 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
 
   override def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit] = {
     import com.waz.utils._
-    def filterOtrEventsForOtherClients(events: JSONArray): JSONArray = {
-      events.foldLeft(new JSONArray){(res, obj) =>
-        val eventType = obj.getString("type")
-        if(eventType.startsWith("conversation.otr") &&
-          !obj.getJSONObject("data").getString("recipient").equals(clientId.str)) {
-          verbose(s"Skipping otr event not intended for us: $obj")
-          res
-        } else {
-          res.put(obj)
-        }
-      }
-    }
+    def isOtrEventForUs(obj: JSONObject): Boolean =
+      obj.getString("type").startsWith("conversation.otr") &&
+        obj.getJSONObject("data").getString("recipient").equals(clientId.str)
 
     val eventsToSave = pushNotifications
       .flatMap { pn =>
-        val eventsForUs = filterOtrEventsForOtherClients(pn.events)
-        if(eventsForUs.toVector.nonEmpty) {
-          pn.events
-            .toVector
-            .zipWithIndex
-            .map { case (obj, index) =>
-              PushNotificationEvent(pn.id, index, decrypted = false, obj, transient = pn.transient)
-            }
-        } else {
-          warn(s"Got notification ${pn.id} containing no events for us, ignoring")
-          Seq.empty[PushNotificationEvent]
+        pn.events.toVector.map { event =>
+          if (isOtrEventForUs(event)) {
+            Some((pn.id, event, pn.transient))
+          } else {
+            verbose(s"Skipping otr event not intended for us: $event")
+            None
+          }
         }
       }
-    insertAll(eventsToSave).map(_ => ())
+
+    storage.withTransaction { implicit db =>
+      val curIndex = PushNotificationEventsDao.maxIndex()
+      val nextIndex = if (curIndex == -1) 0 else curIndex+1
+      insertAll(eventsToSave.zip(nextIndex until (nextIndex+eventsToSave.length))
+      .collect { case (Some((id, event, transient)), index) =>
+        PushNotificationEvent(id, index, event = event, transient = transient)
+      })
+    }.future.map(_ => ())
   }
 
-  def decryptedEvents: Future[Seq[PushNotificationEvent]] = list().map(_.filter(_.decrypted))
-
   def encryptedEvents: Future[Seq[PushNotificationEvent]] = list().map(_.filter(!_.decrypted))
+
+  //limit amount of decrypted events we read to avoid overwhelming older phones
+  def getDecryptedRows(limit: Int = 50): Future[IndexedSeq[PushNotificationEvent]] = storage.read { implicit db =>
+    PushNotificationEventsDao.listDecrypted(limit)
+  }
 
   def removeEventsWithIds(ids: Seq[Uid]): Future[Unit] =
     storage.withTransaction { implicit db =>
@@ -130,5 +128,4 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
         processor()
       }
     }
-
 }
