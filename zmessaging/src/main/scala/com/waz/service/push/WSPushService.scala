@@ -26,7 +26,7 @@ import com.waz.model.UserId
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.accountTag
 import com.waz.service.push.WSPushServiceImpl.RequestCreator
-import com.waz.service.{AccountContext, BackendConfig, NetworkModeService}
+import com.waz.service.{AccountContext, BackendConfig}
 import com.waz.sync.client.PushNotificationEncoded
 import com.waz.sync.client.PushNotificationsClient.NotificationsResponseEncoded
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
@@ -57,7 +57,6 @@ object WSPushServiceImpl {
             backend: BackendConfig,
             webSocketFactory: WebSocketFactory,
             accessTokenProvider: AccessTokenProvider,
-            networkModeService: NetworkModeService,
             ev: AccountContext): WSPushServiceImpl = {
 
     val requestCreator = (token: AccessToken) => {
@@ -79,8 +78,7 @@ object WSPushServiceImpl {
       accessTokenProvider,
       requestCreator,
       webSocketFactory,
-      ExponentialBackoff.standardBackoff,
-      networkModeService
+      ExponentialBackoff.standardBackoff
     )(ev)
   }
 
@@ -91,9 +89,8 @@ class WSPushServiceImpl(userId:              UserId,
                         accessTokenProvider: AccessTokenProvider,
                         requestCreator:      RequestCreator,
                         webSocketFactory:    WebSocketFactory,
-                        backoff:             Backoff = ExponentialBackoff.standardBackoff,
-                        networkModeService:  NetworkModeService)
-                       (implicit ev: AccountContext) extends WSPushService {
+                        backoff:             Backoff = ExponentialBackoff.standardBackoff)
+                       (implicit ev: EventContext) extends WSPushService {
 
   private implicit val logTag: LogTag = accountTag[WSPushServiceImpl](userId)
   private implicit val dispatcher: SerialDispatchQueue = new SerialDispatchQueue(name = "WSPushServiceImpl")

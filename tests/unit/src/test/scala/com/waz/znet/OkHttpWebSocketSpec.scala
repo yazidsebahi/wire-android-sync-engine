@@ -18,86 +18,19 @@
 package com.waz.znet
 
 import java.net.URL
-import java.util.concurrent.TimeoutException
 
-import com.waz.utils.events.{EventContext, EventStream, Subscription}
+import com.waz.utils.events.EventContext
 import com.waz.znet.WebSocketFactory.SocketEvent
 import io.fabric8.mockwebserver.DefaultMockServer
 import org.scalatest.{BeforeAndAfterEach, Inside, MustMatchers, WordSpec}
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.{Duration, _}
+import scala.concurrent.duration._
 import scala.util.Try
-
-object OkHttpWebSocketSpec {
-
-  object BlockingSyntax {
-
-    def toBlocking[T,R](stream: EventStream[T])
-                       (doWithBlocking: BlockingEventStream[T] => R)
-                       (implicit ec: EventContext = EventContext.Global): R = {
-      val blocking = new BlockingEventStream[T](stream)
-      blocking.subscribe
-      val result = doWithBlocking(blocking)
-      blocking.unsubscribe()
-      result
-    }
-
-    class BlockingEventStream[T](private val eventStream: EventStream[T]) {
-      private var subscription: Subscription = _
-      private val events = ArrayBuffer.empty[T]
-
-      private val waitingStepInMillis = 100
-      private val defaultTimeout: Duration = 3.seconds
-
-      def subscribe(implicit ev: EventContext): Unit = {
-        subscription = eventStream { e =>
-          println(s"BlockingEventStream. Received event: $e")
-          events.append(e)
-        }
-      }
-
-      def unsubscribe(): Unit = {
-        if (subscription != null) subscription.destroy()
-      }
-
-      private def waitForEvents(eventsCount: Int, timeout: Duration = defaultTimeout): List[T] = {
-        var alreadyWaiting = 0
-        while (events.size < eventsCount) {
-          Thread.sleep(waitingStepInMillis)
-          alreadyWaiting += waitingStepInMillis
-          if (alreadyWaiting >= timeout.toMillis) throw new TimeoutException()
-        }
-        events.toList
-      }
-
-      def takeEvents(count: Int, timeout: Duration = defaultTimeout): List[T] = {
-        waitForEvents(count, timeout)
-        events.take(count).toList
-      }
-
-      def waitForEvents(duration: Duration): List[T] = {
-        val eventsCount = events.size
-        Thread.sleep(duration.toMillis)
-        if (events.size == eventsCount) List.empty[T]
-        else events.drop(eventsCount).toList
-      }
-
-      def getEvent(index: Int, timeout: Duration = defaultTimeout): T = {
-        waitForEvents(index + 1, timeout)
-        events(index)
-      }
-
-    }
-
-  }
-
-}
 
 class OkHttpWebSocketSpec extends WordSpec with MustMatchers with Inside with BeforeAndAfterEach {
 
   import EventContext.Implicits.global
-  import OkHttpWebSocketSpec.BlockingSyntax.toBlocking
+  import com.waz.BlockingSyntax.toBlocking
 
   private val testPath = "/test"
   private val defaultWaiting = 100
