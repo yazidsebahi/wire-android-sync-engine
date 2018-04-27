@@ -77,6 +77,7 @@ class EventStream[E] extends EventSource[E] with Observable[EventListener[E]] {
   def foreach(op: E => Unit)(implicit context: EventContext): Unit = apply(op)(context)
 
   def map[V](f: E => V): EventStream[V] = new MapEventStream[E, V](this, f)
+  def flatMap[V](f: E => EventStream[V]): EventStream[V] = new FlatMapLatestEventStream[E, V](this, f)
   def mapAsync[V](f: E => Future[V]): EventStream[V] = new FutureEventStream[E, V](this, f)
   def filter(f: E => Boolean): EventStream[E] = new FilterEventStream[E](this, f)
   def collect[V](pf: PartialFunction[E, V]) = new CollectEventStream[E, V](this, pf)
@@ -101,6 +102,16 @@ abstract class ProxyEventStream[A, E](sources: EventStream[A]*) extends EventStr
 
 class MapEventStream[E, V](source: EventStream[E], f: E => V) extends ProxyEventStream[E, V](source) {
   override protected[events] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = dispatch(f(event), sourceContext)
+}
+
+class FlatMapLatestEventStream[E, V](source: EventStream[E], f: E => EventStream[V]) extends ProxyEventStream[E, V](source) {
+  @volatile private var transformed: EventStream[V] = _
+  override protected[events] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
+    import com.waz.utils.events.EventContext.Implicits.global
+    if (transformed != null) transformed.unsubscribeAll()
+    transformed = f(event)
+    transformed { transformedEvent => dispatch(transformedEvent, currentContext) }
+  }
 }
 
 class FutureEventStream[E, V](source: EventStream[E], f: E => Future[V]) extends ProxyEventStream[E, V](source) {
