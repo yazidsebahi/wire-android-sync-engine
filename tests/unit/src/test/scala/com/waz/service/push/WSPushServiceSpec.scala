@@ -21,14 +21,16 @@ import java.net.URL
 
 import com.waz.ZLog.ImplicitTag._
 import com.waz.api.impl.ErrorResponse
-import com.waz.model.UserId
+import com.waz.model.{Uid, UserId}
 import com.waz.service.push.WSPushServiceImpl.RequestCreator
 import com.waz.specs.ZMockSpec
+import com.waz.sync.client.PushNotificationEncoded
 import com.waz.utils.{Backoff, ExponentialBackoff}
 import com.waz.utils.events.{EventContext, EventStream, SourceStream}
 import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.WebSocketFactory.SocketEvent
 import com.waz.znet._
+import org.json.{JSONArray, JSONObject}
 
 import scala.concurrent.Future
 
@@ -67,7 +69,7 @@ class WSPushServiceSpec extends ZMockSpec {
       Thread.sleep(1000)
       fakeWebSocketEvents ! SocketEvent.Opened(webSocket)
 
-      noException shouldBe thrownBy { await(service.connected.filter(identity).head) }
+      noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
       service.deactivate()
 
       service.connected.currentValue shouldBe Some(false)
@@ -85,10 +87,10 @@ class WSPushServiceSpec extends ZMockSpec {
       Thread.sleep(1000)
       fakeWebSocketEvents ! SocketEvent.Opened(webSocket)
 
-      noException shouldBe thrownBy { await(service.connected.filter(identity).head) }
+      noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
     }
 
-    scenario("When web socket closed should retry to connect.") {
+    scenario("When web socket closed should become unconnected and retry to connect.") {
       (accessTokenProvider.currentToken _).expects().twice().returning(accessTokenSuccess)
       (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
         .expects(httpRequest, *).twice().returning(fakeWebSocketEvents)
@@ -102,10 +104,12 @@ class WSPushServiceSpec extends ZMockSpec {
       Thread.sleep(500)
       fakeWebSocketEvents ! SocketEvent.Closed(webSocket, Some(new InterruptedException))
 
+      noException shouldBe thrownBy { await(service.connected.ifFalse.head) }
+
       Thread.sleep(500)
       fakeWebSocketEvents ! SocketEvent.Opened(webSocket)
 
-      noException shouldBe thrownBy { await(service.connected.filter(identity).head) }
+      noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
     }
 
     scenario("When web socket is going to be closed by other side should close web socket with normal closure code.") {
@@ -125,6 +129,57 @@ class WSPushServiceSpec extends ZMockSpec {
       fakeWebSocketEvents ! SocketEvent.Closing(webSocket, 0, null)
     }
 
+    scenario("When web socket emmit message of push notifications, should push it to notifications stream and stay connected.") {
+      (accessTokenProvider.currentToken _).expects().once().returning(accessTokenSuccess)
+      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
+        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+
+      val service = createWSPushService()
+      service.activate()
+
+      Thread.sleep(500)
+      fakeWebSocketEvents ! SocketEvent.Opened(webSocket)
+
+      val notification = PushNotificationEncoded(id = Uid(), new JSONArray)
+      import com.waz.utils.Json.syntax._
+      val responseContent = JsonObjectResponse(notification.toJson)
+
+      var gotNotification = false
+      service.notifications { _ =>
+        gotNotification = true
+      }
+
+      fakeWebSocketEvents ! SocketEvent.Message(webSocket, responseContent)
+
+      gotNotification shouldBe true
+
+      noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
+    }
+
+    scenario("When web socket emmit message of push notifications, should push ignore it and stay connected.") {
+      (accessTokenProvider.currentToken _).expects().once().returning(accessTokenSuccess)
+      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
+        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+
+      val service = createWSPushService()
+      service.activate()
+
+      Thread.sleep(500)
+      fakeWebSocketEvents ! SocketEvent.Opened(webSocket)
+
+      val responseContent = JsonObjectResponse(new JSONObject())
+
+      var gotNotification = false
+      service.notifications { _ =>
+        gotNotification = true
+      }
+
+      fakeWebSocketEvents ! SocketEvent.Message(webSocket, responseContent)
+
+      gotNotification shouldBe false
+
+      noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
+    }
 
   }
 
