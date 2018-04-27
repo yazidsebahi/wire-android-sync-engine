@@ -105,12 +105,11 @@ class MapEventStream[E, V](source: EventStream[E], f: E => V) extends ProxyEvent
 }
 
 class FlatMapLatestEventStream[E, V](source: EventStream[E], f: E => EventStream[V]) extends ProxyEventStream[E, V](source) {
-  @volatile private var transformed: EventStream[V] = _
+  @volatile private var currentSubscription: Subscription = _
   override protected[events] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
-    import com.waz.utils.events.EventContext.Implicits.global
-    if (transformed != null) transformed.unsubscribeAll()
-    transformed = f(event)
-    transformed { transformedEvent => dispatch(transformedEvent, currentContext) }
+    import com.waz.utils.events.EventContext.Implicits.global // Is it ok? How do you think?
+    if (currentSubscription != null) currentSubscription.unsubscribe()
+    currentSubscription = f(event) { transformedEvent => dispatch(transformedEvent, currentContext) }
   }
 }
 
