@@ -155,18 +155,18 @@ class PushServiceImpl(userId:               UserId,
           rows
             .map { row =>
               if (!isOtrEventJson(row.event)) {
-                notificationStorage.setAsDecrypted(row.pushId, row.index)
+                notificationStorage.setAsDecrypted(row.index)
               } else {
                 val otrEvent = ConversationEvent.ConversationEventDecoder(row.event).asInstanceOf[OtrEvent]
-                val writer = notificationStorage.writeClosure(row.pushId, row.index)
+                val writer = notificationStorage.writeClosure(row.index)
                 otrService.decryptStoredOtrEvent(otrEvent, writer).flatMap {
                   case Left(Duplicate) =>
                     verbose("Ignoring duplicate message")
-                    notificationStorage.remove(row.pushId, row.index)
+                    notificationStorage.remove(row.index)
                   case Left(error) =>
                     val e = OtrErrorEvent(otrEvent.convId, otrEvent.time, otrEvent.from, error)
                     verbose(s"Got error when decrypting: ${e.toString}\nOtrError: ${error.toString}")
-                    notificationStorage.writeError(row.pushId, row.index, e)
+                    notificationStorage.writeError(row.index, e)
                   case Right(_) => Future.successful(())
                 }
               }
@@ -199,7 +199,7 @@ class PushServiceImpl(userId:               UserId,
         verbose(s"Processing ${rows.size} rows")
         if (!rows.isEmpty) {
           pipeline(rows.flatMap(decodeRow))
-            .flatMap(_ => notificationStorage.removeRows(rows.map(e => (e.pushId, e.index))))
+            .flatMap(_ => notificationStorage.removeRows(rows.map(_.index)))
             .flatMap(_ => processRows())
         } else {
           Future.successful(())
