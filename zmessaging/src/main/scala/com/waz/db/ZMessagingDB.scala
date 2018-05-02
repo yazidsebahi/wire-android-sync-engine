@@ -53,7 +53,7 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 104
+  val DbVersion = 105
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
@@ -203,6 +203,12 @@ object ZMessagingDB {
     },
     Migration(103, 104) { db =>
       db.execSQL("delete from MessageContentIndex where message_id in (select message_id from MessageContentIndex left join Messages on MessageContentIndex.message_id == Messages._id WHERE Messages._id IS null)")
+    },
+    Migration(104, 105) { db =>
+      db.execSQL("CREATE TABLE PushNotificationEventsCopy(pushId TEXT, event_index INTEGER PRIMARY KEY, decrypted INTEGER, event TEXT, plain BLOB, transient BOOLEAN);")
+      db.execSQL("INSERT INTO PushNotificationEventsCopy (pushId, event_index, decrypted, event, plain, transient) SELECT pushid, event_index, decrypted, event, plain, transient FROM PushNotificationEvents;")
+      db.execSQL("DROP TABLE PushNotificationEvents;")
+      db.execSQL("ALTER TABLE PushNotificationEventsCopy RENAME TO PushNotificationEvents;")
     }
   )
 }

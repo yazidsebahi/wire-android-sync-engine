@@ -40,37 +40,36 @@ object PushNotificationEventsStorage {
   type EventIndex = Int
 }
 
-trait PushNotificationEventsStorage extends CachedStorage[(Uid, EventIndex), PushNotificationEvent] {
-  def setAsDecrypted(id: Uid, index: EventIndex): Future[Unit]
-  def writeClosure(id: Uid, index: EventIndex): PlainWriter
-  def writeError(id: Uid, index: EventIndex, error: OtrErrorEvent): Future[Unit]
+trait PushNotificationEventsStorage extends CachedStorage[EventIndex, PushNotificationEvent] {
+  def setAsDecrypted(index: EventIndex): Future[Unit]
+  def writeClosure(index: EventIndex): PlainWriter
+  def writeError(index: EventIndex, error: OtrErrorEvent): Future[Unit]
   def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit]
   def encryptedEvents: Future[Seq[PushNotificationEvent]]
-  def removeEventsWithIds(ids: Seq[Uid]): Future[Unit]
-  def removeRows(rows: Iterable[(Uid, Int)]): Future[Unit]
+  def removeRows(rows: Iterable[Int]): Future[Unit]
   def registerEventHandler(handler: () => Future[Unit])(implicit ec: EventContext): Future[Unit]
   def getDecryptedRows(limit: Int = 50): Future[IndexedSeq[PushNotificationEvent]]
 }
 
 class PushNotificationEventsStorageImpl(context: Context, storage: Database, clientId: ClientId)
-  extends CachedStorageImpl[(Uid, EventIndex), PushNotificationEvent](new TrimmingLruCache(context, Fixed(1024*1024)), storage)(PushNotificationEventsDao, "PushNotificationEvents_Cached")
+  extends CachedStorageImpl[EventIndex, PushNotificationEvent](new TrimmingLruCache(context, Fixed(1024*1024)), storage)(PushNotificationEventsDao, "PushNotificationEvents_Cached")
     with PushNotificationEventsStorage {
 
   private implicit val dispatcher = new SerialDispatchQueue(name = "PushNotificationEventsStorage")
 
-  override def setAsDecrypted(id: Uid, index: EventIndex): Future[Unit] = {
-    update((id, index), u => u.copy(decrypted = true)).map {
+  override def setAsDecrypted(index: EventIndex): Future[Unit] = {
+    update(index, u => u.copy(decrypted = true)).map {
       case None =>
-        throw new IllegalStateException(s"Failed to set event at index $index with id $id as decrypted")
+        throw new IllegalStateException(s"Failed to set event with index $index as decrypted")
       case _ => ()
     }
   }
 
-  override def writeClosure(id: Uid, index: EventIndex): PlainWriter =
-    (plain: Array[Byte]) => update((id, index), _.copy(decrypted = true, plain = Some(plain))).map(_ => Unit)
+  override def writeClosure(index: EventIndex): PlainWriter =
+    (plain: Array[Byte]) => update(index, _.copy(decrypted = true, plain = Some(plain))).map(_ => Unit)
 
-  override def writeError(id: Uid, index: EventIndex, error: OtrErrorEvent): Future[Unit] =
-    update((id, index), _.copy(decrypted = true, event = MessageEvent.MessageEventEncoder(error), plain = None))
+  override def writeError(index: EventIndex, error: OtrErrorEvent): Future[Unit] =
+    update(index, _.copy(decrypted = true, event = MessageEvent.MessageEventEncoder(error), plain = None))
       .map(_ => Unit)
 
   override def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit] = {
@@ -108,12 +107,7 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
     PushNotificationEventsDao.listDecrypted(limit)
   }
 
-  def removeEventsWithIds(ids: Seq[Uid]): Future[Unit] =
-    storage.withTransaction { implicit db =>
-      removeAll(dao.list.filter(r => ids.contains(r.pushId)).map(r => (r.pushId, r.index)))
-    }.future.map(_ => ())
-
-  def removeRows(rows: Iterable[(Uid, Int)]): Future[Unit] = removeAll(rows)
+  def removeRows(rows: Iterable[Int]): Future[Unit] = removeAll(rows)
 
   //This method is called once on app start, so invoke the handler in case there are any events to be processed
   //This is safe as the handler only allows one invocation at a time.
