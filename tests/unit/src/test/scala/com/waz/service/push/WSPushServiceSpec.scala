@@ -33,6 +33,7 @@ import com.waz.znet._
 import org.json.{JSONArray, JSONObject}
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class WSPushServiceSpec extends ZMockSpec {
 
@@ -52,7 +53,7 @@ class WSPushServiceSpec extends ZMockSpec {
                                   accessTokenProvider: AccessTokenProvider = accessTokenProvider,
                                   requestCreator:      RequestCreator = _ => httpRequest,
                                   webSocketFactory:    WebSocketFactory = webSocketFactory,
-                                  backoff:             Backoff = ExponentialBackoff.zeroBackoff(10)) = {
+                                  backoff:             Backoff = ExponentialBackoff.constantBackof(100.millis)) = {
     new WSPushServiceImpl(userId, accessTokenProvider, requestCreator, webSocketFactory, backoff)
   }
 
@@ -127,6 +128,8 @@ class WSPushServiceSpec extends ZMockSpec {
 
       Thread.sleep(500)
       fakeWebSocketEvents ! SocketEvent.Closing(webSocket, 0, null)
+
+      Thread.sleep(100)
     }
 
     scenario("When web socket emmit message of push notifications, should push it to notifications stream and stay connected.") {

@@ -104,13 +104,25 @@ class MapEventStream[E, V](source: EventStream[E], f: E => V) extends ProxyEvent
   override protected[events] def onEvent(event: E, sourceContext: Option[ExecutionContext]): Unit = dispatch(f(event), sourceContext)
 }
 
-class FlatMapLatestEventStream[E, V](source: EventStream[E], f: E => EventStream[V]) extends ProxyEventStream[E, V](source) {
-  @volatile private var currentSubscription: Subscription = _
-  override protected[events] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
-    import com.waz.utils.events.EventContext.Implicits.global // Is it ok? How do you think?
-    if (currentSubscription != null) currentSubscription.unsubscribe()
-    currentSubscription = f(event) { transformedEvent => dispatch(transformedEvent, currentContext) }
+class FlatMapLatestEventStream[E, V](source: EventStream[E], f: E => EventStream[V]) extends EventStream[V] with EventListener[E] {
+  @volatile private var mapped: Option[EventStream[V]] = None
+
+  private val mappedListener = new EventListener[V] {
+    override protected[events] def onEvent(event: V, currentContext: Option[ExecutionContext]): Unit = {
+      dispatch(event, currentContext)
+    }
   }
+
+  override protected[events] def onEvent(event: E, currentContext: Option[ExecutionContext]): Unit = {
+    mapped.foreach(_.unsubscribe(mappedListener))
+    mapped = Some(returning(f(event))(_.subscribe(mappedListener)))
+  }
+
+  override protected def onWire(): Unit =
+    source.subscribe(this)
+
+  override protected def onUnwire(): Unit =
+    source.unsubscribe(this)
 }
 
 class FutureEventStream[E, V](source: EventStream[E], f: E => Future[V]) extends ProxyEventStream[E, V](source) {
