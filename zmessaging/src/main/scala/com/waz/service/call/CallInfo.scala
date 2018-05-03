@@ -29,6 +29,8 @@ import com.waz.service.call.CallInfo.{CallState, EndedReason}
 import org.threeten.bp.Instant
 
 case class CallInfo(convId:            ConvId,
+                    account:           UserId,
+                    isGroup:           Boolean,
                     caller:            UserId,
                     state:             Option[CallState]                 = None,
                     prevState:         Option[CallState]                 = None,
@@ -50,6 +52,8 @@ case class CallInfo(convId:            ConvId,
     s"""
        |CallInfo:
        | convId:            $convId
+       | account:           $account
+       | isGroup:           $isGroup
        | caller:            $caller
        | state:             $state
        | prevState:         $prevState
