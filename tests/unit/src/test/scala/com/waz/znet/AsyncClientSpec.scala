@@ -23,7 +23,6 @@ import java.io.{File, PipedInputStream, PipedOutputStream}
 import com.koushikdutta.async.callback.CompletedCallback.NullCompletedCallback
 import com.koushikdutta.async.callback.DataCallback.NullDataCallback
 import com.koushikdutta.async.callback._
-import com.koushikdutta.async.http.{WebSocket => AWebSocket}
 import com.koushikdutta.async.http._
 import com.koushikdutta.async.http.callback._
 import com.koushikdutta.async._
@@ -156,7 +155,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
       CancellableFuture.lift(p.future)
     }
 
-    override def websocket(request: HttpRequest, protocol: String, callback: AsyncHttpClient.WebSocketConnectCallback): CancellableFuture[AWebSocket] = ???
+    override def websocket(request: HttpRequest, protocol: String, callback: AsyncHttpClient.WebSocketConnectCallback): CancellableFuture[WebSocket] = ???
     override def stop(): Unit = ???
   }
 
@@ -391,7 +390,7 @@ class AsyncClientSpec extends AndroidFreeSpec {
         CancellableFuture(mockedResponse)
       }
 
-      def websocket(request: HttpRequest, protocol: String, callback: AsyncHttpClient.WebSocketConnectCallback): CancellableFuture[AWebSocket] = ???
+      def websocket(request: HttpRequest, protocol: String, callback: AsyncHttpClient.WebSocketConnectCallback): CancellableFuture[WebSocket] = ???
       def stop(): Unit = {}
     }
 
