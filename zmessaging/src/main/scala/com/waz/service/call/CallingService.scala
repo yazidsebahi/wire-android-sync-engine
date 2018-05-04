@@ -40,13 +40,14 @@ import com.waz.sync.otr.OtrSyncHandler
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils.events._
 import com.waz.utils.wrappers.Context
-import com.waz.utils.{RichDate, RichInstant, Serialized, returningF}
+import com.waz.utils.{RichDate, RichInstant, Serialized, returning, returningF}
 import com.waz.zms.CallWakeService
 import com.waz.znet.Response.SuccessHttpStatus
 import com.waz.znet._
 import org.threeten.bp.{Duration, Instant}
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
+import scala.util.Success
 import scala.util.control.NonFatal
 
 class GlobalCallingService() {
@@ -96,6 +97,8 @@ class CallingService(val accountId:       UserId,
   private val fm = flowManagerService.flowManager
 
   private val callProfile = Signal(CallProfile.Empty)
+
+  private var closingPromise = Option.empty[Promise[Unit]]
 
   val availableCalls = callProfile.map(_.availableCalls) //any call a user can potentially join
   //state about any call for which we should show the CallingActivity
@@ -238,6 +241,7 @@ class CallingService(val accountId:       UserId,
       val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.updateState(Ongoing)) else None
       p.copy(activeId = newActive, callUpdated.fold(p.availableCalls - conv.id)(c => p.availableCalls + (conv.id -> c)))
     }
+    closingPromise.foreach(_.tryComplete(Success({})))
   }
 
   def onMetricsReady(convId: RConvId, metricsJson: String): Unit =
@@ -293,7 +297,7 @@ class CallingService(val accountId:       UserId,
     *
     * @param isVideo will be discarded if call is already active
     */
-  def startCall(convId: ConvId, isVideo: Boolean = false): Future[Any] = withConvAsync(convId) { (w, conv) =>
+  def startCall(convId: ConvId, isVideo: Boolean = false): Future[Unit] = withConvAsync(convId) { (w, conv) =>
     verbose(s"startCall $convId, $isVideo")
 
     for {
@@ -349,15 +353,18 @@ class CallingService(val accountId:       UserId,
   /**
    * @return Future as this function is called from background service
    */
-  def endCall(convId: ConvId): Future[Unit] = withConv(convId) { (w, conv) =>
-    verbose(s"endCall: $convId")
+  def endCall(convId: ConvId): Future[Unit] = {
+    withConv(convId) { (w, conv) =>
+      verbose(s"endCall: $convId")
 
-    updateActiveCall { call =>
-      verbose(s"Call ended in state: ${call.state}")
-      //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
-      if (call.state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
-      call.copy(endReason = Some(SelfEnded))
-    }("endCall")
+      updateActiveCall { call =>
+        verbose(s"Call ended in state: ${call.state}")
+        //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
+        if (call.state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
+        call.copy(endReason = Some(SelfEnded))
+      }("endCall")
+    }
+    returning(Promise[Unit]())(p => closingPromise = Some(p)).future
   }
 
   def continueDegradedCall(): Unit = currentCall.head.map {
@@ -466,7 +473,7 @@ class CallingService(val accountId:       UserId,
         }
     }
 
-  private def withConvAsync(convId: ConvId)(f: (WCall, ConversationData) => Future[_]): Future[Any] = {
+  private def withConvAsync(convId: ConvId)(f: (WCall, ConversationData) => Future[Unit]): Future[Unit] = {
     Serialized.future(self) {
       wCall.flatMap { w =>
         convs.convById(convId) flatMap {

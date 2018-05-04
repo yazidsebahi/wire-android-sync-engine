@@ -32,7 +32,7 @@ import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
-import com.waz.threading.{SerialDispatchQueue, Threading}
+import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, Serialized}
@@ -358,6 +358,66 @@ class CallingServiceSpec extends AndroidFreeSpec {
       service.endCall(groupConv.id)
       result(checkpoint2.head)
     }
+
+    scenario("Chaining a startCall after endCall should wait for onClosedCallback and successfully start second call") {
+      val firstUser = UserId("first-user")
+      val firstConv = ConversationData(ConvId(firstUser.str), RConvId(firstUser.str), Some("First Conv"), account1Id, ConversationType.OneToOne)
+
+      val secondUser = UserId("second-user")
+      val secondConv = ConversationData(ConvId(secondUser.str), RConvId(secondUser.str), Some("Second Conv"), account1Id, ConversationType.OneToOne)
+
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
+
+      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().onCall { rConvId: RConvId =>
+        Future.successful(rConvId match {
+          case firstConv.remoteId => Some(firstConv)
+          case secondConv.remoteId => Some(secondConv)
+          case _ => None
+        })
+      }
+      (convs.convById _).expects(*).anyNumberOfTimes().onCall { convId: ConvId =>
+        Future.successful(convId match {
+          case firstConv.id => Some(firstConv)
+          case secondConv.id => Some(secondConv)
+          case _ => None
+        })
+      }
+
+      val service = initCallingService()
+
+      val checkpoint1 = callCheckpoint(service, _.contains(firstConv.id), cur => cur.exists(_.state.contains(SelfConnected)) && cur.exists(_.others.contains(firstUser)))
+
+      service.onIncomingCall(firstConv.remoteId, firstUser, videoCall = false, shouldRing = true)
+      (avs.answerCall _).expects(*, *, *).once().onCall { (_, _, _) =>
+        service.onEstablishedCall(firstConv.remoteId, firstUser)
+      }
+      service.startCall(firstConv.id)
+      await(checkpoint1.head)
+
+      //hang up first call and start second call, first call should be replaced
+      val checkpoint2 = callCheckpoint(service, _.contains(secondConv.id), cur => cur.exists(_.state.contains(SelfCalling)) && cur.exists(_.others.contains(secondUser)))
+      val checkpoint3 = callCheckpoint(service, _.contains(secondConv.id), cur => cur.exists(_.state.contains(SelfConnected)) && cur.exists(_.others.contains(secondUser)))
+
+      (avs.endCall _).expects(*, firstConv.remoteId).once().onCall { (_, _) =>
+        service.onClosedCall(Normal, firstConv.remoteId, Instant.now, firstUser)
+      }
+      (avs.startCall _).expects(*, secondConv.remoteId, false, false, false).once().onCall { (_, _, _, _, _) =>
+        for {
+          _ <- service.onOtherSideAnsweredCall(secondConv.remoteId)
+          _ <- service.onEstablishedCall(secondConv.remoteId, secondUser)
+        } yield {}
+        Future.successful(0)
+      }
+
+      for {
+        _ <- service.endCall(firstConv.id)
+        _ <- service.startCall(secondConv.id)
+      } yield {}
+      
+      await(checkpoint2.head)
+      await(checkpoint3.head)
+    }
+
   }
 
   feature("Simultaneous calls") {
