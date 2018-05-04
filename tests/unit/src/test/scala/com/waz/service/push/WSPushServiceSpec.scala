@@ -31,10 +31,12 @@ import com.waz.znet.AuthenticationManager.AccessToken
 import com.waz.znet.WebSocketFactory.SocketEvent
 import com.waz.znet._
 import org.json.{JSONArray, JSONObject}
+import org.scalatest.Ignore
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
+@Ignore
 class WSPushServiceSpec extends ZMockSpec {
 
   import com.waz.utils.events.EventContext.Implicits.global
