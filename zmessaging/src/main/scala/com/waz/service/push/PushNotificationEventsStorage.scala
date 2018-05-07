@@ -74,19 +74,18 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
 
   override def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit] = {
     import com.waz.utils._
-    def isOtrEventForUs(obj: JSONObject): Boolean =
-      obj.getString("type").startsWith("conversation.otr") &&
-        obj.getJSONObject("data").getString("recipient").equals(clientId.str)
+    def isOtrEventForUs(obj: JSONObject): Boolean = {
+      returning(!obj.getString("type").startsWith("conversation.otr") || obj.getJSONObject("data").getString("recipient").equals(clientId.str)) { ret =>
+        if (!ret) {
+          verbose(s"Skipping otr event not intended for us: $obj")
+        }
+      }
+    }
 
     val eventsToSave = pushNotifications
       .flatMap { pn =>
-        pn.events.toVector.map { event =>
-          if (isOtrEventForUs(event)) {
-            Some((pn.id, event, pn.transient))
-          } else {
-            verbose(s"Skipping otr event not intended for us: $event")
-            None
-          }
+        pn.events.toVector.filter(isOtrEventForUs).map { event =>
+          (pn.id, event, pn.transient)
         }
       }
 
@@ -94,9 +93,9 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
       val curIndex = PushNotificationEventsDao.maxIndex()
       val nextIndex = if (curIndex == -1) 0 else curIndex+1
       insertAll(eventsToSave.zip(nextIndex until (nextIndex+eventsToSave.length))
-      .collect { case (Some((id, event, transient)), index) =>
-        PushNotificationEvent(id, index, event = event, transient = transient)
-      })
+        .map { case ((id, event, transient), index) =>
+          PushNotificationEvent(id, index, event = event, transient = transient)
+        })
     }.future.map(_ => ())
   }
 
