@@ -26,7 +26,10 @@ import com.waz.service.call.Avs.VideoReceiveState.Stopped
 import com.waz.service.call.Avs.{AvsClosedReason, VideoReceiveState}
 import com.waz.service.call.CallInfo.CallState.{SelfConnected, SelfJoining}
 import com.waz.service.call.CallInfo.{CallState, EndedReason}
-import org.threeten.bp.Instant
+import com.waz.utils.events.{ClockSignal, Signal}
+import org.threeten.bp.Duration.between
+import org.threeten.bp.{Duration, Instant}
+import scala.concurrent.duration._
 
 case class CallInfo(convId:            ConvId,
                     account:           UserId,
@@ -78,6 +81,19 @@ case class CallInfo(convId:            ConvId,
       case SelfConnected => withState.copy(estabTime = Some(clock.instant()))
       case _ => withState
     }
+  }
+
+  val duration = estabTime match {
+    case Some(est) => ClockSignal(1.second).map(_ => Option(between(est, clock.instant())))
+    case None      => Signal.const(Option.empty[Duration])
+  }
+
+  val durationFormatted = duration.map {
+    case Some(d) =>
+      val seconds = ((d.toMillis / 1000) % 60).toInt
+      val minutes = ((d.toMillis / 1000) / 60).toInt
+      f"$minutes%02d:$seconds%02d"
+    case None => ""
   }
 
 }
