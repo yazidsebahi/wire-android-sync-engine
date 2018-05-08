@@ -206,7 +206,7 @@ object ZMessagingDB {
     },
     Migration(104, 105) { db =>
       db.execSQL("CREATE TABLE PushNotificationEventsCopy(pushId TEXT, event_index INTEGER PRIMARY KEY, decrypted INTEGER, event TEXT, plain BLOB, transient BOOLEAN);")
-      db.execSQL("INSERT INTO PushNotificationEventsCopy (pushId, event_index, decrypted, event, plain, transient) SELECT pushid, event_index, decrypted, event, plain, transient FROM PushNotificationEvents;")
+      db.execSQL("INSERT INTO PushNotificationEventsCopy (pushId, decrypted, event, plain, transient) SELECT pushid, decrypted, event, plain, transient FROM PushNotificationEvents;")
       db.execSQL("DROP TABLE PushNotificationEvents;")
       db.execSQL("ALTER TABLE PushNotificationEventsCopy RENAME TO PushNotificationEvents;")
     }
