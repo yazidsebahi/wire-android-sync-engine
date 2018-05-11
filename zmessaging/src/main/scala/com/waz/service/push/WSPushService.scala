@@ -104,7 +104,7 @@ class WSPushServiceImpl(userId:              UserId,
 
   private var currentWebSocketSubscription: Subscription = _
 
-  activated.on(dispatcher) {
+  activated {
     case false  =>
       debug("WebSocket will be deactivated")
       finishWebSocketProcess()
