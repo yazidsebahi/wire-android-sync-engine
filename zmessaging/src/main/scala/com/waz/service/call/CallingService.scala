@@ -184,7 +184,7 @@ class CallingService(val accountId:       UserId,
   def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { (_, conv) =>
     verbose(s"call established for conv: ${conv.id}, userId: $userId, time: ${clock.instant}")
     updateActiveCall { c =>
-      setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
+      setVideoSendState(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) VideoReceiveState.Started else VideoReceiveState.Stopped) //will upgrade call videoSendState
       setCallMuted(c.muted) //Need to set muted only after call is established
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
       val others = c.others + userId - accountId
@@ -425,13 +425,13 @@ class CallingService(val accountId:       UserId,
     }("setCallMuted")
   }
 
-  def setVideoSendActive(convId: ConvId, send: Boolean): Unit = {
-    verbose(s"setVideoSendActive: $convId, $send")
+  def setVideoSendState(convId: ConvId, state: VideoReceiveState.Value): Unit = {
+    verbose(s"setVideoSendActive: $convId, $state")
     withConv(convId) { (w, conv) =>
       updateCallInfo(convId, { c =>
-        avs.setVideoSendActive(w, conv.remoteId, send)
-        c.copy(videoSendState = if (send) SEND else DONT_SEND)
-      })("setVideoSendActive")
+        avs.setVideoSendState(w, conv.remoteId, state)
+        c.copy(videoSendState = if (!state.equals(VideoReceiveState.Stopped)) SEND else DONT_SEND)
+      })("setVideoSendState")
     }
   }
 

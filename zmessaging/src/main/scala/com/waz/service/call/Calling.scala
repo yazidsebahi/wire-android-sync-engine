@@ -71,7 +71,7 @@ object Calling {
 
   @native def wcall_reject(inst: Pointer, convId: String): Unit
 
-  @native def wcall_set_video_send_active(inst: Pointer, convid: String, active: Boolean): Unit
+  @native def wcall_set_video_send_state(inst: Pointer, convid: String, state: Int): Unit
 
   @native def wcall_network_changed(inst: Pointer): Unit
 

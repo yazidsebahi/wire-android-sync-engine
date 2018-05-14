@@ -44,7 +44,7 @@ trait Avs {
   def onReceiveMessage(wCall: WCall, msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
   def endCall(wCall: WCall, convId: RConvId): Unit
   def rejectCall(wCall: WCall, convId: RConvId): Unit
-  def setVideoSendActive(wCall: WCall, convId: RConvId, active: Boolean): Unit
+  def setVideoSendState(wCall: WCall, convId: RConvId, state: VideoReceiveState.Value): Unit
 }
 
 /**
@@ -182,7 +182,7 @@ class AvsImpl() extends Avs {
 
   override def rejectCall(wCall: WCall, convId: RConvId) = withAvs(wcall_reject(wCall, convId.str))
 
-  override def setVideoSendActive(wCall: WCall, convId: RConvId, active: Boolean) = withAvs(wcall_set_video_send_active(wCall, convId.str, active))
+  override def setVideoSendState(wCall: WCall, convId: RConvId, state: VideoReceiveState.Value) = withAvs(wcall_set_video_send_state(wCall, convId.str, state.id))
 
 }
 
@@ -242,14 +242,15 @@ object Avs {
   }
 
   /**
-    *   WCALL_VIDEO_RECEIVE_STOPPED  0
-    *   WCALL_VIDEO_RECEIVE_STARTED  1
-    *   WCALL_VIDEO_RECEIVE_BAD_CONN 2
+    *   WCALL_VIDEO_STATE_STOPPED  0
+    *   WCALL_VIDEO_STATE_STARTED  1
+    *   WCALL_VIDEO_STATE_BAD_CONN 2
+    *   WCALL_VIDEO_STATE_PAUSED   3
     *   Unknown - internal state     3
     */
   type VideoReceiveState = VideoReceiveState.Value
   object VideoReceiveState extends Enumeration {
-    val Stopped, Started, BadConnection, Unknown = Value
+    val Stopped, Started, BadConnection, Paused, Unknown = Value
   }
 
   /**
