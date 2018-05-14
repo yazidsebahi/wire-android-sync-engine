@@ -38,37 +38,7 @@ import org.threeten.bp.Instant
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-object FutureAwaitSyntax {
-  val DefaultTimeout: FiniteDuration = 5.seconds
-}
-
-trait FutureAwaitSyntax {
-  import FutureAwaitSyntax._
-  def await(future: Future[_])(implicit duration: FiniteDuration = DefaultTimeout): Unit =
-    Await.ready(future, duration)
-  def result[A](future: Future[A])(implicit duration: FiniteDuration = DefaultTimeout): A =
-    Await.result(future, duration)
-}
-
-trait ZSpec extends FeatureSpec
-  with BeforeAndAfterAll
-  with BeforeAndAfterEach
-  with Matchers
-  with OneInstancePerTest
-  with FutureAwaitSyntax {
-
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
-    isTest = true
-
-    InternalLog.reset()
-    InternalLog.add(new SystemLogOutput)
-  }
-}
-
-trait ZMockSpec extends ZSpec with MockFactory
-
-abstract class AndroidFreeSpec extends ZMockSpec { this: Suite =>
+abstract class AndroidFreeSpec extends FeatureSpec with BeforeAndAfterAll with BeforeAndAfterEach with Matchers with MockFactory with OneInstancePerTest { this: Suite =>
 
   import AndroidFreeSpec._
 
@@ -103,15 +73,18 @@ abstract class AndroidFreeSpec extends ZMockSpec { this: Suite =>
 
   //Ensures that Android wrappers are assigned with a non-Android implementation so that tests can run on the JVM
   override protected def beforeAll() = {
-    super.beforeAll()
-
     URI.setUtil(JavaURIUtil)
 
     DB.setUtil(new DBUtil {
       override def ContentValues(): DBContentValues = DBContentValuesMap()
     })
 
+    isTest = true
+
     ZMessaging.clock = clock
+
+    InternalLog.reset()
+    InternalLog.add(new SystemLogOutput)
 
     Intent.setUtil(JVMIntentUtil)
 
@@ -145,6 +118,10 @@ abstract class AndroidFreeSpec extends ZMockSpec { this: Suite =>
     }
   }
 
+  def await[A](future: Future[A])(implicit defaultDuration: FiniteDuration = DefaultTimeout): A = result(future)(defaultDuration)
+
+  def result[A](future: Future[A])(implicit defaultDuration: FiniteDuration = DefaultTimeout): A = Await.result(future, defaultDuration)
+
   /**
     * Very useful for checking that something DOESN'T happen (e.g., ensure that a signal doesn't get updated after
     * performing a series of actions)
@@ -165,6 +142,7 @@ abstract class AndroidFreeSpec extends ZMockSpec { this: Suite =>
 }
 
 object AndroidFreeSpec {
+
   val clock = TestClock()
 
   val DefaultTimeout = 5.seconds
