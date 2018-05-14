@@ -376,6 +376,7 @@ object UserPreferences {
 
   lazy val IsLogin                          = PrefKey[Boolean]("is_login")
   lazy val IsNewClient                      = PrefKey[Boolean]("is_new_client")
+  lazy val CrashesAndAnalyticsRequestShown  = PrefKey[Boolean]("usage_data_permissions_shown", customDefault = true) //true to avoid harassing existing users
 
   lazy val SelfClient                       = PrefKey[ClientRegistrationState]("self_client")
   lazy val PrivateMode                      = PrefKey[Boolean]("private_mode")
