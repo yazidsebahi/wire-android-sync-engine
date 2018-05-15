@@ -25,7 +25,7 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{UserId, _}
 import com.waz.service.call.Avs.AvsClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
-import com.waz.service.call.Avs.WCall
+import com.waz.service.call.Avs.{WCall, WCallConvType, WCallType}
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
@@ -78,7 +78,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       val checkpoint2 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state.contains(SelfConnected) && cur.others == Set(otherUser)))
 
       service.onIncomingCall(_1t1Conv.remoteId, otherUser, videoCall = false, shouldRing = true)
-      (avs.answerCall _).expects(*, *, *).once().onCall { (_, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (_, _, _, _) =>
         service.onEstablishedCall(_1t1Conv.remoteId, otherUser)
       }
       service.startCall(_1t1Conv.id)
@@ -102,7 +102,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
         _.exists(cur => cur.convId == groupConv.id && cur.state.contains(SelfConnected) && cur.others == Set(groupMember1, groupMember2)))
 
       service.onIncomingCall(groupConv.remoteId, groupMember1, videoCall = false, shouldRing = true)
-      (avs.answerCall _).expects(*, *, *).once().onCall { (_, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (_, _, _, _) =>
         service.onEstablishedCall(groupConv.remoteId, groupMember1)
         service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
       }
@@ -177,7 +177,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       (convs.convById _).expects(_1t1Conv.id).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
       (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
       (members.getByConvs _).expects(Set(_1t1Conv.id)).once().returning(Future.successful(IndexedSeq(otherUser, account1Id).map(u => ConversationMemberData(u, _1t1Conv.id))))
-      (avs.startCall _).expects(*, _1t1Conv.remoteId, false, false, *).once().returning(Future.successful(0))
+      (avs.startCall _).expects(*, _1t1Conv.remoteId, WCallType.Normal, WCallConvType.Group, *).once().returning(Future.successful(0))
 
       val service = initCallingService()
       val checkpoint1 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state.contains(SelfCalling) && cur.caller == account1Id && cur.others == Set(otherUser)))
@@ -208,7 +208,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       val checkpoint2 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state.contains(SelfConnected) && cur.others == Set(otherUser)))
 
       service.onIncomingCall(_1t1Conv.remoteId, otherUser, videoCall = false, shouldRing = true)
-      (avs.answerCall _).expects(*, _1t1Conv.remoteId, *).once().onCall { (_, _, _) =>
+      (avs.answerCall _).expects(*, _1t1Conv.remoteId, *, *).once().onCall { (_, _, _, _) =>
         service.onEstablishedCall(_1t1Conv.remoteId, otherUser)
       }
       service.startCall(_1t1Conv.id)
@@ -270,7 +270,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       clock + 10.seconds
 
-      (avs.answerCall _).expects(*, *, *).once().onCall { (_, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (_, _, _, _) =>
         println(s"callback time: ${clock.instant()}")
         service.onEstablishedCall(groupConv.remoteId, groupMember1)
         service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
@@ -388,7 +388,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       val checkpoint1 = callCheckpoint(service, _.contains(firstConv.id), cur => cur.exists(_.state.contains(SelfConnected)) && cur.exists(_.others.contains(firstUser)))
 
       service.onIncomingCall(firstConv.remoteId, firstUser, videoCall = false, shouldRing = true)
-      (avs.answerCall _).expects(*, *, *).once().onCall { (_, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (_, _, _, _) =>
         service.onEstablishedCall(firstConv.remoteId, firstUser)
       }
       service.startCall(firstConv.id)
@@ -401,7 +401,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       (avs.endCall _).expects(*, firstConv.remoteId).once().onCall { (_, _) =>
         service.onClosedCall(Normal, firstConv.remoteId, Instant.now, firstUser)
       }
-      (avs.startCall _).expects(*, secondConv.remoteId, false, false, false).once().onCall { (_, _, _, _, _) =>
+      (avs.startCall _).expects(*, secondConv.remoteId, *, WCallConvType.OneOnOne, false).once().onCall { (_, _, _, _, _) =>
         for {
           _ <- service.onOtherSideAnsweredCall(secondConv.remoteId)
           _ <- service.onEstablishedCall(secondConv.remoteId, secondUser)
@@ -445,7 +445,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       val checkpoint1 = callCheckpoint(service, _.contains(ongoingConv.id), cur => cur.exists(_.state.contains(SelfConnected)) && cur.exists(_.others.contains(ongoingUserId)))
 
       service.onIncomingCall(ongoingConv.remoteId, ongoingUserId, videoCall = false, shouldRing = true)
-      (avs.answerCall _).expects(*, *, *).once().onCall { (_, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (_, _, _, _) =>
         service.onEstablishedCall(ongoingConv.remoteId, ongoingUserId)
       }
       service.startCall(ongoingConv.id)
@@ -519,7 +519,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
         _.exists(curr => curr.others.contains(otoUser) && curr.state.contains(SelfConnected)))
 
       service.onIncomingCall(otoConv.remoteId, otoUser, videoCall = false, shouldRing = true)
-      (avs.answerCall _).expects(*, *, *).once().onCall { (rId, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (rId, _, _, _) =>
         service.onEstablishedCall(otoConv.remoteId, otoUser)
       }
       service.startCall(otoConv.id) //user accepts 1:1 call
@@ -539,7 +539,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       //Checkpoint 4: Join group call
       val checkpoint4 = callCheckpoint(service, _.contains(groupConv.id), _.exists(curr => curr.others == Set(groupMember1, groupMember2) && curr.state.contains(SelfConnected)))
 
-      (avs.answerCall _).expects(*, *, *).once().onCall { (rId, _, _) =>
+      (avs.answerCall _).expects(*, *, *, *).once().onCall { (rId, _, _, _) =>
         service.onEstablishedCall(groupConv.remoteId, groupMember1)
         service.onGroupChanged(groupConv.remoteId, Set(groupMember1, groupMember2))
       }
