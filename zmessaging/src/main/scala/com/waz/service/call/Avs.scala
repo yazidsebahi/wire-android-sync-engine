@@ -44,7 +44,7 @@ trait Avs {
   def onReceiveMessage(wCall: WCall, msg: String, currTime: Instant, msgTime: Instant, convId: RConvId, userId: UserId, clientId: ClientId): Unit
   def endCall(wCall: WCall, convId: RConvId): Unit
   def rejectCall(wCall: WCall, convId: RConvId): Unit
-  def setVideoSendState(wCall: WCall, convId: RConvId, state: VideoReceiveState.Value): Unit
+  def setVideoSendState(wCall: WCall, convId: RConvId, state: VideoState.Value): Unit
 }
 
 /**
@@ -132,7 +132,7 @@ class AvsImpl() extends Avs {
       },
       new VideoReceiveStateHandler {
         override def onVideoReceiveStateChanged(userId: String, state: Int, arg: WCall): Unit =
-          cs.onVideoReceiveStateChanged(userId, VideoReceiveState(state))
+          cs.onVideoStateChanged(userId, VideoState(state))
       },
       null
     )
@@ -182,7 +182,7 @@ class AvsImpl() extends Avs {
 
   override def rejectCall(wCall: WCall, convId: RConvId) = withAvs(wcall_reject(wCall, convId.str))
 
-  override def setVideoSendState(wCall: WCall, convId: RConvId, state: VideoReceiveState.Value) = withAvs(wcall_set_video_send_state(wCall, convId.str, state.id))
+  override def setVideoSendState(wCall: WCall, convId: RConvId, state: VideoState.Value) = withAvs(wcall_set_video_send_state(wCall, convId.str, state.id))
 
 }
 
@@ -248,8 +248,8 @@ object Avs {
     *   WCALL_VIDEO_STATE_PAUSED   3
     *   Unknown - internal state     3
     */
-  type VideoReceiveState = VideoReceiveState.Value
-  object VideoReceiveState extends Enumeration {
+  type VideoState = VideoState.Value
+  object VideoState extends Enumeration {
     val Stopped, Started, BadConnection, Paused, Unknown = Value
   }
 
