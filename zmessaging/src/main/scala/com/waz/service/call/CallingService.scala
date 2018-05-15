@@ -21,7 +21,7 @@ package com.waz.service.call
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.api.VideoSendState._
+import com.waz.service.call.Avs.VideoState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.{MembersStorage, UserPreferences}
 import com.waz.model.otr.ClientId
@@ -29,7 +29,7 @@ import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service.ZMessaging.clock
 import com.waz.service._
 import com.waz.service.call.Avs.AvsClosedReason.{StillOngoing, reasonString}
-import com.waz.service.call.Avs.{AvsClosedReason, VideoReceiveState, WCall}
+import com.waz.service.call.Avs.{AvsClosedReason, VideoState, WCall}
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.call.CallInfo.EndedReason._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
@@ -154,7 +154,7 @@ class CallingService(val accountId:       UserId,
       others = Set(userId),
       isVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
-      videoSendState = if (videoCall) PREVIEW else DONT_SEND)
+      videoSendState = if (videoCall) VideoState.Started else VideoState.Stopped)
 
     callProfile.mutate { p =>
       val newActive = p.activeId match {
@@ -184,7 +184,7 @@ class CallingService(val accountId:       UserId,
   def onEstablishedCall(convId: RConvId, userId: UserId) = withConv(convId) { (_, conv) =>
     verbose(s"call established for conv: ${conv.id}, userId: $userId, time: ${clock.instant}")
     updateActiveCall { c =>
-      setVideoSendActive(conv.id, if (Seq(PREVIEW, SEND).contains(c.videoSendState)) true else false) //will upgrade call videoSendState
+      setVideoSendState(conv.id, if (Started.equals(c.videoSendState)) VideoState.Started else VideoState.Stopped) //will upgrade call videoSendState
       setCallMuted(c.muted) //Need to set muted only after call is established
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
       val others = c.others + userId - accountId
@@ -266,13 +266,13 @@ class CallingService(val accountId:       UserId,
     }("onBitRateStateChanged")
   }
 
-  def onVideoReceiveStateChanged(userId: String, videoReceiveState: VideoReceiveState) = Serialized.apply(self) {
+  def onVideoStateChanged(userId: String, videoReceiveState: VideoState) = Serialized.apply(self) {
     CancellableFuture {
       verbose(s"video state changed: $videoReceiveState")
       updateActiveCall { activeCall =>
         val newState = activeCall.videoReceiveState + (UserId(userId) -> videoReceiveState)
         activeCall.copy(videoReceiveState = newState)
-      }("onVideoReceiveStateChanged")
+      }("onVideoStateChanged")
     }
   }
 
@@ -351,7 +351,7 @@ class CallingService(val accountId:       UserId,
                     Some(SelfCalling),
                     others = others,
                     isVideoCall = isVideo,
-                    videoSendState = if (isVideo) PREVIEW else DONT_SEND)
+                    videoSendState = if (isVideo) VideoState.Started else VideoState.Stopped)
                   callProfile.mutate(_.copy(activeId = Some(newCall.convId), availableCalls = profile.availableCalls + (newCall.convId -> newCall)))
                 case err => warn(s"Unable to start call, reason: errno: $err")
               }
@@ -425,13 +425,13 @@ class CallingService(val accountId:       UserId,
     }("setCallMuted")
   }
 
-  def setVideoSendActive(convId: ConvId, send: Boolean): Unit = {
-    verbose(s"setVideoSendActive: $convId, $send")
+  def setVideoSendState(convId: ConvId, state: VideoState.Value): Unit = {
+    verbose(s"setVideoSendActive: $convId, $state")
     withConv(convId) { (w, conv) =>
       updateCallInfo(convId, { c =>
-        avs.setVideoSendActive(w, conv.remoteId, send)
-        c.copy(videoSendState = if (send) SEND else DONT_SEND)
-      })("setVideoSendActive")
+        avs.setVideoSendState(w, conv.remoteId, state)
+        c.copy(videoSendState = state)
+      })("setVideoSendState")
     }
   }
 

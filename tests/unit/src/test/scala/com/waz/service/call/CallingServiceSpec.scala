@@ -512,7 +512,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
 
       (members.getActiveUsers _).expects(*).anyNumberOfTimes().returning(Future.successful(Seq(groupMember1, groupMember2)))
 
-      (avs.setVideoSendActive _).expects(*, otoConv.remoteId, false).anyNumberOfTimes()
+      (avs.setVideoSendState _).expects(*, otoConv.remoteId, Avs.VideoState.Stopped).anyNumberOfTimes()
       val service = initCallingService()
 
       //Checkpoint 1: Receive and reject a group call

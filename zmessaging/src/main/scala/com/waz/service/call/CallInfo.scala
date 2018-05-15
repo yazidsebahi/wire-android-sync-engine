@@ -18,12 +18,11 @@
 package com.waz.service.call
 
 import com.sun.jna.Pointer
-import com.waz.api.VideoSendState
-import com.waz.api.VideoSendState._
 import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.ZMessaging.clock
-import com.waz.service.call.Avs.VideoReceiveState.Stopped
-import com.waz.service.call.Avs.{AvsClosedReason, VideoReceiveState}
+import com.waz.service.call.Avs.AvsClosedReason
+import com.waz.service.call.Avs.VideoState
+import com.waz.service.call.Avs.VideoState._
 import com.waz.service.call.CallInfo.CallState.{SelfConnected, SelfJoining}
 import com.waz.service.call.CallInfo.{CallState, EndedReason}
 import com.waz.utils.events.{ClockSignal, Signal}
@@ -42,8 +41,8 @@ case class CallInfo(convId:            ConvId,
                     muted:             Boolean                           = false,
                     isCbrEnabled:      Boolean                           = false,
                     isVideoCall:       Boolean                           = false,
-                    videoSendState:    VideoSendState                    = DONT_SEND,
-                    videoReceiveState: Map[UserId, VideoReceiveState]    = Map.empty,
+                    videoSendState:    VideoState                        = VideoState.Stopped,
+                    videoReceiveState: Map[UserId, VideoState]           = Map.empty,
                     startTime:         Instant                           = clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
                     joinedTime:        Option[Instant]                   = None, //the time the call was joined, if any
                     estabTime:         Option[Instant]                   = None, //the time that a joined call was established, if any
