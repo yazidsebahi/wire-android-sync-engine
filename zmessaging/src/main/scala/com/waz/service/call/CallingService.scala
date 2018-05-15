@@ -308,7 +308,7 @@ class CallingService(val accountId:       UserId,
       isGroup <- convsService.isGroupConversation(convId)
       mems <- members.getActiveUsers(conv.id)
       others <-
-        if (isGroup) Future.successful(Set(accountId))
+        if (isGroup) Future.successful(Set(accountId)) //TODO: Remove this as we don't use it anymore
         else if (conv.team.isEmpty) Future.successful(Set(UserId(conv.id.str)))
         else Future.successful(mems.filter(_ != accountId).toSet)
       vbr <- userPrefs.preference(UserPreferences.VBREnabled).apply()
