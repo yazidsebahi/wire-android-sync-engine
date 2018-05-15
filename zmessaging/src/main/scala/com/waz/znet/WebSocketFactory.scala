@@ -93,11 +93,6 @@ object OkHttpWebSocketFactory extends WebSocketFactory {
         this.socket = Some(socket)
       }
 
-
-      override def disableAutowiring(): this.type = {
-        this
-      }
-
       override protected def onUnwire(): Unit = {
         info("Cancelling websocket.")
         socket.foreach(_.cancel())
