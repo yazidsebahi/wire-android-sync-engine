@@ -155,7 +155,7 @@ class TrackingServiceImpl(zmsProvider: TrackingService.ZmsProvider = TrackingSer
       } yield
         track(new CallingEvent(
           eventName,
-          callInfo.isVideoCall,
+          callInfo.startedAsVideoCall,
           isGroup,
           memCount,
           withService,

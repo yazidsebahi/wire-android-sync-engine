@@ -152,7 +152,7 @@ class CallingService(val accountId:       UserId,
       userId,
       Some(OtherCalling),
       others = Set(userId),
-      isVideoCall = videoCall,
+      startedAsVideoCall = videoCall,
       //Assume that when a video call starts, sendingVideo will be true. From here on, we can then listen to state handler
       videoSendState = if (videoCall) VideoState.Started else VideoState.Stopped)
 
@@ -350,7 +350,7 @@ class CallingService(val accountId:       UserId,
                     accountId,
                     Some(SelfCalling),
                     others = others,
-                    isVideoCall = isVideo,
+                    startedAsVideoCall = isVideo,
                     videoSendState = if (isVideo) VideoState.Started else VideoState.Stopped)
                   callProfile.mutate(_.copy(activeId = Some(newCall.convId), availableCalls = profile.availableCalls + (newCall.convId -> newCall)))
                 case err => warn(s"Unable to start call, reason: errno: $err")

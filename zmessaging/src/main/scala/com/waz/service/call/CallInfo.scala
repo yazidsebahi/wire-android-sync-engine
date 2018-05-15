@@ -30,47 +30,47 @@ import org.threeten.bp.Duration.between
 import org.threeten.bp.{Duration, Instant}
 import scala.concurrent.duration._
 
-case class CallInfo(convId:            ConvId,
-                    account:           UserId,
-                    isGroup:           Boolean,
-                    caller:            UserId,
-                    state:             Option[CallState]                 = None,
-                    prevState:         Option[CallState]                 = None,
-                    others:            Set[UserId]                       = Set.empty,
-                    maxParticipants:   Int                               = 0, //maintains the largest number of users that were ever in the call (for tracking)
-                    muted:             Boolean                           = false,
-                    isCbrEnabled:      Boolean                           = false,
-                    isVideoCall:       Boolean                           = false,
-                    videoSendState:    VideoState                        = VideoState.Stopped,
-                    videoReceiveState: Map[UserId, VideoState]           = Map.empty,
-                    startTime:         Instant                           = clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
-                    joinedTime:        Option[Instant]                   = None, //the time the call was joined, if any
-                    estabTime:         Option[Instant]                   = None, //the time that a joined call was established, if any
-                    endTime:           Option[Instant]                   = None,
-                    endReason:         Option[EndedReason]               = None,
-                    outstandingMsg:    Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
+case class CallInfo(convId:             ConvId,
+                    account:            UserId,
+                    isGroup:            Boolean,
+                    caller:             UserId,
+                    state:              Option[CallState]                 = None,
+                    prevState:          Option[CallState]                 = None,
+                    others:             Set[UserId]                       = Set.empty,
+                    maxParticipants:    Int                               = 0, //maintains the largest number of users that were ever in the call (for tracking)
+                    muted:              Boolean                           = false,
+                    isCbrEnabled:       Boolean                           = false,
+                    startedAsVideoCall: Boolean                           = false,
+                    videoSendState:     VideoState                        = VideoState.Stopped,
+                    videoReceiveState:  Map[UserId, VideoState]           = Map.empty,
+                    startTime:          Instant                           = clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
+                    joinedTime:         Option[Instant]                   = None, //the time the call was joined, if any
+                    estabTime:          Option[Instant]                   = None, //the time that a joined call was established, if any
+                    endTime:            Option[Instant]                   = None,
+                    endReason:          Option[EndedReason]               = None,
+                    outstandingMsg:     Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
 
   override def toString: String =
     s"""
        |CallInfo:
-       | convId:            $convId
-       | account:           $account
-       | isGroup:           $isGroup
-       | caller:            $caller
-       | state:             $state
-       | prevState:         $prevState
-       | others:            $others
-       | maxParticipants:   $maxParticipants
-       | muted:             $muted
-       | isCbrEnabled:      $isCbrEnabled
-       | isVideoCall:       $isVideoCall
-       | videoSendState:    $videoSendState
-       | videoReceiveState: $videoReceiveState
-       | startTime:         $startTime
-       | estabTime:         $estabTime
-       | endTime:           $endTime
-       | endedReason:       $endReason
-       | hasOutstandingMsg: ${outstandingMsg.isDefined}
+       | convId:             $convId
+       | account:            $account
+       | isGroup:            $isGroup
+       | caller:             $caller
+       | state:              $state
+       | prevState:          $prevState
+       | others:             $others
+       | maxParticipants:    $maxParticipants
+       | muted:              $muted
+       | isCbrEnabled:       $isCbrEnabled
+       | startedAsVideoCall: $startedAsVideoCall
+       | videoSendState:     $videoSendState
+       | videoReceiveState:  $videoReceiveState
+       | startTime:          $startTime
+       | estabTime:          $estabTime
+       | endTime:            $endTime
+       | endedReason:        $endReason
+       | hasOutstandingMsg:  ${outstandingMsg.isDefined}
     """.stripMargin
 
   def updateState(callState: CallState): CallInfo = {
