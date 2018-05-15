@@ -97,7 +97,7 @@ class EventStream[E] extends EventSource[E] with Observable[EventListener[E]] {
 
 abstract class ProxyEventStream[A, E](sources: EventStream[A]*) extends EventStream[E] with EventListener[A] {
   override protected def onWire() = sources foreach (_.subscribe(this))
-  override protected def onUnwire() = sources foreach (_.unsubscribe(this))
+  override protected[events] def onUnwire() = sources foreach (_.unsubscribe(this))
 }
 
 class MapEventStream[E, V](source: EventStream[E], f: E => V) extends ProxyEventStream[E, V](source) {
@@ -118,11 +118,15 @@ class FlatMapLatestEventStream[E, V](source: EventStream[E], f: E => EventStream
     mapped = Some(returning(f(event))(_.subscribe(mappedListener)))
   }
 
-  override protected def onWire(): Unit =
+  override protected def onWire(): Unit = {
     source.subscribe(this)
+  }
 
-  override protected def onUnwire(): Unit =
+  override protected def onUnwire(): Unit = {
+    mapped.foreach(_.unsubscribe(mappedListener))
+    mapped = None
     source.unsubscribe(this)
+  }
 }
 
 class FutureEventStream[E, V](source: EventStream[E], f: E => Future[V]) extends ProxyEventStream[E, V](source) {

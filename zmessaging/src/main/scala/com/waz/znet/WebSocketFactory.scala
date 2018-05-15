@@ -38,7 +38,7 @@ object WebSocketFactory {
 }
 
 trait WebSocketFactory {
-  def openWebSocket(request: HttpRequest2)(implicit evc: EventContext): EventStream[SocketEvent]
+  def openWebSocket(request: HttpRequest2): EventStream[SocketEvent]
 }
 
 object OkHttpWebSocketFactory extends WebSocketFactory {
@@ -49,13 +49,13 @@ object OkHttpWebSocketFactory extends WebSocketFactory {
 
   private lazy val okHttpClient = new OkHttpClient()
 
-  override def openWebSocket(request: HttpRequest2)(implicit evc: EventContext): EventStream[SocketEvent] = {
+  override def openWebSocket(request: HttpRequest2): EventStream[SocketEvent] = {
     new EventStream[SocketEvent] {
 
-      @volatile private var socket: OkWebSocket = _
+      @volatile private var socket: Option[OkWebSocket] = None
 
       override protected def onWire(): Unit = {
-        socket = okHttpClient.newWebSocket(convertHttpRequest(request), new WebSocketListener {
+        val socket = okHttpClient.newWebSocket(convertHttpRequest(request), new WebSocketListener {
 
           override def onOpen(webSocket: OkWebSocket, response: OkResponse): Unit = {
             info("WebSocket connection has been opened")
@@ -89,9 +89,19 @@ object OkHttpWebSocketFactory extends WebSocketFactory {
             publish(SocketEvent.Closed(new OkHttpWebSocket(webSocket), Some(ex)))
           }
         })
+
+        this.socket = Some(socket)
       }
 
-      override protected def onUnwire(): Unit = socket.cancel()
+
+      override def disableAutowiring(): this.type = {
+        this
+      }
+
+      override protected def onUnwire(): Unit = {
+        info("Cancelling websocket.")
+        socket.foreach(_.cancel())
+      }
     }
   }
 

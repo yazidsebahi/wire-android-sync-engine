@@ -131,7 +131,7 @@ class Signal[A](@volatile protected[events] var value: Option[A] = None) extends
     }
 
     override protected def onWire(): Unit = self.subscribe(this)
-    override protected def onUnwire(): Unit = self.unsubscribe(this)
+    override protected[events] def onUnwire(): Unit = self.unsubscribe(this)
   }
 
   def head(implicit logTag: LogTag): Future[A] = currentValue match {

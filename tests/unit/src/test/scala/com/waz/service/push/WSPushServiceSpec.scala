@@ -63,8 +63,7 @@ class WSPushServiceSpec extends ZMockSpec {
 
     scenario("On activation should get access token and become connected. On deactivation become disconnected immediately.") {
       (accessTokenProvider.currentToken _).expects().once().returning(accessTokenSuccess)
-      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
-        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+      (webSocketFactory.openWebSocket _).expects(httpRequest).once().returning(fakeWebSocketEvents)
 
       val service = createWSPushService()
       service.activate()
@@ -81,8 +80,7 @@ class WSPushServiceSpec extends ZMockSpec {
     scenario("When can not get an access token should retry to connect.") {
       val accessTokenResults = List(accessTokenError, accessTokenSuccess).toIterator
       (accessTokenProvider.currentToken _).expects().twice().onCall(() => accessTokenResults.next())
-      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
-        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+      (webSocketFactory.openWebSocket _).expects(httpRequest).once().returning(fakeWebSocketEvents)
 
       val service = createWSPushService()
       service.activate()
@@ -95,8 +93,7 @@ class WSPushServiceSpec extends ZMockSpec {
 
     scenario("When web socket closed should become unconnected and retry to connect.") {
       (accessTokenProvider.currentToken _).expects().twice().returning(accessTokenSuccess)
-      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
-        .expects(httpRequest, *).twice().returning(fakeWebSocketEvents)
+      (webSocketFactory.openWebSocket _).expects(httpRequest).twice().returning(fakeWebSocketEvents)
 
       val service = createWSPushService()
       service.activate()
@@ -117,8 +114,7 @@ class WSPushServiceSpec extends ZMockSpec {
 
     scenario("When web socket is going to be closed by other side should close web socket with normal closure code.") {
       (accessTokenProvider.currentToken _).expects().once().returning(accessTokenSuccess)
-      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
-        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+      (webSocketFactory.openWebSocket _).expects(httpRequest).once().returning(fakeWebSocketEvents)
 
       val service = createWSPushService()
       service.activate()
@@ -136,8 +132,7 @@ class WSPushServiceSpec extends ZMockSpec {
 
     scenario("When web socket emmit message of push notifications, should push it to notifications stream and stay connected.") {
       (accessTokenProvider.currentToken _).expects().once().returning(accessTokenSuccess)
-      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
-        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+      (webSocketFactory.openWebSocket _).expects(httpRequest).once().returning(fakeWebSocketEvents)
 
       val service = createWSPushService()
       service.activate()
@@ -161,10 +156,9 @@ class WSPushServiceSpec extends ZMockSpec {
       noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
     }
 
-    scenario("When web socket emmit message of push notifications, should push ignore it and stay connected.") {
+    scenario("When web socket emmit unknown message, should ignore it and stay connected.") {
       (accessTokenProvider.currentToken _).expects().once().returning(accessTokenSuccess)
-      (webSocketFactory.openWebSocket(_: HttpRequest2)(_: EventContext))
-        .expects(httpRequest, *).once().returning(fakeWebSocketEvents)
+      (webSocketFactory.openWebSocket _).expects(httpRequest).once().returning(fakeWebSocketEvents)
 
       val service = createWSPushService()
       service.activate()
@@ -184,6 +178,20 @@ class WSPushServiceSpec extends ZMockSpec {
       gotNotification shouldBe false
 
       noException shouldBe thrownBy { await(service.connected.ifTrue.head) }
+    }
+
+    scenario("When connect and disconnect called to often, should stay in the correct state.") {
+      (accessTokenProvider.currentToken _).expects().returning(accessTokenSuccess).anyNumberOfTimes()
+      (webSocketFactory.openWebSocket _).expects(httpRequest).returning(fakeWebSocketEvents).anyNumberOfTimes()
+
+      val service = createWSPushService()
+      service.activate()
+      (1 until 20).foreach { i =>
+        Thread.sleep(50)
+        if (i%2 == 0) service.deactivate() else service.activate()
+      }
+
+      noException shouldBe thrownBy { await(service.connected.ifFalse.head) }
     }
 
   }

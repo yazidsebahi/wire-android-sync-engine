@@ -115,18 +115,23 @@ class WSPushServiceImpl(userId:              UserId,
 
   private val retryCount = new AtomicInteger(0)
 
-  private def finishWebSocketProcess(): Unit = if (currentWebSocketSubscription != null) {
-    currentWebSocketSubscription.destroy()
-    currentWebSocketSubscription = null
-    connected ! false
+  private def finishWebSocketProcess(): Unit = {
+    verbose("Finishing websocket process.")
+    if (currentWebSocketSubscription != null) {
+      verbose("Current websocket subscription will be destroyed.")
+      currentWebSocketSubscription.destroy()
+      currentWebSocketSubscription = null
+    }
   }
 
   private def restartWebSocketProcess(initialDelay: FiniteDuration = 0.seconds): Unit = {
+    verbose("Restarting websocket process.")
     finishWebSocketProcess()
     currentWebSocketSubscription = webSocketProcessEngine(initialDelay)
   }
 
   private def webSocketProcessEngine(initialDelay: FiniteDuration): Subscription = {
+    verbose("Constructing websocket engine subscription.")
     val events: EventStream[Either[ErrorResponse, SocketEvent]] = for {
       _ <- EventStream.wrap(Signal.future(CancellableFuture.delay(initialDelay)))
       _ = info(s"Opening WebSocket... ${if (retryCount.get() == 0) "" else s"Retry count: ${retryCount.get()}"}")
@@ -139,7 +144,7 @@ class WSPushServiceImpl(userId:              UserId,
       }
     } yield event
 
-    events {
+    events.on(dispatcher) {
       case Left(errorResponse) =>
         info(s"Error while access token receiving: $errorResponse")
         restartWebSocketProcess(initialDelay = backoff.delay(retryCount.incrementAndGet()))
