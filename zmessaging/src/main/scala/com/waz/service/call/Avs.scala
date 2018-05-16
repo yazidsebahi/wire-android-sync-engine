@@ -233,10 +233,20 @@ object Avs {
     }
   }
 
+  /**
+    * WCALL_CALL_TYPE_NORMAL          0
+    * WCALL_CALL_TYPE_VIDEO           1
+    * WCALL_CALL_TYPE_FORCED_AUDIO    2
+    */
   object WCallType extends Enumeration {
     val Normal, Video, ForcedAudio = Value
   }
 
+  /**
+    * WCALL_CONV_TYPE_ONEONONE        0
+    * WCALL_CONV_TYPE_GROUP           1
+    * WCALL_CONV_TYPE_CONFERENCE      2
+    */
   object WCallConvType extends Enumeration {
     val OneOnOne, Group, Conference = Value
   }
