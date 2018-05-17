@@ -71,7 +71,7 @@ trait AccountsService {
   def loginPhone(phone: String, code: String) = login(PhoneCredentials(PhoneNumber(phone), ConfirmationCode(code)))
   def login(loginCredentials: Credentials): ErrorOr[UserId]
 
-  def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Unit]
+  def register(registerCredentials: Credentials, name: String, teamName: Option[String] = None): ErrorOr[Option[AccountManager]]
 
   def createAccountManager(userId: UserId, dbFile: Option[File], isLogin: Option[Boolean], initialUser: Option[UserInfo] = None): Future[Option[AccountManager]] //TODO return error codes on failure?
 
@@ -423,7 +423,7 @@ class AccountsServiceImpl(val global: GlobalModule) extends AccountsService {
           am <- createAccountManager(user.id, None, Some(false), Some(user))
           _  <- am.fold(Future.successful({}))(_.getOrRegisterClient().map(_ => ()))
           _  <- setAccount(Some(user.id))
-        } yield Right({})
+        } yield Right(am)
       case Right(_) =>
         warn("Register didn't return a cookie")
         Future.successful(Left(ErrorResponse.internalError("No cookie for user after registration - can't create account")))

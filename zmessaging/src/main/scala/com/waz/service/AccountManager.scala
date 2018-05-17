@@ -102,6 +102,7 @@ class AccountManager(val userId:   UserId,
   private val initSelf = for {
     _ <- initialSelf.fold2(Future.successful({}), u =>
       for {
+        _ <- storage.userPrefs(CrashesAndAnalyticsRequestShown) := false //new login/registration, we need to ask for permission to send analytics
         _ <- storage.usersStorage.updateOrCreate(u.id, _.updated(u, withSearchKey = false), UserData(u, withSearchKey = false)) //no search key to avoid transliteration loading
         _ <- storage.assetsStorage.insertAll(u.picture.getOrElse(Seq.empty)) //TODO https://github.com/wireapp/android-project/issues/58
       } yield {})
@@ -306,6 +307,17 @@ class AccountManager(val userId:   UserId,
       case Left(ex) => CancellableFuture(None)
       case Right(hasPass) => CancellableFuture(Some(hasPass))
     }
+
+  def isReceivingNewsAndOffers: Future[Boolean] = {
+    verbose("isReceivingNewsAndOffers")
+    credentialsClient.isReceivingNewsAndOffers
+  }
+
+  def setReceivingNewsAndOffers(receiving: Boolean): ErrorOr[Unit] = {
+    verbose(s"setReceivingNewsAndOffers: $receiving")
+    val meta = global.metadata
+    credentialsClient.setReceivingNewsAndOffers(receiving, meta.majorVersion, meta.minorVersion).future
+  }
 }
 
 object AccountManager {
