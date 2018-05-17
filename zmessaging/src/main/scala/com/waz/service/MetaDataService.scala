@@ -41,6 +41,14 @@ class MetaDataService(context: Context) {
 
   lazy val appVersion = Try(context.getPackageManager.getPackageInfo(context.getPackageName, 0).versionCode).getOrElse(0)
 
+  lazy val versionName = Try(context.getPackageManager.getPackageInfo(context.getPackageName, 0).versionName).getOrElse("X.XX")
+
+  lazy val (majorVersion, minorVersion) = Try {
+    val vs = versionName.split('.').take(2)
+    (vs(0), vs(1))
+  }.getOrElse(("X", "XX"))
+
+
   lazy val internalBuild = metaData.getBoolean("INTERNAL", false)
 
   // rough check for device type, used in otr client info

@@ -21,10 +21,12 @@ import com.waz.ZLog._
 import com.waz.model.AccountData.Password
 import com.waz.model.{EmailAddress, Handle, PhoneNumber}
 import com.waz.threading.Threading
-import com.waz.utils.JsonEncoder
+import com.waz.utils.{JsonDecoder, JsonEncoder}
+import com.waz.znet.Response.{NotFoundStatus, SuccessHttpStatus}
 import com.waz.znet.ZNetClient.ErrorOrResponse
 import com.waz.znet._
-import com.waz.znet.Response.{SuccessHttpStatus, NotFoundStatus}
+
+import scala.concurrent.Future
 
 trait CredentialsUpdateClient {
 
@@ -38,43 +40,74 @@ trait CredentialsUpdateClient {
   def updateHandle(handle: Handle): ErrorOrResponse[Unit]
 
   def hasPassword(): ErrorOrResponse[Boolean]
+
+  def isReceivingNewsAndOffers: Future[Boolean]
+
+  def setReceivingNewsAndOffers(receiving: Boolean, majorVersion: String, minorVersion: String): ErrorOrResponse[Unit]
 }
 
 class CredentialsUpdateClientImpl(netClient: ZNetClient) extends CredentialsUpdateClient {
+  import CredentialsUpdateClient._
   import Threading.Implicits.Background
   private implicit val logTag: LogTag = logTagFor[CredentialsUpdateClientImpl]
 
   override def updateEmail(email: EmailAddress) =
-    netClient.updateWithErrorHandling("updateEmail", Request.Put(CredentialsUpdateClientImpl.emailPath, JsonEncoder { _.put("email", email.str) }))
+    netClient.updateWithErrorHandling("updateEmail", Request.Put(EmailPath, JsonEncoder { _.put("email", email.str) }))
 
   override def clearEmail() =
-    netClient.updateWithErrorHandling("clearEmail", Request.Delete[Unit](CredentialsUpdateClientImpl.emailPath))
+    netClient.updateWithErrorHandling("clearEmail", Request.Delete[Unit](EmailPath))
 
   override def updatePhone(phone: PhoneNumber) =
-    netClient.updateWithErrorHandling("updatePhone", Request.Put(CredentialsUpdateClientImpl.phonePath, JsonEncoder { _.put("phone", phone.str) }))
+    netClient.updateWithErrorHandling("updatePhone", Request.Put(PhonePath, JsonEncoder { _.put("phone", phone.str) }))
 
   override def clearPhone() =
-    netClient.updateWithErrorHandling("clearPhone", Request.Delete[Unit](CredentialsUpdateClientImpl.phonePath))
+    netClient.updateWithErrorHandling("clearPhone", Request.Delete[Unit](PhonePath))
 
   override def updatePassword(newPassword: Password, currentPassword: Option[Password]) =
-    netClient.updateWithErrorHandling("updatePassword", Request.Put(CredentialsUpdateClientImpl.passwordPath, JsonEncoder { o =>
+    netClient.updateWithErrorHandling("updatePassword", Request.Put(PasswordPath, JsonEncoder { o =>
       o.put("new_password", newPassword.str)
       currentPassword.map(_.str).foreach(o.put("old_password", _))
     }))
 
-  override def updateHandle(handle: Handle): ErrorOrResponse[Unit] =
-    netClient.updateWithErrorHandling("updateHandle", Request.Put(CredentialsUpdateClientImpl.handlePath, JsonEncoder { _.put("handle", handle.toString) }))
+  override def updateHandle(handle: Handle) =
+    netClient.updateWithErrorHandling("updateHandle", Request.Put(HandlePath, JsonEncoder { _.put("handle", handle.toString) }))
 
-  override def hasPassword(): ErrorOrResponse[Boolean] =
-    netClient.withErrorHandling("hasPassword", Request.Head(CredentialsUpdateClientImpl.passwordPath)) {
+  override def hasPassword() =
+    netClient.withErrorHandling("hasPassword", Request.Head(PasswordPath)) {
       case Response(SuccessHttpStatus(), _, _) => true
       case Response(NotFoundStatus(), _, _)    => false
     }
+
+  override def isReceivingNewsAndOffers =
+    netClient.withErrorHandling("isReceivingNewsAndOffers", Request.Get(ConsentPath)) {
+      case Response(SuccessHttpStatus(), JsonObjectResponse(json), _) =>
+        val results = JsonDecoder.array(json.getJSONArray("results"), {
+          case (arr, i) => (arr.getJSONObject(i).getInt("type"), arr.getJSONObject(i).getInt("value"))
+        }).toMap
+        results.get(ConsentTypeMarketing).contains(1)
+    }.future.map {
+      case Right(true) => true
+      case _           => false
+    }
+
+  override def setReceivingNewsAndOffers(receiving: Boolean, majorVersion: String, minorVersion: String) =
+    netClient.updateWithErrorHandling(s"setReceivingNewsAndOffers: $receiving", Request.Put(ConsentPath, JsonEncoder { o =>
+      o.put("type", ConsentTypeMarketing)
+      o.put("value", if (receiving) 1 else 0)
+      o.put("source", s"Android $majorVersion.$minorVersion")
+    }))
 }
 
-object CredentialsUpdateClientImpl {
-  val passwordPath = "/self/password"
-  val emailPath = "/self/email"
-  val phonePath = "/self/phone"
-  val handlePath = "/self/handle"
+object CredentialsUpdateClient {
+  val PasswordPath = "/self/password"
+  val EmailPath = "/self/email"
+  val PhonePath = "/self/phone"
+  val HandlePath = "/self/handle"
+
+  val ConsentPath = "/self/consent"
+
+  //https://github.com/wireapp/architecture/blob/master/topics/privacy/use_cases/clients/01-change-marketing-consent.md
+  //https://github.com/wireapp/architecture/blob/master/topics/privacy/use_cases/clients/02-ask-marketing-consent-at-registration.md
+  val ConsentTypeMarketing = 2
+
 }
