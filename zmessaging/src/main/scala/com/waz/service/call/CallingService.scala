@@ -300,7 +300,7 @@ class CallingService(val accountId:       UserId,
     *
     * @param isVideo will be discarded if call is already active
     */
-  def startCall(convId: ConvId, isVideo: Boolean = false): Future[Unit] = withConvAsync(convId) { (w, conv) =>
+  def startCall(convId: ConvId, isVideo: Boolean = false, forceOption: Boolean = false): Future[Unit] = withConvAsync(convId) { (w, conv) =>
     verbose(s"startCall $convId, $isVideo")
 
     for {
@@ -338,6 +338,8 @@ class CallingService(val accountId:       UserId,
               avs.answerCall(w, conv.remoteId, callType, !vbr)
               val active = call.updateState(SelfJoining).copy(joinedTime = None, estabTime = None, endReason = None) // reset previous call state if exists
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
+              if (forceOption)
+                setVideoSendState(convId, if (isVideo)  Avs.VideoState.Started else Avs.VideoState.Stopped)
             case None =>
               verbose("No active call, starting new call")
               avs.startCall(w, conv.remoteId, callType, convType, !vbr).map {
