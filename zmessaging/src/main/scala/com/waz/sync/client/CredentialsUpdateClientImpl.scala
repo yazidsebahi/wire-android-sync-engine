@@ -41,9 +41,9 @@ trait CredentialsUpdateClient {
 
   def hasPassword(): ErrorOrResponse[Boolean]
 
-  def isReceivingNewsAndOffers: Future[Boolean]
+  def hasMarketingConsent: Future[Boolean]
 
-  def setReceivingNewsAndOffers(receiving: Boolean, majorVersion: String, minorVersion: String): ErrorOrResponse[Unit]
+  def setMarketingConsent(receiving: Boolean, majorVersion: String, minorVersion: String): ErrorOrResponse[Unit]
 }
 
 class CredentialsUpdateClientImpl(netClient: ZNetClient) extends CredentialsUpdateClient {
@@ -78,7 +78,7 @@ class CredentialsUpdateClientImpl(netClient: ZNetClient) extends CredentialsUpda
       case Response(NotFoundStatus(), _, _)    => false
     }
 
-  override def isReceivingNewsAndOffers =
+  override def hasMarketingConsent =
     netClient.withErrorHandling("isReceivingNewsAndOffers", Request.Get(ConsentPath)) {
       case Response(SuccessHttpStatus(), JsonObjectResponse(json), _) =>
         val results = JsonDecoder.array(json.getJSONArray("results"), {
@@ -90,8 +90,8 @@ class CredentialsUpdateClientImpl(netClient: ZNetClient) extends CredentialsUpda
       case _           => false
     }
 
-  override def setReceivingNewsAndOffers(receiving: Boolean, majorVersion: String, minorVersion: String) =
-    netClient.updateWithErrorHandling(s"setReceivingNewsAndOffers: $receiving", Request.Put(ConsentPath, JsonEncoder { o =>
+  override def setMarketingConsent(receiving: Boolean, majorVersion: String, minorVersion: String) =
+    netClient.updateWithErrorHandling(s"setMarketingConsent: $receiving", Request.Put(ConsentPath, JsonEncoder { o =>
       o.put("type", ConsentTypeMarketing)
       o.put("value", if (receiving) 1 else 0)
       o.put("source", s"Android $majorVersion.$minorVersion")
