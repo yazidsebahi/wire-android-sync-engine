@@ -358,8 +358,9 @@ object GlobalPreferences {
 
   lazy val GPSErrorDialogShowCount = PrefKey[Int]("PREF_PLAY_SERVICES_ERROR_SHOW_COUNT")
 
-  lazy val ResetPushToken          = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
-  lazy val AnalyticsEnabled        = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
+  lazy val ResetPushToken             = PrefKey[Boolean]("RESET_PUSH_TOKEN", customDefault = true)
+  lazy val AnalyticsEnabled           = PrefKey[Boolean]("PREF_KEY_PRIVACY_ANALYTICS_ENABLED", customDefault = true)
+  lazy val ShowMarketingConsentDialog = PrefKey[Boolean]("show_marketing_consent_dialog", customDefault = true) //can be set to false by automation
 
   //DEPRECATED!!! Use the UserPreferences instead!!
   lazy val _ShareContacts          = PrefKey[Boolean]("PREF_KEY_PRIVACY_CONTACTS")
@@ -376,7 +377,9 @@ object UserPreferences {
 
   lazy val IsLogin                          = PrefKey[Boolean]("is_login")
   lazy val IsNewClient                      = PrefKey[Boolean]("is_new_client")
+
   lazy val CrashesAndAnalyticsRequestShown  = PrefKey[Boolean]("usage_data_permissions_shown", customDefault = true) //true to avoid harassing existing users
+  lazy val AskMarketingConsentAgain         = PrefKey[Boolean]("ask_marketing_consent_again") //used if the user views privacy policy instead of giving consent
 
   lazy val SelfClient                       = PrefKey[ClientRegistrationState]("self_client")
   lazy val PrivateMode                      = PrefKey[Boolean]("private_mode")

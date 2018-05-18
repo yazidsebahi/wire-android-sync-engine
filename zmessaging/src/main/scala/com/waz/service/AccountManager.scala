@@ -309,15 +309,22 @@ class AccountManager(val userId:   UserId,
       case Right(hasPass) => CancellableFuture(Some(hasPass))
     }
 
-  def isReceivingNewsAndOffers: Future[Boolean] = {
-    verbose("isReceivingNewsAndOffers")
-    credentialsClient.isReceivingNewsAndOffers
+  def hasMarketingConsent: Future[Boolean] = {
+    verbose("hasMarketingConsent")
+    credentialsClient.hasMarketingConsent
   }
 
-  def setReceivingNewsAndOffers(receiving: Boolean): ErrorOr[Unit] = {
-    verbose(s"setReceivingNewsAndOffers: $receiving")
-    val meta = global.metadata
-    credentialsClient.setReceivingNewsAndOffers(receiving, meta.majorVersion, meta.minorVersion).future
+  //receiving = None will set a preference so the app knows to ask again
+  def setMarketingConsent(receiving: Option[Boolean]): ErrorOr[Unit] = {
+    verbose(s"setMarketingConsent: $receiving")
+    receiving match {
+      case Some(v) =>
+        val meta = global.metadata
+        credentialsClient.setMarketingConsent(v, meta.majorVersion, meta.minorVersion).future
+      case _ =>
+        (userPrefs(AskMarketingConsentAgain) := true).map(_ => Right({}))
+    }
+
   }
 }
 
