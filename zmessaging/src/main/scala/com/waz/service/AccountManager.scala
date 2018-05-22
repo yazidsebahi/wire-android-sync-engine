@@ -320,7 +320,13 @@ class AccountManager(val userId:   UserId,
     receiving match {
       case Some(v) =>
         val meta = global.metadata
-        credentialsClient.setMarketingConsent(v, meta.majorVersion, meta.minorVersion).future
+        for {
+          resp <- credentialsClient.setMarketingConsent(v, meta.majorVersion, meta.minorVersion).future
+          _    <- resp match {
+            case Right(_) => (userPrefs(AskMarketingConsentAgain) := false).map(_ => Right({}))
+            case _ => Future.successful({})
+          }
+        } yield resp
       case _ =>
         (userPrefs(AskMarketingConsentAgain) := true).map(_ => Right({}))
     }
