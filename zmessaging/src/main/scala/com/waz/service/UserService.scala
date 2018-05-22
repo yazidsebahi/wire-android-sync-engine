@@ -39,6 +39,7 @@ import com.waz.sync.client.{CredentialsUpdateClient, UsersClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events._
 import com.waz.utils.wrappers.AndroidURIUtil
+import com.waz.utils.RichFutureEither
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.ZNetClient.ErrorOr
 
@@ -292,7 +293,10 @@ class UserServiceImpl(selfUserId:        UserId,
 
   override def clearPhone(): ErrorOr[Unit] = {
     verbose(s"clearPhone")
-    credentialsClient.clearPhone().future
+    for {
+      resp <- credentialsClient.clearPhone().future
+      _    <- resp.mapFuture(_ => usersStorage.update(selfUserId, _.copy(phone = None)).map(_ => {}))
+    } yield resp
   }
 
   override def changePassword(newPassword: Password, currentPassword: Password) = {
