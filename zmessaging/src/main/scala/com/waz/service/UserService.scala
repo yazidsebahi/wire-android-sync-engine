@@ -39,6 +39,7 @@ import com.waz.sync.client.{CredentialsUpdateClient, UsersClient}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
 import com.waz.utils.events._
 import com.waz.utils.wrappers.AndroidURIUtil
+import com.waz.utils.RichFutureEither
 import com.waz.utils.{RichInstant, _}
 import com.waz.znet.ZNetClient.ErrorOr
 
@@ -135,10 +136,22 @@ class UserServiceImpl(selfUserId:        UserId,
 
   lazy val lastSlowSyncTimestamp = preference(LastSlowSyncTimeKey)
 
-  override val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent]((_, e) => for {
-      _ <- updateSyncedUsers(e.filterNot(_.removeIdentity).map(_.user)(breakOut))
+  override val userUpdateEventsStage: Stage.Atomic = EventScheduler.Stage[UserUpdateEvent] { (_, e) =>
+    val (removeEvents, updateEvents) = e.partition(_.removeIdentity)
+    for {
+      _ <- updateSyncedUsers(updateEvents.map(_.user))
+      _ <- {
+        val updaters = removeEvents.map(_.user).map { ui =>
+          ui.id -> ((userData: UserData) => userData.copy(
+            email = if (ui.email.nonEmpty) None else userData.email,
+            phone = if (ui.phone.nonEmpty) None else userData.phone
+          ))
+        }.toMap
+
+        usersStorage.updateAll(updaters)
+      }
     } yield {}
-  )
+  }
 
   override val userDeleteEventsStage: Stage.Atomic = EventScheduler.Stage[UserDeleteEvent] { (c, e) =>
     //TODO handle deleting db and stuff?
@@ -292,7 +305,10 @@ class UserServiceImpl(selfUserId:        UserId,
 
   override def clearPhone(): ErrorOr[Unit] = {
     verbose(s"clearPhone")
-    credentialsClient.clearPhone().future
+    for {
+      resp <- credentialsClient.clearPhone().future
+      _    <- resp.mapFuture(_ => usersStorage.update(selfUserId, _.copy(phone = None)).map(_ => {}))
+    } yield resp
   }
 
   override def changePassword(newPassword: Password, currentPassword: Password) = {
