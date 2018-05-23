@@ -41,12 +41,13 @@ import org.scalatest._
   val smallestSearchResult = AssetData(metaData = Some(Image(Dim2(100, 120), Preview)), mime = Mime.Image.Gif, source =  Some(URI.parse("http://s3.amazonaws.com/giphygifs/media/Ggjwvmqktuvf2/200_d.gif")))
   val searchResult = Seq((Some(smallestSearchResult), biggestSearchResult))
 
-  lazy val service = new GiphyService(new GiphyClient(new EmptyClient) {
+  lazy val service = new GiphyService(new GiphyClient {
     override def loadRandom() = CancellableFuture.successful(loadRandomResult)
     override def search(keyword: String, offset: Int, limit: Int) = {
       test.keyword = keyword
       CancellableFuture.successful(loadSearchResult)
     }
+    override def loadTrending(offset: Int, limit: Int): CancellableFuture[Seq[(Option[AssetData], AssetData)]] = ???
   })
 
   feature("random") {
