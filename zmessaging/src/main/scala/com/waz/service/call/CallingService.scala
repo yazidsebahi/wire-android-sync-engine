@@ -270,8 +270,8 @@ class CallingService(val accountId:       UserId,
     CancellableFuture {
       verbose(s"video state changed: $videoReceiveState")
       updateActiveCall { activeCall =>
-        val newState = activeCall.videoReceiveState + (UserId(userId) -> videoReceiveState)
-        activeCall.copy(videoReceiveState = newState)
+        val newState = activeCall.videoReceiveStates + (UserId(userId) -> videoReceiveState)
+        activeCall.copy(videoReceiveStates = newState)
       }("onVideoStateChanged")
     }
   }

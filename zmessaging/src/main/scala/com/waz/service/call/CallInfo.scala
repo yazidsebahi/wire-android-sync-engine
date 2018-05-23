@@ -42,7 +42,7 @@ case class CallInfo(convId:             ConvId,
                     isCbrEnabled:       Boolean                           = false,
                     startedAsVideoCall: Boolean                           = false,
                     videoSendState:     VideoState                        = VideoState.Stopped,
-                    videoReceiveState:  Map[UserId, VideoState]           = Map.empty,
+                    videoReceiveStates: Map[UserId, VideoState]           = Map.empty,
                     startTime:          Instant                           = clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
                     joinedTime:         Option[Instant]                   = None, //the time the call was joined, if any
                     estabTime:          Option[Instant]                   = None, //the time that a joined call was established, if any
@@ -65,7 +65,7 @@ case class CallInfo(convId:             ConvId,
        | isCbrEnabled:       $isCbrEnabled
        | startedAsVideoCall: $startedAsVideoCall
        | videoSendState:     $videoSendState
-       | videoReceiveState:  $videoReceiveState
+       | videoReceiveStates: $videoReceiveStates
        | startTime:          $startTime
        | estabTime:          $estabTime
        | endTime:            $endTime
@@ -94,6 +94,10 @@ case class CallInfo(convId:             ConvId,
       f"$minutes%02d:$seconds%02d"
     case None => ""
   }
+
+  val allVideoReceiveStates = videoReceiveStates + (account -> videoSendState)
+
+  val isVideoCall = allVideoReceiveStates.exists(_._2 != Stopped)
 
 }
 
