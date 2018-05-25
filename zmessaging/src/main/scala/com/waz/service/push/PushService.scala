@@ -44,6 +44,7 @@ import org.threeten.bp.{Duration, Instant}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 
 /** PushService handles notifications coming from FCM, WebSocket, and fetch.
@@ -172,12 +173,13 @@ class PushServiceImpl(userId:               UserId,
               }
             }
         }
-      }.andThen {
-        case Success(_) => processStoredNotifications()
-        case Failure(ex) =>
-          processing ! false
-          throw ex
-      }.map(_ => ())
+      }
+        .flatMap(_ => processStoredNotifications())
+        .recover {
+          case NonFatal(ex) =>
+            processing ! false
+            error("Failed to process notifications", ex)
+        }
     }
 
   private def isOtrEventJson(ev: JSONObject) =
@@ -194,17 +196,18 @@ class PushServiceImpl(userId:               UserId,
         Some(EventDecoder(event.event))
       }
 
-    def processRows(): Future[Unit] =
+    def processRows(): Future[Unit] = {
       notificationStorage.getDecryptedRows().flatMap { rows =>
         verbose(s"Processing ${rows.size} rows")
-        if (!rows.isEmpty) {
-          pipeline(rows.flatMap(decodeRow))
-            .flatMap(_ => notificationStorage.removeRows(rows.map(_.index)))
-            .flatMap(_ => processRows())
-        } else {
-          Future.successful(())
-        }
+        if (rows.nonEmpty)
+          for {
+            _ <- pipeline(rows.flatMap(decodeRow))
+            _ <- notificationStorage.removeRows(rows.map(_.index))
+            _ <- processRows()
+          } yield {}
+        else Future.successful(())
       }
+    }
 
     processRows().andThen { case _ => processing ! false }
   }

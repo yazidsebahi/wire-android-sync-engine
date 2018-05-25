@@ -247,6 +247,8 @@ class MessageEventProcessor(selfUserId:          UserId,
         content(MessageId(uid.str), msgContent, from, time.instant, sanitized)
       case GenericAssetEvent(_, time, from, proto @ GenericMessage(uid, msgContent), dataId, data) =>
         assetContent(MessageId(uid.str), msgContent, from, time.instant, proto)
+      case _:CallMessageEvent =>
+        MessageData.Empty
       case _ =>
         warn(s"Unexpected event for addMessage: $event")
         MessageData.Empty
