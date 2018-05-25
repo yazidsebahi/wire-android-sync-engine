@@ -23,11 +23,12 @@ import com.waz.service.ZMessaging.clock
 import com.waz.service.call.Avs.AvsClosedReason
 import com.waz.service.call.Avs.VideoState
 import com.waz.service.call.Avs.VideoState._
-import com.waz.service.call.CallInfo.CallState.{SelfConnected, SelfJoining}
+import com.waz.service.call.CallInfo.CallState.{OtherCalling, SelfCalling, SelfConnected, SelfJoining}
 import com.waz.service.call.CallInfo.{CallState, EndedReason}
 import com.waz.utils.events.{ClockSignal, Signal}
 import org.threeten.bp.Duration.between
 import org.threeten.bp.{Duration, Instant}
+
 import scala.concurrent.duration._
 
 case class CallInfo(convId:             ConvId,
@@ -98,6 +99,15 @@ case class CallInfo(convId:             ConvId,
   val allVideoReceiveStates = videoReceiveStates + (account -> videoSendState)
 
   val isVideoCall = allVideoReceiveStates.exists(_._2 != Stopped)
+
+  val stateCollapseJoin = (state, prevState) match {
+    case (Some(OtherCalling),  _)                  => Some(OtherCalling)
+    case (Some(SelfCalling),   _)                  => Some(SelfCalling)
+    case (Some(SelfConnected), _)                  => Some(SelfConnected)
+    case (Some(SelfJoining),   Some(OtherCalling)) => Some(OtherCalling)
+    case (Some(SelfJoining),   Some(SelfCalling))  => Some(SelfCalling)
+    case _ => None
+  }
 
 }
 
