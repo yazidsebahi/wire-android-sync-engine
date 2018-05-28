@@ -28,7 +28,6 @@ import com.waz.model.ConversationData.ConversationDataDao
 import com.waz.model.ConversationMemberData.ConversationMemberDataDao
 import com.waz.model.EditHistory.EditHistoryDao
 import com.waz.model.ErrorData.ErrorDataDao
-import com.waz.model.InvitedContacts.InvitedContactsDao
 import com.waz.model.KeyValueData.KeyValueDataDao
 import com.waz.model.Liking.LikingDao
 import com.waz.model.MessageContentIndexDao
@@ -53,13 +52,13 @@ class ZMessagingDB(context: Context, dbName: String) extends DaoDB(context.getAp
 }
 
 object ZMessagingDB {
-  val DbVersion = 105
+  val DbVersion = 106
 
   lazy val daos = Seq (
     UserDataDao, SearchQueryCacheDao, AssetDataDao, ConversationDataDao,
     ConversationMemberDataDao, MessageDataDao, KeyValueDataDao,
     SyncJobDao, NotificationDataDao, ErrorDataDao, ReceivedPushDataDao,
-    ContactHashesDao, ContactsOnWireDao, InvitedContactsDao, UserClientsDao, LikingDao,
+    ContactHashesDao, ContactsOnWireDao, UserClientsDao, LikingDao,
     ContactsDao, EmailAddressesDao, PhoneNumbersDao, MsgDeletionDao,
     EditHistoryDao, MessageContentIndexDao, PushNotificationEventsDao
   )
@@ -209,6 +208,9 @@ object ZMessagingDB {
       db.execSQL("INSERT INTO PushNotificationEventsCopy (pushId, decrypted, event, plain, transient) SELECT pushid, decrypted, event, plain, transient FROM PushNotificationEvents;")
       db.execSQL("DROP TABLE PushNotificationEvents;")
       db.execSQL("ALTER TABLE PushNotificationEventsCopy RENAME TO PushNotificationEvents;")
+    },
+    Migration(105, 106) { db =>
+      db.execSQL("DROP TABLE IF EXISTS InvitedContacts")
     }
   )
 }
