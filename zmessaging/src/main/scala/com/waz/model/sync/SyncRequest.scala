@@ -27,6 +27,7 @@ import com.waz.model.UserData.ConnectionStatus
 import com.waz.model.otr.ClientId
 import com.waz.model.{Availability, SearchQuery, _}
 import com.waz.service.ZMessaging
+import com.waz.service.tracking.TrackingService
 import com.waz.sync.client.{ConversationsClient, UsersClient}
 import com.waz.sync.queue.SyncJobMerger._
 import com.waz.utils._
@@ -389,7 +390,7 @@ object SyncRequest {
       } catch {
         case NonFatal(e) =>
           error(s"Error reading SyncCommand: $cmd", e)
-          ZMessaging.exceptionEvent(e, s"Error reading SyncCommand: $cmd")
+          TrackingService.exception(e, s"Error reading SyncCommand: $cmd")
           Unknown
       }
     }

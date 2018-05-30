@@ -107,6 +107,12 @@ class DeviceActor(val deviceName: String,
     ZMessaging.currentGlobal = this
     lifecycle.acquireUi()
 
+    override lazy val accountsService = new AccountsServiceImpl(this) {
+      ZMessaging.currentAccounts = this
+      Await.ready(prefs(GlobalPreferences.FirstTimeWithTeams) := false, 5.seconds)
+      Await.ready(prefs(GlobalPreferences.DatabasesRenamed) := true, 5.seconds)
+    }
+
     override lazy val storage: Database = new GlobalDatabase(application, Random.nextInt().toHexString)
     override lazy val clientWrapper: Future[ClientWrapper] = wrapper
 
@@ -136,17 +142,11 @@ class DeviceActor(val deviceName: String,
       override def isSpeakerOn = Signal.empty[Boolean]
       override def setSpeaker(enable: Boolean) = Future.successful({})
     }
-
-
   }
 
-  val accountsService = new AccountsServiceImpl(globalModule) {
-    ZMessaging.currentAccounts = this
-    Await.ready(prefs(GlobalPreferences.FirstTimeWithTeams) := false, 5.seconds)
-    Await.ready(prefs(GlobalPreferences.DatabasesRenamed) := true, 5.seconds)
-  }
+  val accountsService = globalModule.accountsService
 
-  val ui = returning(new UiModule(accountsService)) { ui =>
+  val ui = returning(new UiModule(globalModule)) { ui =>
     ui.onStart()
   }
 

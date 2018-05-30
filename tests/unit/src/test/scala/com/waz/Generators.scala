@@ -181,7 +181,6 @@ object Generators {
       arbitrary[PostConvLeave],
       arbitrary[DeletePushToken],
       arbitrary[PostAddressBook],
-      arbitrary[PostInvitation],
       arbitrary[SyncPreKeys]))
 
     implicit lazy val arbUserBasedSyncRequest: Arbitrary[RequestForUser] = Arbitrary(oneOf(
@@ -220,7 +219,6 @@ object Generators {
     implicit lazy val arbPostConvLeaveSyncRequest: Arbitrary[PostConvLeave] = Arbitrary(resultOf(PostConvLeave))
     implicit lazy val arbConnectionSyncRequest: Arbitrary[PostConnection] = Arbitrary(resultOf(PostConnection))
     implicit lazy val arbAddressBookSyncRequest: Arbitrary[PostAddressBook] = Arbitrary(resultOf(PostAddressBook))
-    implicit lazy val arbInvitationSyncRequest: Arbitrary[PostInvitation] = Arbitrary(resultOf(PostInvitation))
     implicit lazy val arbPostLiking: Arbitrary[PostLiking] = Arbitrary(resultOf(PostLiking))
     implicit lazy val arbSyncPreKey: Arbitrary[SyncPreKeys] = Arbitrary(resultOf(SyncPreKeys))
     implicit lazy val arbPostAssetStatus: Arbitrary[PostAssetStatus] = Arbitrary(resultOf(PostAssetStatus))
