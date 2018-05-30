@@ -24,7 +24,7 @@ import com.waz.content.Database
 import com.waz.model.PushNotificationEvents.PushNotificationEventsDao
 import com.waz.model._
 import com.waz.model.otr.ClientId
-import com.waz.service.push.PushNotificationEventsStorage.{EventIndex, PlainWriter}
+import com.waz.service.push.PushNotificationEventsStorage.{EventHandler, EventIndex, PlainWriter}
 import com.waz.sync.client.PushNotificationEncoded
 import com.waz.threading.SerialDispatchQueue
 import com.waz.utils.TrimmingLruCache.Fixed
@@ -38,6 +38,8 @@ import scala.concurrent.Future
 object PushNotificationEventsStorage {
   type PlainWriter = Array[Byte] => Future[Unit]
   type EventIndex = Int
+
+  type EventHandler = () => Future[Unit]
 }
 
 trait PushNotificationEventsStorage extends CachedStorage[EventIndex, PushNotificationEvent] {
@@ -47,7 +49,7 @@ trait PushNotificationEventsStorage extends CachedStorage[EventIndex, PushNotifi
   def saveAll(pushNotifications: Seq[PushNotificationEncoded]): Future[Unit]
   def encryptedEvents: Future[Seq[PushNotificationEvent]]
   def removeRows(rows: Iterable[Int]): Future[Unit]
-  def registerEventHandler(handler: () => Future[Unit])(implicit ec: EventContext): Future[Unit]
+  def registerEventHandler(handler: EventHandler)(implicit ec: EventContext): Future[Unit]
   def getDecryptedRows(limit: Int = 50): Future[IndexedSeq[PushNotificationEvent]]
 }
 
@@ -110,7 +112,7 @@ class PushNotificationEventsStorageImpl(context: Context, storage: Database, cli
 
   //This method is called once on app start, so invoke the handler in case there are any events to be processed
   //This is safe as the handler only allows one invocation at a time.
-  override def registerEventHandler(handler: () => Future[Unit])(implicit ec: EventContext): Future[Unit] = {
+  override def registerEventHandler(handler: EventHandler)(implicit ec: EventContext): Future[Unit] = {
     onAdded(_ => handler())
     processStoredEvents(handler)
   }
