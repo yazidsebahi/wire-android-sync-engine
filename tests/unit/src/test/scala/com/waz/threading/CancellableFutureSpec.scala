@@ -24,6 +24,7 @@ import com.waz.ZLog.LogTag
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.Matchers._
 import com.waz.threading.CancellableFuture.CancelException
+import com.waz.utils.returning
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
@@ -503,19 +504,19 @@ class CancellableFutureSpec extends AndroidFreeSpec {
 
       override def reportFailure(cause: Throwable): Unit = {
         ZLog.error("Test failed!", cause)
-        fail(cause)
       }
     }
 
-    val f = Future {
+    def f = returning(Future {
       ZLog.verbose("What...")("TEST")
       throw new Exception("failed the test")
       ZLog.verbose("What...2")("TEST")
     } (dispatcher)
+    )(_.failed.foreach(throw _)(dispatcher))
 
-    f.foreach(_ => ZLog.verbose("now?"))(dispatcher)
+    val f2 = f.map(_ => println("won't print - will however prevent app crashing..."))(dispatcher)
 
-//    result(f)
+//    result(f2)
 
 //    Thread.sleep(3000)
 
