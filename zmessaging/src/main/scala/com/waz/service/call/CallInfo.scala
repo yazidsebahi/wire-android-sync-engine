@@ -18,6 +18,7 @@
 package com.waz.service.call
 
 import com.sun.jna.Pointer
+import com.waz.ZLog
 import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.ZMessaging.clock
 import com.waz.service.call.Avs.AvsClosedReason
@@ -44,6 +45,7 @@ case class CallInfo(convId:             ConvId,
                     startedAsVideoCall: Boolean                           = false,
                     videoSendState:     VideoState                        = VideoState.Stopped,
                     videoReceiveStates: Map[UserId, VideoState]           = Map.empty,
+                    wasVideoToggled:    Boolean                           = false, //for tracking
                     startTime:          Instant                           = clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
                     joinedTime:         Option[Instant]                   = None, //the time the call was joined, if any
                     estabTime:          Option[Instant]                   = None, //the time that a joined call was established, if any
@@ -67,21 +69,13 @@ case class CallInfo(convId:             ConvId,
        | startedAsVideoCall: $startedAsVideoCall
        | videoSendState:     $videoSendState
        | videoReceiveStates: $videoReceiveStates
+       | wasVideoToggled:    $wasVideoToggled
        | startTime:          $startTime
        | estabTime:          $estabTime
        | endTime:            $endTime
        | endedReason:        $endReason
        | hasOutstandingMsg:  ${outstandingMsg.isDefined}
     """.stripMargin
-
-  def updateState(callState: CallState): CallInfo = {
-    val withState = copy(state = Some(callState), prevState = this.state)
-    callState match {
-      case SelfJoining => withState.copy(joinedTime = Some(clock.instant()))
-      case SelfConnected => withState.copy(estabTime = Some(clock.instant()))
-      case _ => withState
-    }
-  }
 
   val duration = estabTime match {
     case Some(est) => ClockSignal(1.second).map(_ => Option(between(est, clock.instant())))
@@ -107,6 +101,27 @@ case class CallInfo(convId:             ConvId,
     case (Some(SelfJoining),   Some(OtherCalling)) => Some(OtherCalling)
     case (Some(SelfJoining),   Some(SelfCalling))  => Some(SelfCalling)
     case _ => None
+  }
+
+  def updateCallState(callState: CallState): CallInfo = {
+    val withState = copy(state = Some(callState), prevState = this.state)
+    callState match {
+      case SelfJoining => withState.copy(joinedTime = Some(clock.instant()))
+      case SelfConnected => withState.copy(estabTime = Some(clock.instant()))
+      case _ => withState
+    }
+  }
+
+  def updateVideoState(userId: UserId, videoState: VideoState): CallInfo = {
+
+    val newCall: CallInfo =
+      if (userId == account) this.copy(videoSendState = videoState)
+      else this.copy(videoReceiveStates = this.videoReceiveStates + (userId -> videoState))
+
+    ZLog.verbose(s"updateVideoSendState: $userId, $videoState, newCall: $newCall")("CallInfo")
+
+    val wasVideoToggled = newCall.wasVideoToggled || (newCall.isVideoCall != this.isVideoCall)
+    newCall.copy(wasVideoToggled = wasVideoToggled)
   }
 
 }

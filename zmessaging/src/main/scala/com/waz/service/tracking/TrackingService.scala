@@ -161,6 +161,9 @@ class TrackingServiceImpl(curAccount: Signal[Option[UserId]], zmsProvider: ZmsPr
         warn(s"Unexpected call state change: ${callInfo.prevState} => ${callInfo.state}, not tracking")
         None
     }).fold(Future.successful({})) { eventName =>
+
+      val callEnded = callInfo.state.isEmpty && callInfo.prevState.isDefined
+
       for {
         Some(z)  <- zmsProvider(Some(userId))
         isGroup  <- z.conversations.isGroupConversation(callInfo.convId)
@@ -184,7 +187,8 @@ class TrackingServiceImpl(curAccount: Signal[Option[UserId]], zmsProvider: ZmsPr
             Option(callInfo.maxParticipants).filter(_ > 0),
             callInfo.estabTime.map(est => callInfo.joinedTime.getOrElse(est).until(est)),
             callInfo.endTime.map(end => callInfo.estabTime.getOrElse(end).until(end)),
-            callInfo.endReason
+            callInfo.endReason,
+            if (callEnded) Some(callInfo.wasVideoToggled) else None
           ))
       } yield {}
     }

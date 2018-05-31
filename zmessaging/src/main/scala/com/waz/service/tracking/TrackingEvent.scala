@@ -252,21 +252,23 @@ class CallingEvent(partName:              String,
                    callParticipantsCount: Option[Int]         = None,
                    setupTime:             Option[Duration]    = None,
                    callDuration:          Option[Duration]    = None,
-                   endReason:             Option[EndedReason] = None) extends TrackingEvent {
+                   endReason:             Option[EndedReason] = None,
+                   videoAudioToggled:     Option[Boolean]     = None) extends TrackingEvent {
 
-  override lazy val name = s"calling.$partName${if (video) "_video" else ""}_call"
+  override lazy val name = s"calling.${partName}_call"
   override val props = Some(returning(new JSONObject()) { o =>
     o.put("conversation_type", if (isGroup) "group" else "one_to_one")
     o.put("conversation_participants", groupMemberCount)
     o.put("with_service", withService)
+    o.put("is_video", video)
 
     o.put("app_is_active", uiActive)
     o.put("direction", if (incoming) "incoming" else "outgoing")
 
     guestsAllowed.foreach(v => o.put("is_allow_guests", v))
-    callParticipantsCount.foreach(v => o.put("conversation_participants_in_call", v))
-    setupTime.foreach(v => o.put("setup_time", v.getSeconds))
+    callParticipantsCount.foreach(v => o.put("conversation_max_participants_in_call", v))
     callDuration.foreach(v => o.put("duration", v.getSeconds))
+    videoAudioToggled.foreach(v => o.put("AV_switch_toggled", v))
 
     import EndedReason._
     endReason.foreach(v => o.put("reason", v match {

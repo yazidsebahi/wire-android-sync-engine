@@ -171,7 +171,7 @@ class CallingService(val accountId:       UserId,
   def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { (_, conv) =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     updateActiveCall {
-      case call if call.convId == conv.id => call.updateState(SelfJoining)
+      case call if call.convId == conv.id => call.updateCallState(SelfJoining)
       case call => warn("Other side answered non-active call, ignoring"); call
     }("onOtherSideAnsweredCall")
   }
@@ -188,7 +188,7 @@ class CallingService(val accountId:       UserId,
       setCallMuted(c.muted) //Need to set muted only after call is established
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
       val others = c.others + userId - accountId
-      c.updateState(SelfConnected).copy(others = others, maxParticipants = others.size + 1)
+      c.updateCallState(SelfConnected).copy(others = others, maxParticipants = others.size + 1)
     }("onEstablishedCall")
   }
 
@@ -238,7 +238,7 @@ class CallingService(val accountId:       UserId,
       }
 
       //Group calls that you don't answer (but are answered by other users) will be "closed" with reason StillOngoing. We need to keep these around so the user can join them later
-      val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.updateState(Ongoing)) else None
+      val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.updateCallState(Ongoing)) else None
       p.copy(activeId = newActive, callUpdated.fold(p.availableCalls - conv.id)(c => p.availableCalls + (conv.id -> c)))
     }
     closingPromise.foreach(_.tryComplete(Success({})))
@@ -269,10 +269,7 @@ class CallingService(val accountId:       UserId,
   def onVideoStateChanged(userId: String, videoReceiveState: VideoState) = Serialized.apply(self) {
     CancellableFuture {
       verbose(s"video state changed: $videoReceiveState")
-      updateActiveCall { activeCall =>
-        val newState = activeCall.videoReceiveStates + (UserId(userId) -> videoReceiveState)
-        activeCall.copy(videoReceiveStates = newState)
-      }("onVideoStateChanged")
+      updateActiveCall(_.updateVideoState(UserId(userId), videoReceiveState))("onVideoStateChanged")
     }
   }
 
@@ -325,7 +322,7 @@ class CallingService(val accountId:       UserId,
             case Some(OtherCalling) =>
               verbose(s"Answering call")
               avs.answerCall(w, conv.remoteId, callType, !vbr)
-              updateActiveCall(_.updateState(SelfJoining))("startCall/OtherCalling")
+              updateActiveCall(_.updateCallState(SelfJoining))("startCall/OtherCalling")
             case _ =>
               warn("Tried to join an already joined/connecting call - ignoring")
           }
@@ -336,7 +333,7 @@ class CallingService(val accountId:       UserId,
             case Some(call) =>
               verbose("Joining an ongoing background call")
               avs.answerCall(w, conv.remoteId, callType, !vbr)
-              val active = call.updateState(SelfJoining).copy(joinedTime = None, estabTime = None, endReason = None) // reset previous call state if exists
+              val active = call.updateCallState(SelfJoining).copy(joinedTime = None, estabTime = None, endReason = None) // reset previous call state if exists
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
               if (forceOption)
                 setVideoSendState(convId, if (isVideo)  Avs.VideoState.Started else Avs.VideoState.Stopped)
@@ -428,11 +425,11 @@ class CallingService(val accountId:       UserId,
   }
 
   def setVideoSendState(convId: ConvId, state: VideoState.Value): Unit = {
-    verbose(s"setVideoSendActive: $convId, $state")
     withConv(convId) { (w, conv) =>
+      verbose(s"setVideoSendActive: $convId, $state")
       updateCallInfo(convId, { c =>
         avs.setVideoSendState(w, conv.remoteId, state)
-        c.copy(videoSendState = state)
+        c.updateVideoState(accountId, state)
       })("setVideoSendState")
     }
   }
