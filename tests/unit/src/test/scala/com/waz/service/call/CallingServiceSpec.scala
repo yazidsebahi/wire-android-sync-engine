@@ -25,14 +25,14 @@ import com.waz.model.ConversationData.ConversationType
 import com.waz.model.otr.ClientId
 import com.waz.model.{UserId, _}
 import com.waz.service.call.Avs.AvsClosedReason.{AnsweredElsewhere, Normal, StillOngoing}
-import com.waz.service.call.Avs.{WCall, WCallConvType, WCallType}
+import com.waz.service.call.Avs.{VideoState, WCall, WCallConvType, WCallType}
 import com.waz.service.call.CallInfo.CallState._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.{MediaManagerService, NetworkModeService}
 import com.waz.specs.AndroidFreeSpec
 import com.waz.testutils.TestUserPreferences
-import com.waz.threading.{CancellableFuture, SerialDispatchQueue, Threading}
+import com.waz.threading.{SerialDispatchQueue, Threading}
 import com.waz.utils.events.Signal
 import com.waz.utils.wrappers.Context
 import com.waz.utils.{RichInstant, Serialized}
@@ -572,6 +572,53 @@ class CallingServiceSpec extends AndroidFreeSpec {
       map("version")   shouldEqual "avs 3.5.37 (arm/linux)"
       map("direction") shouldEqual "Outgoing"
     }
+
+    scenario("Toggling audio or video state during a call sets wasVideoToggled to true for the rest of the call") {
+
+      val otherUser = UserId("otherUser")
+      val _1t1Conv = ConversationData(ConvId(otherUser.str), RConvId(), Some("1:1 Conv"), account1Id, ConversationType.OneToOne)
+
+      (convs.convByRemoteId _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
+      (convs.convById _).expects(*).anyNumberOfTimes().returning(Future.successful(Some(_1t1Conv)))
+      (convsService.isGroupConversation _).expects(*).anyNumberOfTimes().returning(Future.successful(false))
+      (members.getActiveUsers _).expects(*).anyNumberOfTimes().returning(Future.successful(Seq(otherUser)))
+
+      val lastTrackedCall = Signal[CallInfo]()
+      (tracking.trackCallState _).expects(*, *, *).anyNumberOfTimes().onCall { (user, call, _) =>
+        Future(lastTrackedCall ! call)
+      }
+
+      val service = initCallingService()
+      val checkpoint1 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state.contains(SelfCalling) && cur.caller == account1Id && cur.others == Set(otherUser)))
+      val checkpoint2 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state.contains(SelfJoining) && cur.caller == account1Id && cur.others == Set(otherUser)))
+      val checkpoint3 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(cur => cur.convId == _1t1Conv.id && cur.state.contains(SelfConnected) && cur.caller == account1Id && cur.others == Set(otherUser)))
+      val checkpoint4 = callCheckpoint(service, _.contains(_1t1Conv.id), _.exists(_.isVideoCall))
+      val checkpoint5 = callCheckpoint(service, _.isEmpty, _.isEmpty)
+
+      (avs.startCall _).expects(*, *, *, *, *).once().returning(Future.successful(0))
+      (avs.endCall _).expects(*, *).once().onCall { (_: WCall, convId: RConvId) =>
+        service.onClosedCall(Avs.AvsClosedReason.Normal, convId, clock.instant(), account1Id)
+      }
+      (avs.setVideoSendState _).expects(*, *, *).twice()
+
+      service.startCall(_1t1Conv.id)
+      result(checkpoint1.head)
+
+      service.onOtherSideAnsweredCall(_1t1Conv.remoteId)
+      result(checkpoint2.head)
+
+      service.onEstablishedCall(_1t1Conv.remoteId, otherUser)
+      result(checkpoint3.head)
+
+      service.setVideoSendState(_1t1Conv.id, VideoState.Started)
+      result(checkpoint4.head)
+
+      service.endCall(_1t1Conv.id)
+      result(checkpoint5.head)
+
+      result(lastTrackedCall.filter(_.wasVideoToggled).head) //check that wasVideoToggled gets set at least once
+
+    }
   }
 
   scenario("Test...") {
@@ -628,7 +675,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   def initCallingService(wCall: WCall = new Pointer(0L)) = {
     val prefs = new TestUserPreferences()
     (context.startService _).expects(*).anyNumberOfTimes().returning(true)
-    (tracking.trackCallState _).expects(account1Id, *).anyNumberOfTimes()
+    (tracking.trackCallState _).expects(account1Id, *, *).anyNumberOfTimes()
     (flows.flowManager _).expects().once().returning(None)
     (messages.addMissedCallMessage(_:RConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))
     (messages.addMissedCallMessage(_:ConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))

@@ -21,7 +21,6 @@ package com.waz.service.call
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.service.call.Avs.VideoState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.{MembersStorage, UserPreferences}
 import com.waz.model.otr.ClientId
@@ -29,9 +28,9 @@ import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service.ZMessaging.clock
 import com.waz.service._
 import com.waz.service.call.Avs.AvsClosedReason.{StillOngoing, reasonString}
+import com.waz.service.call.Avs.VideoState._
 import com.waz.service.call.Avs.{AvsClosedReason, VideoState, WCall}
 import com.waz.service.call.CallInfo.CallState._
-import com.waz.service.call.CallInfo.EndedReason._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
@@ -171,7 +170,7 @@ class CallingService(val accountId:       UserId,
   def onOtherSideAnsweredCall(convId: RConvId) = withConv(convId) { (_, conv) =>
     verbose(s"outgoing call answered for conv: ${conv.id}")
     updateActiveCall {
-      case call if call.convId == conv.id => call.updateState(SelfJoining)
+      case call if call.convId == conv.id => call.updateCallState(SelfJoining)
       case call => warn("Other side answered non-active call, ignoring"); call
     }("onOtherSideAnsweredCall")
   }
@@ -188,7 +187,7 @@ class CallingService(val accountId:       UserId,
       setCallMuted(c.muted) //Need to set muted only after call is established
       //on est. group call, switch from self avatar to other user now in case `onGroupChange` is delayed
       val others = c.others + userId - accountId
-      c.updateState(SelfConnected).copy(others = others, maxParticipants = others.size + 1)
+      c.updateCallState(SelfConnected).copy(others = others, maxParticipants = others.size + 1)
     }("onEstablishedCall")
   }
 
@@ -202,11 +201,6 @@ class CallingService(val accountId:       UserId,
 
           val endTime = clock.instant()
           import AvsClosedReason._
-          val endReason = (call.endReason, reason) match {
-            case (Some(er), Normal | StillOngoing) => er
-            case (_, Normal)        => OtherEnded
-            case (_, _)             => Dropped(reason)
-          }
 
           if (reason != AnsweredElsewhere) call.state match {
             case Some(SelfCalling) =>
@@ -224,7 +218,7 @@ class CallingService(val accountId:       UserId,
               warn(s"unexpected call state: ${call.state}")
           }
           //need to track here manually, since the current call will either change or be set to None
-          tracking.trackCallState(accountId, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
+          tracking.trackCallState(accountId, call.copy(state = None, prevState = call.state, endTime = Some(endTime)), reason = Some(reason))
           //Switch to any available calls that are still incoming and should ring
           p.nonActiveCalls.filter(_.state.contains(OtherCalling)).sortBy(_.startTime).headOption.map(_.convId)
         case Some(call) =>
@@ -233,12 +227,12 @@ class CallingService(val accountId:       UserId,
           //don't change the active call, since the close callback was for a different conv/call
           Some(call.convId)
         case None =>
-          warn("Tried to close call on without an active call")
+          verbose("No active call to update")
           None
       }
 
       //Group calls that you don't answer (but are answered by other users) will be "closed" with reason StillOngoing. We need to keep these around so the user can join them later
-      val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.updateState(Ongoing)) else None
+      val callUpdated = if (reason == StillOngoing) p.availableCalls.get(conv.id).map(_.updateCallState(Ongoing)) else None
       p.copy(activeId = newActive, callUpdated.fold(p.availableCalls - conv.id)(c => p.availableCalls + (conv.id -> c)))
     }
     closingPromise.foreach(_.tryComplete(Success({})))
@@ -269,10 +263,7 @@ class CallingService(val accountId:       UserId,
   def onVideoStateChanged(userId: String, videoReceiveState: VideoState) = Serialized.apply(self) {
     CancellableFuture {
       verbose(s"video state changed: $videoReceiveState")
-      updateActiveCall { activeCall =>
-        val newState = activeCall.videoReceiveStates + (UserId(userId) -> videoReceiveState)
-        activeCall.copy(videoReceiveStates = newState)
-      }("onVideoStateChanged")
+      updateActiveCall(_.updateVideoState(UserId(userId), videoReceiveState))("onVideoStateChanged")
     }
   }
 
@@ -325,7 +316,7 @@ class CallingService(val accountId:       UserId,
             case Some(OtherCalling) =>
               verbose(s"Answering call")
               avs.answerCall(w, conv.remoteId, callType, !vbr)
-              updateActiveCall(_.updateState(SelfJoining))("startCall/OtherCalling")
+              updateActiveCall(_.updateCallState(SelfJoining))("startCall/OtherCalling")
             case _ =>
               warn("Tried to join an already joined/connecting call - ignoring")
           }
@@ -336,7 +327,7 @@ class CallingService(val accountId:       UserId,
             case Some(call) =>
               verbose("Joining an ongoing background call")
               avs.answerCall(w, conv.remoteId, callType, !vbr)
-              val active = call.updateState(SelfJoining).copy(joinedTime = None, estabTime = None, endReason = None) // reset previous call state if exists
+              val active = call.updateCallState(SelfJoining).copy(joinedTime = None, estabTime = None) // reset previous call state if exists
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
               if (forceOption)
                 setVideoSendState(convId, if (isVideo)  Avs.VideoState.Started else Avs.VideoState.Stopped)
@@ -367,14 +358,10 @@ class CallingService(val accountId:       UserId,
    */
   def endCall(convId: ConvId): Future[Unit] = {
     withConv(convId) { (w, conv) =>
-      verbose(s"endCall: $convId")
-
-      updateActiveCall { call =>
-        verbose(s"Call ended in state: ${call.state}")
-        //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
-        if (call.state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
-        call.copy(endReason = Some(SelfEnded))
-      }("endCall")
+      val state = currentCall.currentValue.flatMap(_.flatMap(_.state))
+      verbose(s"endCall: $convId. Active call in state: $state")
+      //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
+      if (state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
     }
     returning(Promise[Unit]())(p => closingPromise = Some(p)).future
   }
@@ -410,12 +397,7 @@ class CallingService(val accountId:       UserId,
     verbose("onInterrupted - gsm call received")
     currentCall.collect { case Some(info) => info.convId }.currentValue.foreach { convId =>
       //Ensure that conversation state is only performed INSIDE withConv
-      withConv(convId) { (w, conv) =>
-        updateActiveCall { c =>
-          avs.endCall(w, conv.remoteId)
-          c.copy(endReason = Some(GSMInterrupted))
-        }("onInterrupted")
-      }
+      withConv(convId)((w, conv) => avs.endCall(w, conv.remoteId))
     }
   }
 
@@ -428,11 +410,11 @@ class CallingService(val accountId:       UserId,
   }
 
   def setVideoSendState(convId: ConvId, state: VideoState.Value): Unit = {
-    verbose(s"setVideoSendActive: $convId, $state")
     withConv(convId) { (w, conv) =>
+      verbose(s"setVideoSendActive: $convId, $state")
       updateCallInfo(convId, { c =>
         avs.setVideoSendState(w, conv.remoteId, state)
-        c.copy(videoSendState = state)
+        c.updateVideoState(accountId, state)
       })("setVideoSendState")
     }
   }

@@ -20,6 +20,7 @@ package com.waz.service.tracking
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
 import com.waz.model._
+import com.waz.service.call.Avs.AvsClosedReason
 import com.waz.service.call.CallInfo
 import com.waz.service.call.CallInfo.CallState.{OtherCalling, SelfCalling, SelfConnected, SelfJoining}
 import com.waz.service.tracking.ContributionEvent.fromMime
@@ -55,7 +56,7 @@ trait TrackingService {
   def historyBackedUp(isSuccess: Boolean): Future[Unit]
   def historyRestored(isSuccess: Boolean): Future[Unit]
 
-  def trackCallState(userId: UserId, callInfo: CallInfo): Future[Unit]
+  def trackCallState(userId: UserId, callInfo: CallInfo, reason: Option[AvsClosedReason] = None): Future[Unit]
 }
 
 object TrackingService {
@@ -150,7 +151,7 @@ class TrackingServiceImpl(curAccount: Signal[Option[UserId]], zmsProvider: ZmsPr
   override def historyRestored(isSuccess: Boolean) =
     track(if (isSuccess) HistoryRestoreSucceeded else HistoryRestoreFailed)
 
-  override def trackCallState(userId: UserId, callInfo: CallInfo) =
+  override def trackCallState(userId: UserId, callInfo: CallInfo, reason: Option[AvsClosedReason] = None) =
     ((callInfo.prevState, callInfo.state) match {
       case (None, Some(SelfCalling))      => Some("initiated")
       case (None, Some(OtherCalling))     => Some("received")
@@ -161,6 +162,9 @@ class TrackingServiceImpl(curAccount: Signal[Option[UserId]], zmsProvider: ZmsPr
         warn(s"Unexpected call state change: ${callInfo.prevState} => ${callInfo.state}, not tracking")
         None
     }).fold(Future.successful({})) { eventName =>
+
+      val callEnded = callInfo.state.isEmpty && callInfo.prevState.isDefined
+
       for {
         Some(z)  <- zmsProvider(Some(userId))
         isGroup  <- z.conversations.isGroupConversation(callInfo.convId)
@@ -170,7 +174,6 @@ class TrackingServiceImpl(curAccount: Signal[Option[UserId]], zmsProvider: ZmsPr
           if (isGroup)
             z.convsStorage.get(callInfo.convId).collect { case Some(conv) => !conv.isTeamOnly }.map(Some(_))
           else Future.successful(None)
-        uiActive <- ZMessaging.currentGlobal.lifecycle.uiActive.head
         _ <-
           track(new CallingEvent(
             eventName,
@@ -178,13 +181,13 @@ class TrackingServiceImpl(curAccount: Signal[Option[UserId]], zmsProvider: ZmsPr
             isGroup,
             memCount,
             withService,
-            uiActive,
             callInfo.caller != z.selfUserId,
             withGuests,
             Option(callInfo.maxParticipants).filter(_ > 0),
             callInfo.estabTime.map(est => callInfo.joinedTime.getOrElse(est).until(est)),
             callInfo.endTime.map(end => callInfo.estabTime.getOrElse(end).until(end)),
-            callInfo.endReason
+            reason,
+            if (callEnded) Some(callInfo.wasVideoToggled) else None
           ))
       } yield {}
     }

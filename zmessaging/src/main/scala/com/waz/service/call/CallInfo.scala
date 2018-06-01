@@ -18,13 +18,13 @@
 package com.waz.service.call
 
 import com.sun.jna.Pointer
+import com.waz.ZLog
 import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.ZMessaging.clock
-import com.waz.service.call.Avs.AvsClosedReason
 import com.waz.service.call.Avs.VideoState
 import com.waz.service.call.Avs.VideoState._
+import com.waz.service.call.CallInfo.CallState
 import com.waz.service.call.CallInfo.CallState.{OtherCalling, SelfCalling, SelfConnected, SelfJoining}
-import com.waz.service.call.CallInfo.{CallState, EndedReason}
 import com.waz.utils.events.{ClockSignal, Signal}
 import org.threeten.bp.Duration.between
 import org.threeten.bp.{Duration, Instant}
@@ -44,11 +44,11 @@ case class CallInfo(convId:             ConvId,
                     startedAsVideoCall: Boolean                           = false,
                     videoSendState:     VideoState                        = VideoState.Stopped,
                     videoReceiveStates: Map[UserId, VideoState]           = Map.empty,
+                    wasVideoToggled:    Boolean                           = false, //for tracking
                     startTime:          Instant                           = clock.instant(), //the time we start/receive a call - always the time at which the call info object was created
                     joinedTime:         Option[Instant]                   = None, //the time the call was joined, if any
                     estabTime:          Option[Instant]                   = None, //the time that a joined call was established, if any
                     endTime:            Option[Instant]                   = None,
-                    endReason:          Option[EndedReason]               = None,
                     outstandingMsg:     Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
 
   override def toString: String =
@@ -67,21 +67,13 @@ case class CallInfo(convId:             ConvId,
        | startedAsVideoCall: $startedAsVideoCall
        | videoSendState:     $videoSendState
        | videoReceiveStates: $videoReceiveStates
+       | wasVideoToggled:    $wasVideoToggled
        | startTime:          $startTime
+       | joinedTime:         $joinedTime
        | estabTime:          $estabTime
        | endTime:            $endTime
-       | endedReason:        $endReason
        | hasOutstandingMsg:  ${outstandingMsg.isDefined}
     """.stripMargin
-
-  def updateState(callState: CallState): CallInfo = {
-    val withState = copy(state = Some(callState), prevState = this.state)
-    callState match {
-      case SelfJoining => withState.copy(joinedTime = Some(clock.instant()))
-      case SelfConnected => withState.copy(estabTime = Some(clock.instant()))
-      case _ => withState
-    }
-  }
 
   val duration = estabTime match {
     case Some(est) => ClockSignal(1.second).map(_ => Option(between(est, clock.instant())))
@@ -109,6 +101,27 @@ case class CallInfo(convId:             ConvId,
     case _ => None
   }
 
+  def updateCallState(callState: CallState): CallInfo = {
+    val withState = copy(state = Some(callState), prevState = this.state)
+    callState match {
+      case SelfJoining => withState.copy(joinedTime = Some(clock.instant()))
+      case SelfConnected => withState.copy(estabTime = Some(clock.instant()))
+      case _ => withState
+    }
+  }
+
+  def updateVideoState(userId: UserId, videoState: VideoState): CallInfo = {
+
+    val newCall: CallInfo =
+      if (userId == account) this.copy(videoSendState = videoState)
+      else this.copy(videoReceiveStates = this.videoReceiveStates + (userId -> videoState))
+
+    ZLog.verbose(s"updateVideoSendState: $userId, $videoState, newCall: $newCall")("CallInfo")
+
+    val wasVideoToggled = newCall.wasVideoToggled || (newCall.isVideoCall != this.isVideoCall)
+    newCall.copy(wasVideoToggled = wasVideoToggled)
+  }
+
 }
 
 object CallInfo {
@@ -122,13 +135,5 @@ object CallInfo {
     case object SelfJoining    extends CallState
     case object SelfConnected  extends CallState
     case object Ongoing        extends CallState
-  }
-
-  sealed trait EndedReason
-  object EndedReason {
-    case object SelfEnded extends EndedReason
-    case object OtherEnded extends EndedReason
-    case object GSMInterrupted extends EndedReason
-    case class Dropped(avsReason: AvsClosedReason) extends EndedReason
   }
 }
