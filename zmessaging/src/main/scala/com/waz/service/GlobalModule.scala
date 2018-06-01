@@ -216,5 +216,7 @@ class EmptyGlobalModule extends GlobalModule {
   override def lifecycle:             UiLifeCycle                                         = ???
   override def flowmanager:           FlowManagerService                                  = ???
   override def mediaManager:          MediaManagerService                                 = ???
+  override def httpClient: HttpClient = ???
+  override def httpClientForLongRunning: HttpClient = ???
 }
 

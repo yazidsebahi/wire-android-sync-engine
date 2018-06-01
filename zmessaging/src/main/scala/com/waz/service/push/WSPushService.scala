@@ -21,7 +21,7 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.waz.ZLog._
-import com.waz.api.ErrorResponse
+import com.waz.api.impl.ErrorResponse
 import com.waz.model.UserId
 import com.waz.model.otr.ClientId
 import com.waz.service.ZMessaging.accountTag
