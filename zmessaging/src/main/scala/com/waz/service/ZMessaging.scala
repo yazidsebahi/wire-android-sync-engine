@@ -112,6 +112,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val syncContent:       SyncContentUpdater      = wire[SyncContentUpdaterImpl]
   lazy val syncRequests:      SyncRequestService      = wire[SyncRequestServiceImpl]
   lazy val otrClientsSync:    OtrClientsSyncHandler   = wire[OtrClientsSyncHandlerImpl]
+  lazy val otrClient:         OtrClientImpl           = account.otrClient
   lazy val credentialsClient: CredentialsUpdateClientImpl = account.credentialsClient
   implicit lazy val authRequestInterceptor: AuthRequestInterceptor = account.authRequestInterceptor
 
@@ -179,7 +180,6 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val connectionsClient  = wire[ConnectionsClientImpl]
   lazy val messagesClient     = new MessagesClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val openGraphClient    = wire[OpenGraphClientImpl]
-  lazy val otrClient          = wire[com.waz.sync.client.OtrClient]
   lazy val handlesClient      = new HandlesClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val integrationsClient = new IntegrationsClientImpl()(backend, httpClient, authRequestInterceptor)
 

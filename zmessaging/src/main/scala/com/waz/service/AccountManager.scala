@@ -33,7 +33,7 @@ import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, Pas
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
-import com.waz.sync.client.{InvitationClient, OtrClient}
+import com.waz.sync.client.{InvitationClient, OtrClient, OtrClientImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -88,8 +88,8 @@ class AccountManager(val userId:   UserId,
   val cryptoBox         = global.factory.cryptobox(userId, storage)
   val auth              = global.factory.auth(userId)
   val netClient         = global.factory.client(auth)
-  val otrClient         = new OtrClient(netClient)
   val authRequestInterceptor: AuthRequestInterceptor = new AuthRequestInterceptor(auth)
+  val otrClient         = new OtrClientImpl()(global.backend, global.httpClient, authRequestInterceptor)
   val credentialsClient = global.factory.credentialsClient(global.backend, global.httpClient, authRequestInterceptor)
 
   val timeouts       = global.timeouts

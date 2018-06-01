@@ -51,17 +51,6 @@ class MessagesClientImpl(implicit
   import MessagesClient._
   import com.waz.threading.Threading.Implicits.Background
 
-  private implicit val OtrMessageSerializer: RawBodySerializer[OtrMessage] = RawBodySerializer.create { m =>
-    val msg = new Otr.NewOtrMessage
-    msg.sender = OtrClient.clientId(m.sender)
-    msg.nativePush = m.nativePush
-    msg.recipients = m.recipients.userEntries
-    m.blob foreach { msg.blob = _ }
-
-    val bytes = MessageNano.toByteArray(msg)
-    RawBody(mediaType = Some(MediaType.Protobuf), new ByteArrayInputStream(bytes), dataLength = Some(bytes.length))
-  }
-
   override def postMessage(
       conv: RConvId,
       content: OtrMessage,
@@ -95,4 +84,16 @@ object MessagesClient {
     if (ignoreMissing) s"$base?ignore_missing=true"
     else receivers.fold2(base, uids => s"$base?report_missing=${uids.iterator.map(_.str).mkString(",")}")
   }
+
+  implicit val OtrMessageSerializer: RawBodySerializer[OtrMessage] = RawBodySerializer.create { m =>
+    val msg = new Otr.NewOtrMessage
+    msg.sender = OtrClient.clientId(m.sender)
+    msg.nativePush = m.nativePush
+    msg.recipients = m.recipients.userEntries
+    m.blob foreach { msg.blob = _ }
+
+    val bytes = MessageNano.toByteArray(msg)
+    RawBody(mediaType = Some(MediaType.Protobuf), new ByteArrayInputStream(bytes), dataLength = Some(bytes.length))
+  }
+
 }
