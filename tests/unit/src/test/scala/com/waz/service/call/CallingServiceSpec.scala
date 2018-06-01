@@ -584,7 +584,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
       (members.getActiveUsers _).expects(*).anyNumberOfTimes().returning(Future.successful(Seq(otherUser)))
 
       val lastTrackedCall = Signal[CallInfo]()
-      (tracking.trackCallState _).expects(*, *).anyNumberOfTimes().onCall { (user, call) =>
+      (tracking.trackCallState _).expects(*, *, *).anyNumberOfTimes().onCall { (user, call, _) =>
         Future(lastTrackedCall ! call)
       }
 
@@ -675,7 +675,7 @@ class CallingServiceSpec extends AndroidFreeSpec {
   def initCallingService(wCall: WCall = new Pointer(0L)) = {
     val prefs = new TestUserPreferences()
     (context.startService _).expects(*).anyNumberOfTimes().returning(true)
-    (tracking.trackCallState _).expects(account1Id, *).anyNumberOfTimes()
+    (tracking.trackCallState _).expects(account1Id, *, *).anyNumberOfTimes()
     (flows.flowManager _).expects().once().returning(None)
     (messages.addMissedCallMessage(_:RConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))
     (messages.addMissedCallMessage(_:ConvId, _:UserId, _:Instant)).expects(*, *, *).anyNumberOfTimes().returning(Future.successful(None))

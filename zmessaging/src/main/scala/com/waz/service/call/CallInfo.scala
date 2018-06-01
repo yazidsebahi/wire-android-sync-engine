@@ -21,11 +21,10 @@ import com.sun.jna.Pointer
 import com.waz.ZLog
 import com.waz.model.{ConvId, GenericMessage, UserId}
 import com.waz.service.ZMessaging.clock
-import com.waz.service.call.Avs.AvsClosedReason
 import com.waz.service.call.Avs.VideoState
 import com.waz.service.call.Avs.VideoState._
+import com.waz.service.call.CallInfo.CallState
 import com.waz.service.call.CallInfo.CallState.{OtherCalling, SelfCalling, SelfConnected, SelfJoining}
-import com.waz.service.call.CallInfo.{CallState, EndedReason}
 import com.waz.utils.events.{ClockSignal, Signal}
 import org.threeten.bp.Duration.between
 import org.threeten.bp.{Duration, Instant}
@@ -50,7 +49,6 @@ case class CallInfo(convId:             ConvId,
                     joinedTime:         Option[Instant]                   = None, //the time the call was joined, if any
                     estabTime:          Option[Instant]                   = None, //the time that a joined call was established, if any
                     endTime:            Option[Instant]                   = None,
-                    endReason:          Option[EndedReason]               = None,
                     outstandingMsg:     Option[(GenericMessage, Pointer)] = None) { //Any messages we were unable to send due to conv degradation
 
   override def toString: String =
@@ -71,9 +69,9 @@ case class CallInfo(convId:             ConvId,
        | videoReceiveStates: $videoReceiveStates
        | wasVideoToggled:    $wasVideoToggled
        | startTime:          $startTime
+       | joinedTime:         $joinedTime
        | estabTime:          $estabTime
        | endTime:            $endTime
-       | endedReason:        $endReason
        | hasOutstandingMsg:  ${outstandingMsg.isDefined}
     """.stripMargin
 
@@ -137,13 +135,5 @@ object CallInfo {
     case object SelfJoining    extends CallState
     case object SelfConnected  extends CallState
     case object Ongoing        extends CallState
-  }
-
-  sealed trait EndedReason
-  object EndedReason {
-    case object SelfEnded extends EndedReason
-    case object OtherEnded extends EndedReason
-    case object GSMInterrupted extends EndedReason
-    case class Dropped(avsReason: AvsClosedReason) extends EndedReason
   }
 }

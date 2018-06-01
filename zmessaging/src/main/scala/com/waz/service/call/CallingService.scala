@@ -21,7 +21,6 @@ package com.waz.service.call
 import com.sun.jna.Pointer
 import com.waz.ZLog.ImplicitTag._
 import com.waz.ZLog._
-import com.waz.service.call.Avs.VideoState._
 import com.waz.api.impl.ErrorResponse
 import com.waz.content.{MembersStorage, UserPreferences}
 import com.waz.model.otr.ClientId
@@ -29,9 +28,9 @@ import com.waz.model.{ConvId, RConvId, UserId, _}
 import com.waz.service.ZMessaging.clock
 import com.waz.service._
 import com.waz.service.call.Avs.AvsClosedReason.{StillOngoing, reasonString}
+import com.waz.service.call.Avs.VideoState._
 import com.waz.service.call.Avs.{AvsClosedReason, VideoState, WCall}
 import com.waz.service.call.CallInfo.CallState._
-import com.waz.service.call.CallInfo.EndedReason._
 import com.waz.service.conversation.{ConversationsContentUpdater, ConversationsService}
 import com.waz.service.messages.MessagesService
 import com.waz.service.push.PushService
@@ -202,11 +201,6 @@ class CallingService(val accountId:       UserId,
 
           val endTime = clock.instant()
           import AvsClosedReason._
-          val endReason = (call.endReason, reason) match {
-            case (Some(er), Normal | StillOngoing) => er
-            case (_, Normal)        => OtherEnded
-            case (_, _)             => Dropped(reason)
-          }
 
           if (reason != AnsweredElsewhere) call.state match {
             case Some(SelfCalling) =>
@@ -224,7 +218,7 @@ class CallingService(val accountId:       UserId,
               warn(s"unexpected call state: ${call.state}")
           }
           //need to track here manually, since the current call will either change or be set to None
-          tracking.trackCallState(accountId, call.copy(state = None, prevState = call.state, endReason = Some(endReason), endTime = Some(endTime)))
+          tracking.trackCallState(accountId, call.copy(state = None, prevState = call.state, endTime = Some(endTime)), reason = Some(reason))
           //Switch to any available calls that are still incoming and should ring
           p.nonActiveCalls.filter(_.state.contains(OtherCalling)).sortBy(_.startTime).headOption.map(_.convId)
         case Some(call) =>
@@ -233,7 +227,7 @@ class CallingService(val accountId:       UserId,
           //don't change the active call, since the close callback was for a different conv/call
           Some(call.convId)
         case None =>
-          warn("Tried to close call on without an active call")
+          verbose("No active call to update")
           None
       }
 
@@ -333,7 +327,7 @@ class CallingService(val accountId:       UserId,
             case Some(call) =>
               verbose("Joining an ongoing background call")
               avs.answerCall(w, conv.remoteId, callType, !vbr)
-              val active = call.updateCallState(SelfJoining).copy(joinedTime = None, estabTime = None, endReason = None) // reset previous call state if exists
+              val active = call.updateCallState(SelfJoining).copy(joinedTime = None, estabTime = None) // reset previous call state if exists
               callProfile.mutate(_.copy(activeId = Some(call.convId), availableCalls = profile.availableCalls + (convId -> active)))
               if (forceOption)
                 setVideoSendState(convId, if (isVideo)  Avs.VideoState.Started else Avs.VideoState.Stopped)
@@ -364,14 +358,10 @@ class CallingService(val accountId:       UserId,
    */
   def endCall(convId: ConvId): Future[Unit] = {
     withConv(convId) { (w, conv) =>
-      verbose(s"endCall: $convId")
-
-      updateActiveCall { call =>
-        verbose(s"Call ended in state: ${call.state}")
-        //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
-        if (call.state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
-        call.copy(endReason = Some(SelfEnded))
-      }("endCall")
+      val state = currentCall.currentValue.flatMap(_.flatMap(_.state))
+      verbose(s"endCall: $convId. Active call in state: $state")
+      //avs reject and end call will always trigger the onClosedCall callback - there we handle the end of the call
+      if (state.contains(OtherCalling)) avs.rejectCall(w, conv.remoteId) else avs.endCall(w, conv.remoteId)
     }
     returning(Promise[Unit]())(p => closingPromise = Some(p)).future
   }
@@ -407,12 +397,7 @@ class CallingService(val accountId:       UserId,
     verbose("onInterrupted - gsm call received")
     currentCall.collect { case Some(info) => info.convId }.currentValue.foreach { convId =>
       //Ensure that conversation state is only performed INSIDE withConv
-      withConv(convId) { (w, conv) =>
-        updateActiveCall { c =>
-          avs.endCall(w, conv.remoteId)
-          c.copy(endReason = Some(GSMInterrupted))
-        }("onInterrupted")
-      }
+      withConv(convId)((w, conv) => avs.endCall(w, conv.remoteId))
     }
   }
 
