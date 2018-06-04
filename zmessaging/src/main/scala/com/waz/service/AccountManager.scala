@@ -33,7 +33,7 @@ import com.waz.service.AccountManager.ClientRegistrationState.{LimitReached, Pas
 import com.waz.service.otr.OtrService.sessionId
 import com.waz.service.tracking.LoggedOutEvent
 import com.waz.sync.client.InvitationClient.ConfirmedTeamInvitation
-import com.waz.sync.client.{InvitationClient, OtrClient, OtrClientImpl}
+import com.waz.sync.client.{InvitationClientImpl, OtrClientImpl}
 import com.waz.threading.{CancellableFuture, SerialDispatchQueue}
 import com.waz.utils._
 import com.waz.utils.events.Signal
@@ -99,7 +99,7 @@ class AccountManager(val userId:   UserId,
   val tracking       = global.trackingService
   val clientsStorage = storage.otrClientsStorage
 
-  val invitationClient = new InvitationClient(netClient)
+  val invitationClient = new InvitationClientImpl()(global.backend, global.httpClient, authRequestInterceptor)
   val invitedToTeam = Signal(ListMap.empty[TeamInvitation, Option[Either[ErrorResponse, ConfirmedTeamInvitation]]])
 
   private val initSelf = for {
