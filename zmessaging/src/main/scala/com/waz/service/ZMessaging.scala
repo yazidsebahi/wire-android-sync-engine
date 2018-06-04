@@ -176,7 +176,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val typingClient       = new TypingClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val invitationClient   = account.invitationClient
   lazy val giphyClient        = new GiphyClientImpl()(backend, httpClient, authRequestInterceptor)
-  lazy val userSearchClient   = wire[UserSearchClient]
+  lazy val userSearchClient   = new UserSearchClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val connectionsClient  = wire[ConnectionsClientImpl]
   lazy val messagesClient     = new MessagesClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val openGraphClient    = wire[OpenGraphClientImpl]
