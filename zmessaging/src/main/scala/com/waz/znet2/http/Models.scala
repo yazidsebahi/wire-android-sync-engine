@@ -62,6 +62,7 @@ object ResponseCode {
   val InternalServerError = 500
 
   val successCodes: Set[Int] = Set(Success, Created, NoResponse)
+  def isSuccessful(code: Int): Boolean = successCodes.contains(code)
 }
 
 case class Headers(headers: Map[String, String] = Map.empty[String, String]) {

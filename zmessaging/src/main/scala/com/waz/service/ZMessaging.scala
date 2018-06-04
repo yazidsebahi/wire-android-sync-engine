@@ -168,7 +168,7 @@ class ZMessaging(val teamId: Option[TeamId], val clientId: ClientId, account: Ac
   lazy val soundCloudClient   = wire[SoundCloudClient]
   lazy val assetClient        = new AssetClientImpl(cache, backend)(httpClientForLongRunning, authRequestInterceptor)
   lazy val usersClient        = wire[UsersClient]
-  lazy val convClient         = wire[ConversationsClient]
+  lazy val convClient         = new ConversationsClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val teamClient         = new TeamsClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val pushNotificationsClient: PushNotificationsClient = new PushNotificationsClientImpl()(backend, httpClient, authRequestInterceptor)
   lazy val abClient           = wire[AddressBookClientImpl]
